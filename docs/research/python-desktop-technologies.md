@@ -1,33 +1,4 @@
 # Python Desktop Technologies Research
-# Includes:
-
-## Purpose
-
-## Project Requirements
-
-## Desktop GUI Frameworks
-
-### PySide6
-
-### PyQt6
-
-### Tkinter
-
-## 3D Visualisation Libraries
-
-### PyVista
-
-### VTK
-
-### Open3D
-
-## CSV Data Handling
-
-## Application Packaging
-
-## Licensing Considerations
-
-## Recommendation
 
 
 
@@ -253,3 +224,25 @@ Selecting libraries with permissive licences reduces legal risk and simplifies f
 ### Summary
 
 The proposed technology stack is compatible with the project's open-source requirements and does not introduce significant licensing concerns.
+
+## Recommendation
+
+Based on the current project requirements, a combination of PySide6 and PyVista appears to provide the best balance between usability, functionality and development effort. PySide6 offers a modern desktop interface, while PyVista simplifies interactive 3D visualisation through its VTK-based architecture.
+
+Python's built-in csv module is sufficient for importing coordinate data during the initial development stages, and PyInstaller provides a practical solution for distributing the completed application to researchers.
+
+However, the final technology stack should be confirmed after further discussion with the development team and the client to ensure that it aligns with project requirements, team experience and the overall project timeline.
+
+## References
+
+Open3D Documentation. https://www.open3d.org/
+
+PyInstaller Documentation. https://pyinstaller.org/
+
+PySide6 Documentation. https://doc.qt.io/qtforpython/
+
+PyVista Documentation. https://docs.pyvista.org/
+
+Python csv Module Documentation. https://docs.python.org/3/library/csv.html
+
+Visualization Toolkit (VTK). https://vtk.org/
