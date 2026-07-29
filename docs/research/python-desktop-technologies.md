@@ -179,3 +179,39 @@ Disadvantages:
 ### Summary
 
 PyVista appears to be the strongest option for this project. It combines the rendering capabilities of VTK with a significantly simpler programming interface. Since the project mainly requires displaying a human skeleton, navigating the scene and placing annotations, PyVista provides sufficient functionality while reducing implementation complexity. VTK remains an excellent foundation for future expansion if more advanced rendering features become necessary.
+
+
+## CSV Data Handling
+
+The project specification requires the application to import XYZ coordinate data from CSV files. Python provides excellent built-in support for reading and processing CSV data, making this requirement straightforward to implement.
+
+### Python csv Module
+
+Python includes the built-in `csv` module, which can efficiently read and write comma-separated value files without requiring additional dependencies.
+
+Advantages:
+
+- Included with Python by default
+- Simple API
+- Suitable for small and medium-sized datasets
+- Easy to integrate with desktop applications
+
+### pandas
+
+The pandas library provides more advanced functionality for handling structured data. It simplifies validation, filtering and preprocessing of imported coordinate data.
+
+Advantages:
+
+- Powerful data manipulation
+- Easy handling of missing or invalid values
+- Supports multiple file formats
+- Useful for future project expansion
+
+Disadvantages:
+
+- Larger dependency than the built-in csv module
+- Additional learning required for team members unfamiliar with pandas
+
+### Summary
+
+For the current project, Python's built-in csv module is sufficient for importing skeletal coordinate files. If future versions require more advanced data analysis or validation, pandas can be introduced without major changes to the application architecture.
