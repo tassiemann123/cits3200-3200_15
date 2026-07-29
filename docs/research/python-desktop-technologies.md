@@ -113,3 +113,69 @@ Disadvantages:
 ### Summary
 
 PySide6 appears to be the strongest candidate for this project because it provides a modern user interface, cross-platform compatibility and good integration with scientific visualisation libraries. Although PyQt6 offers similar functionality, PySide6 has a more flexible licence that is generally preferable for university projects.
+
+## 3D Visualisation Libraries
+
+Selecting an appropriate 3D visualisation library is one of the most important technical decisions for this project. The library must support interactive rendering, camera controls, marker placement and future expansion while remaining compatible with Python desktop applications.
+
+### PyVista
+
+PyVista is a high-level Python library built on top of VTK. It provides a much simpler interface while retaining access to VTK's powerful rendering capabilities. PyVista is widely used in scientific visualisation, engineering and medical imaging applications.
+
+Advantages:
+
+- Easy to learn and use
+- Built on the powerful VTK engine
+- Supports interactive rotation, zooming and panning
+- Excellent documentation
+- Integrates well with PySide6
+- Suitable for displaying 3D models and annotations
+
+Disadvantages:
+
+- Depends on VTK, increasing installation size
+- Fewer advanced rendering options than directly using VTK
+
+### VTK (Visualization Toolkit)
+
+VTK is one of the most established open-source libraries for scientific 3D graphics and visualisation. It is widely used in medicine, archaeology, engineering and research applications.
+
+Advantages:
+
+- Extremely powerful rendering engine
+- Supports complex 3D visualisation workflows
+- Highly configurable
+- Large academic and professional user base
+
+Disadvantages:
+
+- Steep learning curve
+- Complex API
+- Requires more development time
+
+### Open3D
+
+Open3D is an open-source library designed for processing 3D data such as point clouds and meshes. It provides useful tools for geometry processing and visualisation.
+
+Advantages:
+
+- Excellent support for point cloud processing
+- Active open-source community
+- Useful for future extensions involving scanned skeletal data
+
+Disadvantages:
+
+- Primarily designed for geometry processing rather than desktop applications
+- Less suitable for building a complete interactive desktop interface
+
+### Comparison
+
+| Library | Ease of Use | 3D Rendering | Desktop Integration | Learning Curve |
+|---------|-------------|--------------|--------------------|----------------|
+| PyVista | High | Excellent | Excellent | Low |
+| VTK | Medium | Excellent | Excellent | High |
+| Open3D | Medium | Good | Moderate | Medium |
+
+### Summary
+
+PyVista appears to be the strongest option for this project. It combines the rendering capabilities of VTK with a significantly simpler programming interface. Since the project mainly requires displaying a human skeleton, navigating the scene and placing annotations, PyVista provides sufficient functionality while reducing implementation complexity. VTK remains an excellent foundation for future expansion if more advanced rendering features become necessary.
