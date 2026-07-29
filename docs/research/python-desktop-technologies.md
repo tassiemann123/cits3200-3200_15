@@ -215,3 +215,41 @@ Disadvantages:
 ### Summary
 
 For the current project, Python's built-in csv module is sufficient for importing skeletal coordinate files. If future versions require more advanced data analysis or validation, pandas can be introduced without major changes to the application architecture.
+
+## Application Packaging
+
+The completed application should be distributed as a standalone desktop program so that researchers can use it without installing Python manually.
+
+### PyInstaller
+
+PyInstaller converts Python applications into standalone executables for Windows, macOS and Linux by packaging the Python interpreter and all required dependencies.
+
+Advantages:
+
+- Cross-platform packaging
+- No Python installation required for end users
+- Widely adopted within the Python community
+- Simple build process
+
+Disadvantages:
+
+- Large executable size
+- Packaging complex graphical libraries may require additional configuration
+
+### Summary
+
+PyInstaller appears to be the most practical deployment solution for the project because it supports all target operating systems and requires minimal changes to the application code.
+
+## Licensing Considerations
+
+The project specification encourages the use of open-source software where possible. Licensing should therefore be considered when selecting development tools.
+
+PySide6 is distributed under the LGPL licence, allowing flexible use in both academic and many commercial environments.
+
+PyVista, VTK and Open3D are open-source projects with permissive licences suitable for research and education.
+
+Selecting libraries with permissive licences reduces legal risk and simplifies future maintenance or extension of the software.
+
+### Summary
+
+The proposed technology stack is compatible with the project's open-source requirements and does not introduce significant licensing concerns.
