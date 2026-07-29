@@ -15,8 +15,8 @@ IP: Creative Commons (open source)
 | Name | GitHub Username | Role(s) |
 |------|------------------|---------|
 | Tasveer Mann (23585984) | tassiemann123 | Project Manager (Sprint 1) |
-| Ruan Van Zyl (23784316) | Rvzyl | |
-| Hogan Tan (23644329) | HOGAN-T | |
+| Ruan Van Zyl (23784316) | Rvzyl | Project Manager (Sprint 1)  |
+| Hogan Tan (23644329) | HOGAN-T | Project Manager (Sprint 1)  |
 | Wenbo Zhong (24247407) | wnbmlk | |
 | Suhrid Mahmood Pushan (24306853) | suhrid07 | |
 
