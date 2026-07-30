@@ -1,0 +1,39 @@
+29-Jul-26 Wed 8:30am
+
+Weekly Meetings Every Wednesday 8:30am at Venture building
+
+Attendance:
+Ruan - Present
+Suhrid - Present
+Ivy - Present
+Tas - Present
+Hogan - Present
+Wenbo - Excused
+
+Choosen Project: 3D Skeletal Annotation
+
+Project Description:
+The objective is to develop a standalone desktop application for private forensic and bioarchaeological research. The app will accept XYZ coordinates of human skeletal joints and map them onto a realistic 3D human skeleton model. 
+This tool will allow researchers to accurately reconstruct, visualise, and analyse the precise positioning of a body within a grave context. Ideally, the app would support importing multiple independent joint datasets simultaneously, 
+allowing users to layer, label, and visualise several distinct skeletons within a single shared 3D grave environment. The application must dynamically colour-code skeletons to differentiate individuals within a mass grave with 
+automatic and manual override options. To ensure no ongoing licensing fees for this tool, the project must be built using open-source software. The app would require: a simple UI sidebar to manually type XYZ coordinates for major 
+skeletal joints, or upload them via a standard CSV file; a 3D viewport featuring a highly detailed, anatomically correct skeleton mesh placed within a simulated grave environment; scripts that translate the inputted spatial coordinates 
+to position and articulate the virtual skeleton's joints accurately; full 360-degree orbital rotation, panning, and zooming to allow detailed inspection of the body from any angle; ability to save reconstructions locally and export
+ screenshots or 3D view files for research documentation.
+
+Send clarifying/general email with questions attached  <—  Tas Sent Email
+
+Check Ambika's availability and set a meeting
+- Try to set a meeting every 2 weeks
+- project managers should be present in all meetings + anyone else that can make it
+
+Scope of work due on Week 4
+
+Create a meeting Agendda with Ambika with questioned attached:
+- Check for skeleton mesh
+- hardware/software requirements needed for this project
+- Confirm we can use AI to work on this project
+
+All individual requirements before next meeting:
+- brush up on software development/app building
+- familiaries ourselves with the project requirements
