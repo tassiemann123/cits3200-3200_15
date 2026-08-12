@@ -27,6 +27,17 @@ pnpm run android:open
 
 The Android Studio project is generated in `android/`. Build and device testing should be completed from Android Studio.
 
+## Optional reference models
+
+The application can build and run in landmark-only mode without the GLB reference models. To enable the male and female overlays, add these files locally:
+
+```text
+public/models/skeleton_pre-cut.glb
+public/models/female_skeleton.glb
+```
+
+GLB files are intentionally excluded from Git while redistribution rights are being reviewed. A production build may therefore omit the reference overlays without failing the rest of the application.
+
 ## Coordinate conventions
 
 - ROT source rows use `X Z Y colour`.

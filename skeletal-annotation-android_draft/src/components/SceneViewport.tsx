@@ -262,43 +262,50 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     let cancelled = false;
     if (showModels && selected?.visible && selected.modelType !== "landmarks" && selected.landmarks.length > 1) {
       const url = selected.modelType === "female" ? "/models/female_skeleton.glb" : "/models/skeleton_pre-cut.glb";
-      new GLTFLoader().load(url, (gltf) => {
-        if (cancelled || !contentRef.current) return;
-        const overlay = clone(gltf.scene);
-        overlay.name = "reference-model-overlay";
-        overlay.userData.layerId = selected.id;
-        overlay.traverse((object) => {
-          object.userData.layerId = selected.id;
-          if (object instanceof THREE.Mesh || object instanceof THREE.SkinnedMesh) {
-            const materials = (Array.isArray(object.material) ? object.material : [object.material]).map((source) => {
-              const material = source.clone();
-              material.transparent = true;
-              material.opacity = 0.32;
-              material.depthWrite = false;
-              if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(new THREE.Color(selected.color), 0.58);
-              return material;
-            });
-            object.material = Array.isArray(object.material) ? materials : materials[0];
-          }
-        });
-        const sourceBox = new THREE.Box3().setFromObject(overlay);
-        const sourceSize = sourceBox.getSize(new THREE.Vector3());
-        const targetBox = layerBox(selected);
-        const targetSize = targetBox.getSize(new THREE.Vector3());
-        const targetCenter = targetBox.getCenter(new THREE.Vector3());
-        const targetLength = Math.max(targetSize.x, targetSize.z, 0.5);
-        const scale = targetLength / Math.max(sourceSize.y, sourceSize.x, sourceSize.z, 0.001);
-        overlay.scale.setScalar(scale);
-        const direction = principalDirection(allPositions(selected));
-        const layDown = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-        const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(direction.x, direction.y));
-        overlay.quaternion.copy(yaw.multiply(layDown));
-        overlay.updateMatrixWorld(true);
-        const positionedBox = new THREE.Box3().setFromObject(overlay);
-        const positionedCenter = positionedBox.getCenter(new THREE.Vector3());
-        overlay.position.add(targetCenter.sub(positionedCenter));
-        contentRef.current.add(overlay);
-      });
+      new GLTFLoader().load(
+        url,
+        (gltf) => {
+          if (cancelled || !contentRef.current) return;
+          const overlay = clone(gltf.scene);
+          overlay.name = "reference-model-overlay";
+          overlay.userData.layerId = selected.id;
+          overlay.traverse((object) => {
+            object.userData.layerId = selected.id;
+            if (object instanceof THREE.Mesh || object instanceof THREE.SkinnedMesh) {
+              const materials = (Array.isArray(object.material) ? object.material : [object.material]).map((source) => {
+                const material = source.clone();
+                material.transparent = true;
+                material.opacity = 0.32;
+                material.depthWrite = false;
+                if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(new THREE.Color(selected.color), 0.58);
+                return material;
+              });
+              object.material = Array.isArray(object.material) ? materials : materials[0];
+            }
+          });
+          const sourceBox = new THREE.Box3().setFromObject(overlay);
+          const sourceSize = sourceBox.getSize(new THREE.Vector3());
+          const targetBox = layerBox(selected);
+          const targetSize = targetBox.getSize(new THREE.Vector3());
+          const targetCenter = targetBox.getCenter(new THREE.Vector3());
+          const targetLength = Math.max(targetSize.x, targetSize.z, 0.5);
+          const scale = targetLength / Math.max(sourceSize.y, sourceSize.x, sourceSize.z, 0.001);
+          overlay.scale.setScalar(scale);
+          const direction = principalDirection(allPositions(selected));
+          const layDown = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+          const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(direction.x, direction.y));
+          overlay.quaternion.copy(yaw.multiply(layDown));
+          overlay.updateMatrixWorld(true);
+          const positionedBox = new THREE.Box3().setFromObject(overlay);
+          const positionedCenter = positionedBox.getCenter(new THREE.Vector3());
+          overlay.position.add(targetCenter.sub(positionedCenter));
+          contentRef.current.add(overlay);
+        },
+        undefined,
+        () => {
+          if (!cancelled) console.warn(`Optional reference model could not be loaded: ${url}`);
+        },
+      );
     }
 
     return () => { cancelled = true; };

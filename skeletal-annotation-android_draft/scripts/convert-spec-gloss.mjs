@@ -5,6 +5,11 @@ if (!inputPath || !outputPath) {
   throw new Error("Usage: node scripts/convert-spec-gloss.mjs input.glb output.glb");
 }
 
+if (!fs.existsSync(inputPath)) {
+  console.warn(`Optional reference model not found; skipping conversion: ${inputPath}`);
+  process.exit(0);
+}
+
 const source = fs.readFileSync(inputPath);
 if (source.toString("ascii", 0, 4) !== "glTF" || source.readUInt32LE(4) !== 2) {
   throw new Error("Only GLB v2 files are supported.");
