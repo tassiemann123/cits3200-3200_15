@@ -1,30 +1,32 @@
-# CITS3200 - Professional Computing Group
+# React + TypeScript + Vite
 
-## Project
-3D Skeletal Annotation
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-This project aims to build a desktop-based interactive mapping tool for forensic anthropologists and bioarchaeologists. The application will allow researchers to rotate a fixed, pre-loaded 3D human skeleton model and plot precise, customisable markers directly onto specific bone surfaces to document trauma and disease history.
+Currently, two official plugins are available:
 
-Client: Ambika Flavel
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Location: UWA - Building 351
+## React Compiler
 
-IP: Creative Commons (open source)
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Team Members
-| Name | GitHub Username 
-|------|------------------|---------|
-| Tasveer Mann (23585984) | tassiemann123 
-| Ruan Van Zyl (23784316) | Rvzyl 
-| Hogan Tan (23644329) | HOGAN-T 
-| Wenbo Zhong (24247407) | wnbmlk 
-| Suhrid Mahmood Pushan (24306853) | suhrid07 
-| Ivy Qi (24270483) | ivqly 
+## Expanding the Oxlint configuration
 
-## Unit Coordinator
-Michael Wise — michael.wise@uwa.edu.au
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
 
-## Project Auditor
-Zulqarnain Gilani
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+```
 
-
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
