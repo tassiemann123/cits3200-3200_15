@@ -1,11 +1,12 @@
 # OsteoPlot — 3D Skeletal Reference
 
-Independent Android-ready prototype for viewing one anatomical reference model at a time. The interface includes one bundled GLB model and lets the user replace it with another local GLB without exposing survey layers or BP records.
+Independent Android-ready prototype for viewing one anatomical reference project at a time. The interface retains one bundled default project and lets the user switch to another local GLB without exposing survey layers or BP records.
 
 ## Included prototype features
 
-- Displays one active skeletal reference model.
-- Imports or replaces the active model with a local `.glb` file.
+- Displays one active skeletal reference project.
+- Switches to another project using a local `.glb` file.
+- Restores the bundled initial project with a one-click reset.
 - Automatically orients, centres and normalises models to a consistent display height.
 - Provides orbit, zoom, pan, focus, reset and optional grid controls.
 - Keeps model source, licensing information and research notes in the Details panel.
@@ -35,7 +36,7 @@ Add this file locally to enable the bundled model:
 public/models/skeleton_pre-cut.glb
 ```
 
-GLB files are intentionally excluded from Git while redistribution rights are being reviewed. The application can still build without the bundled file, and another GLB can be selected with **Import Model** or **Replace model**. Imported object URLs only exist for the current application session and are not saved to browser/device storage.
+GLB files are intentionally excluded from Git while redistribution rights are being reviewed. The application can still build without the bundled file, and another GLB can be selected with **Switch Project** or **Switch to another project**. Imported object URLs only exist for the current application session and are not saved to browser/device storage. **Reset to default project** restores the original bundled model.
 
 ## Model attribution
 

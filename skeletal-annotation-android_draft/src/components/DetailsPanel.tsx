@@ -1,11 +1,13 @@
-import { Database, Info, Upload } from "lucide-react";
+import { Database, Info, RotateCcw, Upload } from "lucide-react";
 import type { Landmark, ViewerModel } from "../types";
 
 interface DetailsPanelProps {
   model: ViewerModel;
   coordinates: Landmark[];
   notes: string;
+  isInitialProject: boolean;
   onImportClick: () => void;
+  onResetProject: () => void;
   onNotesChange: (notes: string) => void;
 }
 
@@ -13,29 +15,35 @@ function formatCoordinate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(3) : "—";
 }
 
-export function DetailsPanel({ model, coordinates, notes, onImportClick, onNotesChange }: DetailsPanelProps) {
+export function DetailsPanel({ model, coordinates, notes, isInitialProject, onImportClick, onResetProject, onNotesChange }: DetailsPanelProps) {
   return (
     <aside className="panel details-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">SELECTED MODEL</p>
+          <p className="eyebrow">ACTIVE PROJECT</p>
           <h2>{model.name}</h2>
         </div>
       </div>
 
       <label className="field-label">
-        Model name
+        Project model
         <input value={model.name} readOnly />
       </label>
 
-      <button type="button" className="model-import-button" onClick={onImportClick}>
-        <Upload size={16} />
-        <span><strong>Replace model</strong><small>Choose a GLB file from this device</small></span>
-      </button>
+      <div className="project-action-stack">
+        <button type="button" className="model-import-button" onClick={onImportClick}>
+          <Upload size={16} />
+          <span><strong>Switch to another project</strong><small>Choose a project GLB from this device</small></span>
+        </button>
+        <button type="button" className="model-reset-button" onClick={onResetProject} disabled={isInitialProject}>
+          <RotateCcw size={15} />
+          <span><strong>Reset to default project</strong><small>{isInitialProject ? "Default project is active" : "Restore the original bundled skeleton"}</small></span>
+        </button>
+      </div>
 
       <div className="research-note">
         <Info size={16} />
-        <p>This is a visual reference model. Imported files are kept locally for this session and are displayed at a normalised viewing size.</p>
+        <p>The default project is always available. Other project files remain local to this session and can be reset safely at any time.</p>
       </div>
       <p className="model-attribution">{model.attribution}</p>
 

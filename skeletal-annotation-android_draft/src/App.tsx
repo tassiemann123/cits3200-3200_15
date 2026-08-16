@@ -30,7 +30,7 @@ const DEFAULT_PREFERENCES: ViewerPreferences = {
   notes: "",
 };
 
-const DEFAULT_MODEL: ViewerModel = {
+const INITIAL_MODEL: ViewerModel = {
   name: "Skeleton Reference",
   url: "/models/skeleton_pre-cut.glb",
   origin: "bundled",
@@ -68,7 +68,7 @@ function loadPreferences(): ViewerPreferences {
 
 export function App() {
   const [preferences, setPreferences] = useState<ViewerPreferences>(loadPreferences);
-  const [model, setModel] = useState<ViewerModel>(DEFAULT_MODEL);
+  const [model, setModel] = useState<ViewerModel>(INITIAL_MODEL);
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>("loading");
   const [showGrid, setShowGrid] = useState(true);
   const [mobilePane, setMobilePane] = useState<MobilePane>("scene");
@@ -97,6 +97,12 @@ export function App() {
 
   const openModelPicker = () => fileInputRef.current?.click();
 
+  const releaseImportedModel = () => {
+    if (!importedObjectUrlRef.current) return;
+    URL.revokeObjectURL(importedObjectUrlRef.current);
+    importedObjectUrlRef.current = null;
+  };
+
   const importModel = (file: File | undefined) => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".glb")) {
@@ -104,7 +110,7 @@ export function App() {
       return;
     }
 
-    if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
+    releaseImportedModel();
     const objectUrl = URL.createObjectURL(file);
     importedObjectUrlRef.current = objectUrl;
     setModel({
@@ -116,7 +122,19 @@ export function App() {
     });
     setModelLoadState("loading");
     setMobilePane("scene");
-    notify(`${file.name} imported`);
+    notify(`${file.name} opened as a project`);
+  };
+
+  const resetToInitialProject = () => {
+    if (model.origin === "bundled") {
+      notify("The default project is already active");
+      return;
+    }
+    releaseImportedModel();
+    setModel(INITIAL_MODEL);
+    setModelLoadState("loading");
+    setMobilePane("scene");
+    notify("Default project restored");
   };
 
   const exportScreenshot = async () => {
@@ -142,7 +160,7 @@ export function App() {
           />
         </div>
         <div className="header-actions">
-          <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Import Model</span></button>
+          <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Switch Project</span></button>
           <button type="button" className="header-button" onClick={persist}><Save size={17} /><span>Save</span></button>
           <button type="button" className="primary-header-button" onClick={() => void exportScreenshot()}><Camera size={17} /><span>Screenshot</span></button>
           <button
@@ -161,7 +179,7 @@ export function App() {
         className="model-file-input"
         type="file"
         accept=".glb,model/gltf-binary"
-        aria-label="Import a GLB model"
+        aria-label="Choose another project GLB"
         onChange={(event) => {
           importModel(event.currentTarget.files?.[0]);
           event.currentTarget.value = "";
@@ -180,7 +198,7 @@ export function App() {
           <div className="viewport-topbar">
             <div className="active-model-label">
               <Bone size={16} />
-              <span><strong>{model.name}</strong><small>{model.origin === "bundled" ? "BUILT-IN" : "IMPORTED"}</small></span>
+              <span><strong>{model.name}</strong><small>{model.origin === "bundled" ? "DEFAULT PROJECT" : "IMPORTED PROJECT"}</small></span>
             </div>
             <div className="viewport-tools">
               <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
@@ -188,7 +206,7 @@ export function App() {
               <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
             </div>
           </div>
-          <div className="collection-badge"><span>SINGLE MODEL WORKSPACE</span><strong>Import any compatible GLB</strong></div>
+          <div className="collection-badge"><span>SINGLE PROJECT WORKSPACE</span><strong>Switch projects with a compatible GLB</strong></div>
           <div className="orientation-cube" aria-hidden="true">
             <span className="axis-y">Y↑</span><span className="axis-x">X→</span><span className="axis-z">Z↘</span>
           </div>
@@ -209,7 +227,9 @@ export function App() {
             model={model}
             coordinates={BACKEND_COORDINATES}
             notes={preferences.notes}
+            isInitialProject={model.origin === "bundled"}
             onImportClick={openModelPicker}
+            onResetProject={resetToInitialProject}
             onNotesChange={(notes) => patchPreferences({ notes })}
           />
         </div>
