@@ -1,117 +1,80 @@
-import { Bone, CircleDot, Info, Minus, Trash2 } from "lucide-react";
-import type { ModelType, SkeletonLayer } from "../types";
+import { Database, Info, Upload } from "lucide-react";
+import type { Landmark, ViewerModel } from "../types";
 
 interface DetailsPanelProps {
-  layer: SkeletonLayer | null;
-  onPatch: (id: string, patch: Partial<SkeletonLayer>) => void;
-  onRemove: (id: string) => void;
+  model: ViewerModel;
+  coordinates: Landmark[];
+  notes: string;
+  onImportClick: () => void;
+  onNotesChange: (notes: string) => void;
 }
 
-export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
-  if (!layer) {
-    return (
-      <aside className="panel details-panel empty-details">
-        <CircleDot size={30} />
-        <h2>Select an individual</h2>
-        <p>Select a skeleton in the layer list or viewport to view its landmarks and model settings.</p>
-      </aside>
-    );
-  }
+function formatCoordinate(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(3) : "—";
+}
 
-  const modelType = layer.modelType;
+export function DetailsPanel({ model, coordinates, notes, onImportClick, onNotesChange }: DetailsPanelProps) {
   return (
     <aside className="panel details-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">SELECTED RECORD</p>
-          <h2>{layer.name}</h2>
+          <p className="eyebrow">SELECTED MODEL</p>
+          <h2>{model.name}</h2>
         </div>
-        <span className="color-chip" style={{ background: layer.color }} />
       </div>
 
       <label className="field-label">
-        Individual name
-        <input value={layer.name} onChange={(event) => onPatch(layer.id, { name: event.target.value })} disabled={layer.locked} />
+        Model name
+        <input value={model.name} readOnly />
       </label>
 
-      <div className="field-label">
-        Model display
-        <div className="segmented-control">
-          {([
-            ["landmarks", "Landmarks"],
-            ["male", "Male"],
-            ["female", "Female"],
-          ] as Array<[ModelType, string]>).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={modelType === value ? "selected" : ""}
-              onClick={() => onPatch(layer.id, { modelType: value })}
-              disabled={layer.locked && value !== "landmarks"}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <button type="button" className="model-import-button" onClick={onImportClick}>
+        <Upload size={16} />
+        <span><strong>Replace model</strong><small>Choose a GLB file from this device</small></span>
+      </button>
+
+      <div className="research-note">
+        <Info size={16} />
+        <p>This is a visual reference model. Imported files are kept locally for this session and are displayed at a normalised viewing size.</p>
       </div>
-
-      <label className="field-label color-field">
-        Layer colour
-        <span>
-          <input type="color" value={layer.color} onChange={(event) => onPatch(layer.id, { color: event.target.value.toUpperCase() })} />
-          <code>{layer.color.toUpperCase()}</code>
-        </span>
-      </label>
-
-      <div className="metric-grid">
-        <div><CircleDot size={17} /><span><strong>{layer.landmarks.length}</strong>landmarks</span></div>
-        <div><Minus size={17} /><span><strong>{layer.segments.length}</strong>segments</span></div>
-        <div><Bone size={17} /><span><strong>{modelType === "female" ? "118" : modelType === "male" ? "18" : "—"}</strong>{modelType === "female" ? "joints" : modelType === "male" ? "bones" : "model"}</span></div>
-        <div><Info size={17} /><span><strong>{layer.visible ? "Shown" : "Hidden"}</strong>status</span></div>
-      </div>
-
-      {modelType !== "landmarks" && (
-        <>
-          <div className="research-note">
-            <Info size={16} />
-            <p>The reference model is fitted to the landmark range, direction, and scale. It is not yet a research-grade joint pose registration.</p>
-          </div>
-          <p className="model-attribution">
-            {modelType === "female"
-              ? "Female Skeleton · projectkaizen · CC BY 4.0"
-              : "Skeleton Pre-cut · Maxime66410 · Sketchfab Standard"}
-          </p>
-        </>
-      )}
+      <p className="model-attribution">{model.attribution}</p>
 
       <label className="field-label notes-field">
         Research notes
-        <textarea value={layer.notes} onChange={(event) => onPatch(layer.id, { notes: event.target.value })} placeholder="Record observations, context, or anomalies…" />
+        <textarea value={notes} onChange={(event) => onNotesChange(event.target.value)} placeholder="Record observations, comparison notes, or model limitations…" />
       </label>
 
-      <div className="coordinate-table-wrap">
-        <div className="section-title"><span>Landmark preview</span><small>X / Z / Y</small></div>
-        <table className="coordinate-table">
-          <thead><tr><th>Point</th><th>X</th><th>Z</th><th>Y</th></tr></thead>
-          <tbody>
-            {layer.landmarks.slice(0, 12).map((landmark, index) => (
-              <tr key={landmark.id}>
-                <td>{index + 1}</td>
-                <td>{landmark.position[0].toFixed(3)}</td>
-                <td>{landmark.position[1].toFixed(3)}</td>
-                <td>{(-landmark.position[2]).toFixed(3)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {layer.landmarks.length > 12 && <p className="table-footnote">{layer.landmarks.length - 12} more landmarks</p>}
-      </div>
-
-      {!layer.locked && (
-        <button type="button" className="danger-button" onClick={() => onRemove(layer.id)}>
-          <Trash2 size={16} /> Delete Individual
-        </button>
-      )}
+      <section className="backend-coordinate-section" aria-labelledby="backend-coordinate-title">
+        <div className="section-title">
+          <span id="backend-coordinate-title">Backend coordinates</span>
+          <small>{coordinates.length > 0 ? `${coordinates.length} POINTS` : "BACKEND DATA"}</small>
+        </div>
+        {coordinates.length > 0 ? (
+          <div className="backend-coordinate-table-wrap">
+            <table className="backend-coordinate-table">
+              <thead><tr><th>Point</th><th>X</th><th>Y</th><th>Z</th></tr></thead>
+              <tbody>
+                {coordinates.map((coordinate) => (
+                  <tr key={coordinate.id}>
+                    <td title={coordinate.label}>{coordinate.label}</td>
+                    <td>{formatCoordinate(coordinate.position[0])}</td>
+                    <td>{formatCoordinate(coordinate.position[1])}</td>
+                    <td>{formatCoordinate(coordinate.position[2])}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="coordinate-empty-state">
+            <Database size={19} />
+            <div>
+              <strong>Waiting for backend coordinates</strong>
+              <p>Point labels and X, Y, Z values returned by the backend will appear here.</p>
+            </div>
+          </div>
+        )}
+      </section>
     </aside>
   );
 }

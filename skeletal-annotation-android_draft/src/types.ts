@@ -2,6 +2,16 @@ export type Vec3 = [number, number, number];
 
 export type ModelType = "landmarks" | "male" | "female";
 
+export type ModelLoadState = "loading" | "ready" | "error";
+
+export interface ViewerModel {
+  name: string;
+  url: string;
+  origin: "bundled" | "imported";
+  subtitle: string;
+  attribution: string;
+}
+
 export interface Segment {
   from: Vec3;
   to: Vec3;

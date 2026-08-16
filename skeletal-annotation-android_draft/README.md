@@ -1,17 +1,17 @@
-# OsteoPlot — 3D Skeletal Annotation
+# OsteoPlot — 3D Skeletal Reference
 
-Independent Android-ready prototype for offline forensic anthropology and bioarchaeological coordinate visualisation. This project is intentionally separate from the e-commerce component library.
+Independent Android-ready prototype for viewing one anatomical reference model at a time. The interface includes one bundled GLB model and lets the user replace it with another local GLB without exposing survey layers or BP records.
 
 ## Included prototype features
 
-- Imports editable Lines 3D `.rot` files using their native `X Z Y colour` ordering.
-- Imports CSV files with `skeleton_id,joint_name,x,y,z` columns.
-- Groups multiple BP records into independently selectable, colour-coded layers.
-- Displays grave outlines, survey linework, landmarks and a touch-friendly Three.js viewport.
-- Provides male and female reference-model overlays.
-- Adds validated manual XYZ landmarks.
-- Saves projects in local browser/device storage.
-- Exports the current 3D viewport as PNG and the project as JSON.
+- Displays one active skeletal reference model.
+- Imports or replaces the active model with a local `.glb` file.
+- Automatically orients, centres and normalises models to a consistent display height.
+- Provides orbit, zoom, pan, focus, reset and optional grid controls.
+- Keeps model source, licensing information and research notes in the Details panel.
+- Provides a backend-ready coordinate table for point labels and X, Y, Z values.
+- Saves viewer preferences in local browser/device storage.
+- Exports the current 3D viewport as a PNG.
 - Includes Capacitor configuration and an Android project.
 
 ## Commands
@@ -27,33 +27,20 @@ pnpm run android:open
 
 The Android Studio project is generated in `android/`. Build and device testing should be completed from Android Studio.
 
-## Optional reference models
+## Reference models
 
-The application can build and run in landmark-only mode without the GLB reference models. To enable the male and female overlays, add these files locally:
+Add this file locally to enable the bundled model:
 
 ```text
 public/models/skeleton_pre-cut.glb
-public/models/female_skeleton.glb
 ```
 
-GLB files are intentionally excluded from Git while redistribution rights are being reviewed. A production build may therefore omit the reference overlays without failing the rest of the application.
-
-## Coordinate conventions
-
-- ROT source rows use `X Z Y colour`.
-- CSV and manual input use `X Y Z` column labels.
-- Rendering converts survey coordinates to Three.js as `world = (X, Z, -Y)` so reduced elevation is vertical.
-- The female and male GLBs are currently semi-transparent spatial reference overlays. They are aligned to the selected record's extent and principal direction but are not yet scientifically validated articulated reconstructions.
+GLB files are intentionally excluded from Git while redistribution rights are being reviewed. The application can still build without the bundled file, and another GLB can be selected with **Import Model** or **Replace model**. Imported object URLs only exist for the current application session and are not saved to browser/device storage.
 
 ## Model attribution
 
-- **Female Skeleton** by projectkaizen, CC BY 4.0. Source metadata is embedded in `female_skeleton.glb`.
 - **Skeleton Pre-cut** by Maxime66410, Sketchfab Standard License. Source metadata is embedded in `skeleton_pre-cut.glb`.
 
-The bundled pre-cut model has been mechanically converted from the retired `KHR_materials_pbrSpecularGlossiness` extension to standard metallic-roughness material fields so it loads in current Three.js. The source model in Downloads remains unchanged.
+The pre-cut model is mechanically converted from the retired `KHR_materials_pbrSpecularGlossiness` extension to standard metallic-roughness material fields so it loads in current Three.js. The source model in Downloads remains unchanged.
 
-Confirm redistribution rights before publishing or open-sourcing an application bundle containing the pre-cut model.
-
-## Data note
-
-`public/samples/LN24-East-Colour.rot` is supplied research sample data for local prototype validation. Review privacy and publication requirements before distributing it outside the research team.
+Confirm redistribution rights before publishing or open-sourcing an application bundle containing the model.

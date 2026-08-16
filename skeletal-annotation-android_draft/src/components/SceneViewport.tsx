@@ -3,34 +3,24 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
-import type { SkeletonLayer, Vec3 } from "../types";
-import { calculateModelAlignment } from "../lib/modelAlignment";
+import type { ModelLoadState } from "../types";
 
 export interface SceneViewportHandle {
   resetCamera: () => void;
-  focusSelected: () => void;
+  focusModel: () => void;
   capturePng: () => Promise<Blob | null>;
 }
 
 interface SceneViewportProps {
-  layers: SkeletonLayer[];
-  selectedId: string | null;
+  modelUrl: string;
+  modelName: string;
   showGrid: boolean;
-  showModels: boolean;
-  onSelect: (id: string) => void;
+  onLoadStateChange: (state: ModelLoadState) => void;
 }
 
-const DEFAULT_CAMERA = new THREE.Vector3(4.8, 8.2, 2.2);
-const DEFAULT_TARGET = new THREE.Vector3(2.6, 1.65, -6.3);
-
-function allPositions(layer: SkeletonLayer): Vec3[] {
-  return layer.landmarks.map((landmark) => landmark.position);
-}
-
-function layerBox(layer: SkeletonLayer): THREE.Box3 {
-  const points = allPositions(layer).map((point) => new THREE.Vector3(...point));
-  return points.length > 0 ? new THREE.Box3().setFromPoints(points) : new THREE.Box3();
-}
+const DEFAULT_CAMERA = new THREE.Vector3(3.2, 1.8, 4.4);
+const DEFAULT_TARGET = new THREE.Vector3(0, 1.12, 0);
+const DISPLAY_HEIGHT = 2.25;
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
@@ -43,7 +33,7 @@ function disposeObject(root: THREE.Object3D): void {
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { layers, selectedId, showGrid, showModels, onSelect },
+  { modelUrl, modelName, showGrid, onLoadStateChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -53,40 +43,39 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const controlsRef = useRef<OrbitControls | null>(null);
   const contentRef = useRef<THREE.Group | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
-  const layersRef = useRef(layers);
-  const selectedRef = useRef(selectedId);
-  const onSelectRef = useRef(onSelect);
-  layersRef.current = layers;
-  selectedRef.current = selectedId;
-  onSelectRef.current = onSelect;
+  const modelBoxRef = useRef<THREE.Box3 | null>(null);
 
-  const focusLayer = (layer: SkeletonLayer | undefined) => {
+  const resetCamera = () => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (!camera || !controls || !layer) return;
-    const box = layerBox(layer);
-    if (box.isEmpty()) return;
+    if (!camera || !controls) return;
+    camera.position.copy(DEFAULT_CAMERA);
+    controls.target.copy(DEFAULT_TARGET);
+    camera.near = 0.01;
+    camera.far = 100;
+    camera.updateProjectionMatrix();
+    controls.update();
+  };
+
+  const focusModel = () => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const box = modelBoxRef.current;
+    if (!camera || !controls || !box || box.isEmpty()) return;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.x, size.y, size.z, 0.5);
+    const height = Math.max(size.y, 1);
     controls.target.copy(center);
-    camera.position.copy(center).add(new THREE.Vector3(radius * 0.9, radius * 1.45, radius * 0.9));
-    camera.near = Math.max(radius / 100, 0.001);
-    camera.far = Math.max(radius * 100, 100);
+    camera.position.copy(center).add(new THREE.Vector3(height * 0.82, height * 0.18, height * 1.25));
+    camera.near = Math.max(height / 100, 0.01);
+    camera.far = Math.max(height * 50, 100);
     camera.updateProjectionMatrix();
     controls.update();
   };
 
   useImperativeHandle(ref, () => ({
-    resetCamera: () => {
-      const camera = cameraRef.current;
-      const controls = controlsRef.current;
-      if (!camera || !controls) return;
-      camera.position.copy(DEFAULT_CAMERA);
-      controls.target.copy(DEFAULT_TARGET);
-      controls.update();
-    },
-    focusSelected: () => focusLayer(layersRef.current.find((layer) => layer.id === selectedRef.current)),
+    resetCamera,
+    focusModel,
     capturePng: () => new Promise((resolve) => {
       const renderer = rendererRef.current;
       const scene = sceneRef.current;
@@ -100,66 +89,90 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#07171b");
-    scene.fog = new THREE.FogExp2("#07171b", 0.025);
 
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#061418");
+    scene.fog = new THREE.FogExp2("#061418", 0.055);
+
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
     camera.position.copy(DEFAULT_CAMERA);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.08;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     host.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(DEFAULT_TARGET);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    controls.dampingFactor = 0.07;
     controls.screenSpacePanning = true;
-    controls.minDistance = 0.25;
-    controls.maxDistance = 40;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 14;
+    controls.maxPolarAngle = Math.PI * 0.92;
     controls.update();
 
-    const grid = new THREE.GridHelper(12, 48, "#53767c", "#1f3b40");
-    grid.position.set(3, 1.15, -6.2);
+    const grid = new THREE.GridHelper(8, 32, "#477873", "#17353a");
+    grid.position.y = -0.075;
     const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
     gridMaterials.forEach((material) => {
       material.transparent = true;
-      material.opacity = 0.46;
+      material.opacity = 0.34;
     });
     scene.add(grid);
 
-    const grave = new THREE.Mesh(
-      new THREE.BoxGeometry(3.3, 0.03, 2.2),
-      new THREE.MeshStandardMaterial({ color: "#183037", roughness: 1, metalness: 0, transparent: true, opacity: 0.72 }),
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshStandardMaterial({ color: "#07191d", roughness: 0.96, metalness: 0.02 }),
     );
-    grave.position.set(2.8, 1.12, -6.25);
-    scene.add(grave);
-    scene.add(new THREE.HemisphereLight("#dff9f4", "#102125", 2.2));
-    const keyLight = new THREE.DirectionalLight("#fff4dd", 2.4);
-    keyLight.position.set(5, 10, 4);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.09;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const pedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.18, 1.28, 0.09, 72),
+      new THREE.MeshStandardMaterial({ color: "#102c31", roughness: 0.72, metalness: 0.18 }),
+    );
+    pedestal.position.y = -0.045;
+    pedestal.receiveShadow = true;
+    scene.add(pedestal);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.17, 1.195, 96),
+      new THREE.MeshBasicMaterial({ color: "#69d9c3", transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.006;
+    scene.add(ring);
+
+    scene.add(new THREE.HemisphereLight("#e6fff9", "#071113", 2.1));
+    const keyLight = new THREE.DirectionalLight("#fff1d9", 3.1);
+    keyLight.position.set(3.8, 6.5, 4.2);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 14;
+    keyLight.shadow.camera.left = -3;
+    keyLight.shadow.camera.right = 3;
+    keyLight.shadow.camera.top = 4;
+    keyLight.shadow.camera.bottom = -1;
     scene.add(keyLight);
+    const rimLight = new THREE.DirectionalLight("#61d8cf", 1.7);
+    rimLight.position.set(-4, 2.6, -3.5);
+    scene.add(rimLight);
+
     const content = new THREE.Group();
     scene.add(content);
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.params.Line = { threshold: 0.055 };
-    raycaster.params.Points = { threshold: 0.08 };
-    const pointer = new THREE.Vector2();
-    let pointerStart: { x: number; y: number } | null = null;
-    const onPointerDown = (event: PointerEvent) => { pointerStart = { x: event.clientX, y: event.clientY }; };
-    const onPointerUp = (event: PointerEvent) => {
-      if (!pointerStart || Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 8) return;
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
-      raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(content.children, true).find((intersection) => intersection.object.userData.layerId);
-      if (hit) onSelectRef.current(String(hit.object.userData.layerId));
-    };
-    renderer.domElement.addEventListener("pointerdown", onPointerDown);
-    renderer.domElement.addEventListener("pointerup", onPointerUp);
 
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
@@ -190,8 +203,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
-      renderer.domElement.removeEventListener("pointerup", onPointerUp);
       controls.dispose();
       disposeObject(scene);
       renderer.dispose();
@@ -201,6 +212,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       cameraRef.current = null;
       controlsRef.current = null;
       contentRef.current = null;
+      gridRef.current = null;
+      modelBoxRef.current = null;
     };
   }, []);
 
@@ -215,90 +228,79 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       content.remove(child);
       disposeObject(child);
     });
-    const selected = layers.find((layer) => layer.id === selectedId);
-
-    layers.filter((layer) => layer.visible).forEach((layer) => {
-      const group = new THREE.Group();
-      group.userData.layerId = layer.id;
-      const selectedLayer = layer.id === selectedId;
-      const linePositions = layer.segments.flatMap((segment) => [...segment.from, ...segment.to]);
-      if (linePositions.length > 0) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
-        const material = new THREE.LineBasicMaterial({ color: layer.color, transparent: true, opacity: selectedLayer ? 1 : 0.78 });
-        const lines = new THREE.LineSegments(geometry, material);
-        lines.userData.layerId = layer.id;
-        group.add(lines);
-      }
-      const pointPositions = layer.landmarks.flatMap((landmark) => landmark.position);
-      if (pointPositions.length > 0 && (selectedLayer || layer.locked)) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.Float32BufferAttribute(pointPositions, 3));
-        const material = new THREE.PointsMaterial({ color: layer.color, size: selectedLayer ? 0.052 : 0.028, sizeAttenuation: true, transparent: true, opacity: 0.95 });
-        const points = new THREE.Points(geometry, material);
-        points.userData.layerId = layer.id;
-        group.add(points);
-      }
-      content.add(group);
-    });
+    modelBoxRef.current = null;
+    onLoadStateChange("loading");
 
     let cancelled = false;
-    if (showModels && selected?.visible && selected.modelType !== "landmarks" && selected.landmarks.length > 1) {
-      const url = selected.modelType === "female" ? "/models/female_skeleton.glb" : "/models/skeleton_pre-cut.glb";
-      new GLTFLoader().load(
-        url,
-        (gltf) => {
-          if (cancelled || !contentRef.current) return;
-          const model = clone(gltf.scene);
-          const overlay = new THREE.Group();
-          overlay.add(model);
-          overlay.name = "reference-model-overlay";
-          overlay.userData.layerId = selected.id;
-          overlay.traverse((object) => {
-            object.userData.layerId = selected.id;
-            if (object instanceof THREE.Mesh || object instanceof THREE.SkinnedMesh) {
-              const materials = (Array.isArray(object.material) ? object.material : [object.material]).map((source) => {
-                const material = source.clone();
-                material.transparent = true;
-                material.opacity = 0.32;
-                material.depthWrite = false;
-                if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(new THREE.Color(selected.color), 0.58);
-                return material;
-              });
-              object.material = Array.isArray(object.material) ? materials : materials[0];
-            }
+    new GLTFLoader().load(
+      modelUrl,
+      (gltf) => {
+        if (cancelled || !contentRef.current) {
+          disposeObject(gltf.scene);
+          return;
+        }
+
+        const model = clone(gltf.scene);
+        const oriented = new THREE.Group();
+        const pivot = new THREE.Group();
+        pivot.name = `${modelName}-reference-model`;
+        oriented.add(model);
+        pivot.add(oriented);
+        const tint = new THREE.Color("#D8CBB7");
+
+        model.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) return;
+          object.castShadow = true;
+          object.receiveShadow = true;
+          const materials = (Array.isArray(object.material) ? object.material : [object.material]).map((source) => {
+            const material = source.clone();
+            if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(tint, 0.3);
+            if ("roughness" in material && typeof material.roughness === "number") material.roughness = Math.max(material.roughness, 0.58);
+            if ("metalness" in material && typeof material.metalness === "number") material.metalness = Math.min(material.metalness, 0.08);
+            return material;
           });
-          model.updateMatrixWorld(true);
-          const sourceBox = new THREE.Box3().setFromObject(model);
-          const sourceSize = sourceBox.getSize(new THREE.Vector3());
-          const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
-          const alignment = calculateModelAlignment(selected.landmarks, sourceSize.toArray());
+          object.material = Array.isArray(object.material) ? materials : materials[0];
+        });
 
-          // Centre the source without discarding any transforms embedded in the GLB.
-          model.position.sub(sourceCenter);
-          const sourceLong = new THREE.Vector3(...alignment.sourceLongAxis);
-          const sourceWidth = new THREE.Vector3(...alignment.sourceWidthAxis);
-          const sourceDepth = new THREE.Vector3().crossVectors(sourceLong, sourceWidth);
-          const targetLong = new THREE.Vector3(...alignment.targetLongAxis);
-          const targetWidth = new THREE.Vector3(...alignment.targetWidthAxis);
-          const sourceBasis = new THREE.Matrix4().makeBasis(sourceLong, sourceWidth, sourceDepth);
-          const targetBasis = new THREE.Matrix4().makeBasis(targetLong, targetWidth, new THREE.Vector3(0, 1, 0));
-          const rotation = targetBasis.multiply(sourceBasis.transpose());
+        model.updateMatrixWorld(true);
+        const sourceBox = new THREE.Box3().setFromObject(model);
+        const sourceSize = sourceBox.getSize(new THREE.Vector3());
+        if (sourceBox.isEmpty() || !Number.isFinite(sourceSize.length()) || sourceSize.lengthSq() < 0.000001) {
+          disposeObject(pivot);
+          onLoadStateChange("error");
+          return;
+        }
+        const axes = [
+          { size: sourceSize.x, direction: new THREE.Vector3(1, 0, 0) },
+          { size: sourceSize.y, direction: new THREE.Vector3(0, 1, 0) },
+          { size: sourceSize.z, direction: new THREE.Vector3(0, 0, 1) },
+        ];
+        const longestAxis = axes.reduce((longest, axis) => axis.size > longest.size ? axis : longest);
+        oriented.quaternion.setFromUnitVectors(longestAxis.direction, new THREE.Vector3(0, 1, 0));
+        oriented.updateMatrixWorld(true);
 
-          overlay.scale.setScalar(alignment.uniformScale);
-          overlay.quaternion.setFromRotationMatrix(rotation);
-          overlay.position.set(...alignment.targetCenter);
-          contentRef.current.add(overlay);
-        },
-        undefined,
-        () => {
-          if (!cancelled) console.warn(`Optional reference model could not be loaded: ${url}`);
-        },
-      );
-    }
+        const orientedBox = new THREE.Box3().setFromObject(oriented);
+        const orientedSize = orientedBox.getSize(new THREE.Vector3());
+        const orientedCenter = orientedBox.getCenter(new THREE.Vector3());
+        oriented.position.set(-orientedCenter.x, -orientedBox.min.y, -orientedCenter.z);
+        pivot.scale.setScalar(DISPLAY_HEIGHT / Math.max(orientedSize.y, 0.001));
+        pivot.position.y = 0.015;
+        contentRef.current.add(pivot);
+        pivot.updateMatrixWorld(true);
+        modelBoxRef.current = new THREE.Box3().setFromObject(pivot);
+        onLoadStateChange("ready");
+      },
+      undefined,
+      () => {
+        if (!cancelled) {
+          console.warn(`Reference model could not be loaded: ${modelUrl}`);
+          onLoadStateChange("error");
+        }
+      },
+    );
 
     return () => { cancelled = true; };
-  }, [layers, selectedId, showModels]);
+  }, [modelUrl, modelName, onLoadStateChange]);
 
-  return <div ref={hostRef} className="scene-canvas" aria-label="3D skeletal viewport" />;
+  return <div ref={hostRef} className="scene-canvas" aria-label={`${modelName} 3D reference model`} />;
 });
