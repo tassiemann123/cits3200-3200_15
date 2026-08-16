@@ -1,16 +1,15 @@
-# OS
+node_modules/
+dist/
+build/
+.gradle/
+mobile/android/app/build/
+mobile/android/build/
+*.apk
+__pycache__/
+*.pyc
+venv/
+.venv/
 .DS_Store
-Thumbs.db
-
-# Editor
 .vscode/
 .idea/
-
-# Env
 .env
-*.log
-
-# Dependencies (uncomment as needed)
-# node_modules/
-# __pycache__/
-# venv/
