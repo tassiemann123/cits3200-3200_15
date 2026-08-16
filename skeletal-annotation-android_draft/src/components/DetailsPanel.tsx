@@ -12,8 +12,8 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
     return (
       <aside className="panel details-panel empty-details">
         <CircleDot size={30} />
-        <h2>选择一个个体</h2>
-        <p>点击左侧图层或视口中的骨架，查看测点和模型设置。</p>
+        <h2>Select an individual</h2>
+        <p>Select a skeleton in the layer list or viewport to view its landmarks and model settings.</p>
       </aside>
     );
   }
@@ -30,17 +30,17 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
       </div>
 
       <label className="field-label">
-        个体名称
+        Individual name
         <input value={layer.name} onChange={(event) => onPatch(layer.id, { name: event.target.value })} disabled={layer.locked} />
       </label>
 
       <div className="field-label">
-        显示模型
+        Model display
         <div className="segmented-control">
           {([
-            ["landmarks", "测点"],
-            ["male", "男性"],
-            ["female", "女性"],
+            ["landmarks", "Landmarks"],
+            ["male", "Male"],
+            ["female", "Female"],
           ] as Array<[ModelType, string]>).map(([value, label]) => (
             <button
               key={value}
@@ -56,7 +56,7 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
       </div>
 
       <label className="field-label color-field">
-        图层颜色
+        Layer colour
         <span>
           <input type="color" value={layer.color} onChange={(event) => onPatch(layer.id, { color: event.target.value.toUpperCase() })} />
           <code>{layer.color.toUpperCase()}</code>
@@ -64,17 +64,17 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
       </label>
 
       <div className="metric-grid">
-        <div><CircleDot size={17} /><span><strong>{layer.landmarks.length}</strong>测点</span></div>
-        <div><Minus size={17} /><span><strong>{layer.segments.length}</strong>线段</span></div>
-        <div><Bone size={17} /><span><strong>{modelType === "female" ? "118" : modelType === "male" ? "18" : "—"}</strong>{modelType === "female" ? "关节" : modelType === "male" ? "骨段" : "模型"}</span></div>
-        <div><Info size={17} /><span><strong>{layer.visible ? "显示" : "隐藏"}</strong>状态</span></div>
+        <div><CircleDot size={17} /><span><strong>{layer.landmarks.length}</strong>landmarks</span></div>
+        <div><Minus size={17} /><span><strong>{layer.segments.length}</strong>segments</span></div>
+        <div><Bone size={17} /><span><strong>{modelType === "female" ? "118" : modelType === "male" ? "18" : "—"}</strong>{modelType === "female" ? "joints" : modelType === "male" ? "bones" : "model"}</span></div>
+        <div><Info size={17} /><span><strong>{layer.visible ? "Shown" : "Hidden"}</strong>status</span></div>
       </div>
 
       {modelType !== "landmarks" && (
         <>
           <div className="research-note">
             <Info size={16} />
-            <p>参考模型会按测点范围、方向和比例叠加；当前不代表已完成科研级关节姿态配准。</p>
+            <p>The reference model is fitted to the landmark range, direction, and scale. It is not yet a research-grade joint pose registration.</p>
           </div>
           <p className="model-attribution">
             {modelType === "female"
@@ -85,14 +85,14 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
       )}
 
       <label className="field-label notes-field">
-        研究备注
-        <textarea value={layer.notes} onChange={(event) => onPatch(layer.id, { notes: event.target.value })} placeholder="保存观察、上下文或异常说明…" />
+        Research notes
+        <textarea value={layer.notes} onChange={(event) => onPatch(layer.id, { notes: event.target.value })} placeholder="Record observations, context, or anomalies…" />
       </label>
 
       <div className="coordinate-table-wrap">
-        <div className="section-title"><span>测点预览</span><small>X / Z / Y</small></div>
+        <div className="section-title"><span>Landmark preview</span><small>X / Z / Y</small></div>
         <table className="coordinate-table">
-          <thead><tr><th>点</th><th>X</th><th>Z</th><th>Y</th></tr></thead>
+          <thead><tr><th>Point</th><th>X</th><th>Z</th><th>Y</th></tr></thead>
           <tbody>
             {layer.landmarks.slice(0, 12).map((landmark, index) => (
               <tr key={landmark.id}>
@@ -104,12 +104,12 @@ export function DetailsPanel({ layer, onPatch, onRemove }: DetailsPanelProps) {
             ))}
           </tbody>
         </table>
-        {layer.landmarks.length > 12 && <p className="table-footnote">另有 {layer.landmarks.length - 12} 个测点</p>}
+        {layer.landmarks.length > 12 && <p className="table-footnote">{layer.landmarks.length - 12} more landmarks</p>}
       </div>
 
       {!layer.locked && (
         <button type="button" className="danger-button" onClick={() => onRemove(layer.id)}>
-          <Trash2 size={16} /> 删除此个体
+          <Trash2 size={16} /> Delete Individual
         </button>
       )}
     </aside>

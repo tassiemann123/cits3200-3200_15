@@ -29,7 +29,7 @@ export function ManualEntryDialog({ open, onClose, onAdd }: ManualEntryDialogPro
   const submit = () => {
     const values = [Number(x), Number(y), Number(z)];
     if (!skeletonId.trim() || !pointName.trim() || values.some((value) => !Number.isFinite(value))) {
-      setError("请输入个体编号、测点名称和有效的 X、Y、Z 数值。");
+      setError("Enter an individual ID, a landmark name, and valid X, Y, and Z values.");
       return;
     }
     onAdd({ skeletonId: skeletonId.trim(), pointName: pointName.trim(), x: values[0], y: values[1], z: values[2] });
@@ -41,21 +41,21 @@ export function ManualEntryDialog({ open, onClose, onAdd }: ManualEntryDialogPro
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="manual-entry-title">
         <div className="dialog-heading">
-          <div><p className="eyebrow">MANUAL COORDINATE</p><h2 id="manual-entry-title">添加测点</h2></div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="关闭"><X size={20} /></button>
+          <div><p className="eyebrow">MANUAL COORDINATE</p><h2 id="manual-entry-title">Add Landmark</h2></div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={20} /></button>
         </div>
         <div className="dialog-grid">
-          <label className="field-label">个体编号<input value={skeletonId} onChange={(event) => setSkeletonId(event.target.value)} placeholder="例如 BP151" /></label>
-          <label className="field-label">测点名称<input value={pointName} onChange={(event) => setPointName(event.target.value)} placeholder="1–25 或名称" /></label>
+          <label className="field-label">Individual ID<input value={skeletonId} onChange={(event) => setSkeletonId(event.target.value)} placeholder="e.g. BP151" /></label>
+          <label className="field-label">Landmark name<input value={pointName} onChange={(event) => setPointName(event.target.value)} placeholder="1–25 or a name" /></label>
           <label className="field-label">X<input inputMode="decimal" value={x} onChange={(event) => setX(event.target.value)} placeholder="0.000" /></label>
           <label className="field-label">Y<input inputMode="decimal" value={y} onChange={(event) => setY(event.target.value)} placeholder="0.000" /></label>
           <label className="field-label">Z<input inputMode="decimal" value={z} onChange={(event) => setZ(event.target.value)} placeholder="0.000" /></label>
         </div>
-        <p className="dialog-hint">手动输入使用标准 X / Y / Z；显示时自动转换为现场坐标方向。</p>
+        <p className="dialog-hint">Manual entries use standard X / Y / Z values and are automatically converted to the survey orientation for display.</p>
         {error && <p className="form-error">{error}</p>}
         <div className="dialog-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>完成</button>
-          <button type="button" className="primary-button" onClick={submit}><Plus size={17} /> 添加并继续</button>
+          <button type="button" className="secondary-button" onClick={onClose}>Done</button>
+          <button type="button" className="primary-button" onClick={submit}><Plus size={17} /> Add & Continue</button>
         </div>
       </section>
     </div>

@@ -49,7 +49,7 @@ export function parseRot(text: string, sourceName = "Imported ROT"): ParseResult
     const instruction = trimmed.split("#", 1)[0].trim();
     const numbers = instruction.split(/\s+/).map(Number);
     if (numbers.length < 4 || numbers.some((value) => !Number.isFinite(value))) {
-      warnings.push(`第 ${rowIndex + 1} 行无法解析，已跳过。`);
+      warnings.push(`Row ${rowIndex + 1} could not be parsed and was skipped.`);
       return;
     }
 
@@ -94,6 +94,6 @@ export function parseRot(text: string, sourceName = "Imported ROT"): ParseResult
     notes: "",
   }));
 
-  if (layers.length === 0) warnings.push("文件中没有找到可显示的 ROT 坐标。请检查是否使用 X Z Y colour 格式。");
+  if (layers.length === 0) warnings.push("No displayable ROT coordinates were found. Check that the file uses the X Z Y colour format.");
   return { layers, warnings };
 }

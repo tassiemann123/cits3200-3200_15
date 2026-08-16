@@ -46,7 +46,7 @@ function pointNumber(value: string): number | null {
 export function parseCsv(text: string, sourceName = "Imported CSV"): ParseResult {
   const rows = parseRows(text);
   const warnings: string[] = [];
-  if (rows.length < 2) return { layers: [], warnings: ["CSV 没有数据行。"] };
+  if (rows.length < 2) return { layers: [], warnings: ["The CSV contains no data rows."] };
 
   const headers = rows[0].map((header) => header.trim().toLowerCase());
   const find = (...names: string[]) => headers.findIndex((header) => names.includes(header));
@@ -56,7 +56,7 @@ export function parseCsv(text: string, sourceName = "Imported CSV"): ParseResult
   const yIndex = find("y");
   const zIndex = find("z");
   if ([skeletonIndex, jointIndex, xIndex, yIndex, zIndex].some((index) => index < 0)) {
-    return { layers: [], warnings: ["CSV 必须包含 skeleton_id、joint_name、x、y、z 列。"] };
+    return { layers: [], warnings: ["The CSV must contain skeleton_id, joint_name, x, y, and z columns."] };
   }
 
   const groups = new Map<string, Landmark[]>();
@@ -67,7 +67,7 @@ export function parseCsv(text: string, sourceName = "Imported CSV"): ParseResult
     const y = Number(row[yIndex]);
     const z = Number(row[zIndex]);
     if (!skeleton || !joint || ![x, y, z].every(Number.isFinite)) {
-      warnings.push(`第 ${offset + 2} 行缺少标识或有效坐标，已跳过。`);
+      warnings.push(`Row ${offset + 2} is missing an identifier or valid coordinates and was skipped.`);
       return;
     }
     const landmarks = groups.get(skeleton) ?? [];

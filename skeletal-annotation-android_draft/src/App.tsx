@@ -75,7 +75,7 @@ export function App() {
         const firstBody = result.layers.find((layer) => !layer.locked);
         if (firstBody) setSelectedId(firstBody.id);
       })
-      .catch(() => notify("示例数据未加载；可使用“导入数据”选择本地文件。"));
+      .catch(() => notify("The sample data could not be loaded. Use Import Data to select a local file."));
   }, [sampleLoaded, savedProject]);
 
   const patchLayer = (id: string, patch: Partial<SkeletonLayer>) => {
@@ -88,19 +88,19 @@ export function App() {
       const extension = file.name.split(".").pop()?.toLowerCase();
       if (extension === "json") {
         const imported: unknown = JSON.parse(text);
-        if (!isProjectData(imported)) throw new Error("JSON 不是有效的 OsteoPlot 项目文件。" );
+        if (!isProjectData(imported)) throw new Error("This JSON file is not a valid OsteoPlot project." );
         setProject({ ...imported, updatedAt: new Date().toISOString() });
         setSelectedId(imported.layers.find((layer) => !layer.locked)?.id ?? imported.layers[0]?.id ?? null);
-        notify(`已载入项目：${imported.name}`);
+        notify(`Project loaded: ${imported.name}`);
         return;
       }
       const result = extension === "rot" ? parseRot(text, file.name) : parseCsv(text, file.name);
-      if (result.layers.length === 0) throw new Error(result.warnings[0] ?? "文件没有可用坐标。" );
+      if (result.layers.length === 0) throw new Error(result.warnings[0] ?? "The file contains no usable coordinates." );
       setProject((current) => ({ ...current, layers: [...current.layers, ...result.layers] }));
       setSelectedId(result.layers.find((layer) => !layer.locked)?.id ?? result.layers[0].id);
-      notify(`已导入 ${result.layers.length} 个图层${result.warnings.length ? `，${result.warnings.length} 条提示` : ""}`);
+      notify(`Imported ${result.layers.length} layer${result.layers.length === 1 ? "" : "s"}${result.warnings.length ? ` with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}` : ""}`);
     } catch (error) {
-      notify(error instanceof Error ? error.message : "导入失败，请检查文件格式。" );
+      notify(error instanceof Error ? error.message : "Import failed. Check the file format." );
     }
   };
 
@@ -129,34 +129,34 @@ export function App() {
       setProject((current) => ({ ...current, layers: [...current.layers, layer] }));
       setSelectedId(id);
     }
-    notify(`${entry.skeletonId} · ${entry.pointName} 已添加`);
+    notify(`${entry.skeletonId} · ${entry.pointName} added`);
   };
 
   const removeLayer = (id: string) => {
     const layer = project.layers.find((item) => item.id === id);
-    if (!layer || !window.confirm(`确定删除 ${layer.name}？此操作尚未保存。`)) return;
+    if (!layer || !window.confirm(`Delete ${layer.name}? This change has not been saved yet.`)) return;
     setProject((current) => ({ ...current, layers: current.layers.filter((item) => item.id !== id) }));
     setSelectedId(project.layers.find((item) => item.id !== id && !item.locked)?.id ?? null);
   };
 
   const persist = () => {
     setProject((current) => saveProject(current));
-    notify("项目已安全保存到本机");
+    notify("Project saved locally");
   };
 
   const exportJson = () => {
     const updated = { ...project, updatedAt: new Date().toISOString() };
     downloadFile(JSON.stringify(updated, null, 2), `${safeFilename(project.name)}.json`, "application/json");
     setExportOpen(false);
-    notify("项目 JSON 已导出");
+    notify("Project JSON exported");
   };
 
   const exportScreenshot = async () => {
     const blob = await viewportRef.current?.capturePng();
-    if (!blob) return notify("截图生成失败。" );
+    if (!blob) return notify("The screenshot could not be generated." );
     downloadFile(blob, `${safeFilename(project.name)}-viewport.png`, "image/png");
     setExportOpen(false);
-    notify("3D 视图截图已导出");
+    notify("3D viewport screenshot exported");
   };
 
   return (
@@ -167,9 +167,9 @@ export function App() {
           <div><strong>OsteoPlot</strong><span>3D SKELETAL ANNOTATION</span></div>
         </div>
         <div className="project-title-block">
-          <span className="offline-badge"><ShieldCheck size={14} /> 离线项目</span>
+          <span className="offline-badge"><ShieldCheck size={14} /> Offline project</span>
           <input
-            aria-label="项目名称"
+            aria-label="Project name"
             value={project.name}
             onChange={(event) => setProject((current) => ({ ...current, name: event.target.value }))}
           />
@@ -186,15 +186,15 @@ export function App() {
               event.target.value = "";
             }}
           />
-          <button type="button" className="header-button" onClick={() => setManualOpen(true)}><Plus size={17} /><span>手动测点</span></button>
-          <button type="button" className="header-button" onClick={() => fileInputRef.current?.click()}><Upload size={17} /><span>导入数据</span></button>
-          <button type="button" className="header-button" onClick={persist}><Save size={17} /><span>保存</span></button>
+          <button type="button" className="header-button" onClick={() => setManualOpen(true)}><Plus size={17} /><span>Add Landmark</span></button>
+          <button type="button" className="header-button" onClick={() => fileInputRef.current?.click()}><Upload size={17} /><span>Import Data</span></button>
+          <button type="button" className="header-button" onClick={persist}><Save size={17} /><span>Save</span></button>
           <div className="export-menu-wrap">
-            <button type="button" className="primary-header-button" onClick={() => setExportOpen((open) => !open)}><Download size={17} /><span>导出</span></button>
+            <button type="button" className="primary-header-button" onClick={() => setExportOpen((open) => !open)}><Download size={17} /><span>Export</span></button>
             {exportOpen && (
               <div className="export-menu">
-                <button type="button" onClick={() => void exportScreenshot()}><Camera size={17} /><span><strong>视图截图</strong><small>PNG · 当前相机角度</small></span></button>
-                <button type="button" onClick={exportJson}><FileJson size={17} /><span><strong>项目数据</strong><small>JSON · 可重新载入</small></span></button>
+                <button type="button" onClick={() => void exportScreenshot()}><Camera size={17} /><span><strong>Viewport Screenshot</strong><small>PNG · Current camera angle</small></span></button>
+                <button type="button" onClick={exportJson}><FileJson size={17} /><span><strong>Project Data</strong><small>JSON · Reloadable</small></span></button>
               </div>
             )}
           </div>
@@ -224,14 +224,14 @@ export function App() {
           />
           <div className="viewport-topbar">
             <div className="scene-stats">
-              <span><Layers3 size={14} /> {bodyLayers.length} 个体</span>
-              <span><Crosshair size={14} /> {totalPoints.toLocaleString()} 测点</span>
+              <span><Layers3 size={14} /> {bodyLayers.length} individuals</span>
+              <span><Crosshair size={14} /> {totalPoints.toLocaleString()} landmarks</span>
             </div>
             <div className="viewport-tools">
-              <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="坐标网格"><Grid3X3 size={18} /></button>
-              <button type="button" className={showModels ? "active" : ""} onClick={() => setShowModels((value) => !value)} title="参考模型"><Bone size={18} /></button>
-              <button type="button" onClick={() => viewportRef.current?.focusSelected()} title="聚焦所选"><Focus size={18} /></button>
-              <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="重置相机"><RotateCcw size={18} /></button>
+              <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
+              <button type="button" className={showModels ? "active" : ""} onClick={() => setShowModels((value) => !value)} title="Reference models"><Bone size={18} /></button>
+              <button type="button" onClick={() => viewportRef.current?.focusSelected()} title="Focus selected"><Focus size={18} /></button>
+              <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
             </div>
           </div>
           <div className="orientation-cube" aria-hidden="true">
@@ -239,9 +239,9 @@ export function App() {
           </div>
           <div className="viewport-caption">
             <span className="pulse-dot" />
-            <div><strong>{selectedLayer?.name ?? "未选择"}</strong><small>{selectedLayer ? `${selectedLayer.sourceName} · X/Z/Y survey coordinates` : "点击骨架选择个体"}</small></div>
+            <div><strong>{selectedLayer?.name ?? "No selection"}</strong><small>{selectedLayer ? `${selectedLayer.sourceName} · X/Z/Y survey coordinates` : "Select a skeleton in the viewport"}</small></div>
           </div>
-          <div className="touch-hint">单指旋转 · 双指缩放/平移 · 轻触选择</div>
+          <div className="touch-hint">Drag to rotate · Pinch or scroll to zoom · Tap to select</div>
         </section>
 
         <div className={`workspace-pane right-pane ${mobilePane === "details" ? "mobile-active" : ""}`}>
@@ -249,10 +249,10 @@ export function App() {
         </div>
       </main>
 
-      <nav className="mobile-nav" aria-label="移动端导航">
-        <button type="button" className={mobilePane === "layers" ? "active" : ""} onClick={() => setMobilePane("layers")}><ListTree size={19} />图层</button>
-        <button type="button" className={mobilePane === "scene" ? "active" : ""} onClick={() => setMobilePane("scene")}><Database size={19} />3D 场景</button>
-        <button type="button" className={mobilePane === "details" ? "active" : ""} onClick={() => setMobilePane("details")}><PanelRight size={19} />详情</button>
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        <button type="button" className={mobilePane === "layers" ? "active" : ""} onClick={() => setMobilePane("layers")}><ListTree size={19} />Layers</button>
+        <button type="button" className={mobilePane === "scene" ? "active" : ""} onClick={() => setMobilePane("scene")}><Database size={19} />3D Scene</button>
+        <button type="button" className={mobilePane === "details" ? "active" : ""} onClick={() => setMobilePane("details")}><PanelRight size={19} />Details</button>
       </nav>
 
       <ManualEntryDialog open={manualOpen} onClose={() => setManualOpen(false)} onAdd={addManualPoint} />

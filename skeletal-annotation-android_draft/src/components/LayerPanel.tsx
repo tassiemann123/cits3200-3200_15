@@ -11,9 +11,9 @@ interface LayerPanelProps {
 }
 
 const MODEL_LABELS: Record<ModelType, string> = {
-  landmarks: "测点骨架",
-  male: "男性参考",
-  female: "女性参考",
+  landmarks: "Landmark skeleton",
+  male: "Male reference",
+  female: "Female reference",
 };
 
 export function LayerPanel({ layers, selectedId, onSelect, onPatch, onShowAll }: LayerPanelProps) {
@@ -26,19 +26,19 @@ export function LayerPanel({ layers, selectedId, onSelect, onPatch, onShowAll }:
       <div className="panel-heading">
         <div>
           <p className="eyebrow">SCENE LAYERS</p>
-          <h2>个体与图层</h2>
+          <h2>Individuals & Layers</h2>
         </div>
         <span className="count-pill">{visibleCount}/{layers.length}</span>
       </div>
 
       <label className="search-field">
         <Search size={16} aria-hidden="true" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索 BP 编号" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search BP number" />
       </label>
 
       <div className="layer-actions">
-        <button type="button" onClick={() => onShowAll(true)}>全部显示</button>
-        <button type="button" onClick={() => onShowAll(false)}>全部隐藏</button>
+        <button type="button" onClick={() => onShowAll(true)}>Show all</button>
+        <button type="button" onClick={() => onShowAll(false)}>Hide all</button>
       </div>
 
       <div className="layer-list" role="list">
@@ -49,7 +49,7 @@ export function LayerPanel({ layers, selectedId, onSelect, onPatch, onShowAll }:
               <button
                 type="button"
                 className="visibility-button"
-                aria-label={layer.visible ? `隐藏 ${layer.name}` : `显示 ${layer.name}`}
+                aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
                 onClick={() => onPatch(layer.id, { visible: !layer.visible })}
               >
                 {layer.visible ? <Eye size={17} /> : <EyeOff size={17} />}
@@ -58,14 +58,14 @@ export function LayerPanel({ layers, selectedId, onSelect, onPatch, onShowAll }:
                 <span className="color-dot" style={{ background: layer.color }} />
                 <span className="layer-copy">
                   <strong>{layer.name}</strong>
-                  <small>{MODEL_LABELS[layer.modelType]} · {layer.segments.length} 段</small>
+                  <small>{MODEL_LABELS[layer.modelType]} · {layer.segments.length} segments</small>
                 </span>
                 {layer.locked ? <LockKeyhole size={14} className="muted-icon" /> : <ChevronRight size={16} className="muted-icon" />}
               </button>
             </div>
           );
         })}
-        {filtered.length === 0 && <p className="empty-copy">没有匹配的图层</p>}
+        {filtered.length === 0 && <p className="empty-copy">No matching layers</p>}
       </div>
     </aside>
   );
