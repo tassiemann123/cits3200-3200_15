@@ -4,7 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { SkeletonLayer, Vec3 } from "../types";
-import { centroid } from "../lib/coordinates";
+import { calculateModelAlignment } from "../lib/modelAlignment";
 
 export interface SceneViewportHandle {
   resetCamera: () => void;
@@ -30,23 +30,6 @@ function allPositions(layer: SkeletonLayer): Vec3[] {
 function layerBox(layer: SkeletonLayer): THREE.Box3 {
   const points = allPositions(layer).map((point) => new THREE.Vector3(...point));
   return points.length > 0 ? new THREE.Box3().setFromPoints(points) : new THREE.Box3();
-}
-
-function principalDirection(points: Vec3[]): THREE.Vector2 {
-  if (points.length < 2) return new THREE.Vector2(0, 1);
-  const center = centroid(points);
-  let xx = 0;
-  let zz = 0;
-  let xz = 0;
-  points.forEach(([x, , z]) => {
-    const dx = x - center[0];
-    const dz = z - center[2];
-    xx += dx * dx;
-    zz += dz * dz;
-    xz += dx * dz;
-  });
-  const angle = 0.5 * Math.atan2(2 * xz, xx - zz);
-  return new THREE.Vector2(Math.cos(angle), Math.sin(angle)).normalize();
 }
 
 function disposeObject(root: THREE.Object3D): void {
@@ -266,7 +249,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         url,
         (gltf) => {
           if (cancelled || !contentRef.current) return;
-          const overlay = clone(gltf.scene);
+          const model = clone(gltf.scene);
+          const overlay = new THREE.Group();
+          overlay.add(model);
           overlay.name = "reference-model-overlay";
           overlay.userData.layerId = selected.id;
           overlay.traverse((object) => {
@@ -283,22 +268,26 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
               object.material = Array.isArray(object.material) ? materials : materials[0];
             }
           });
-          const sourceBox = new THREE.Box3().setFromObject(overlay);
+          model.updateMatrixWorld(true);
+          const sourceBox = new THREE.Box3().setFromObject(model);
           const sourceSize = sourceBox.getSize(new THREE.Vector3());
-          const targetBox = layerBox(selected);
-          const targetSize = targetBox.getSize(new THREE.Vector3());
-          const targetCenter = targetBox.getCenter(new THREE.Vector3());
-          const targetLength = Math.max(targetSize.x, targetSize.z, 0.5);
-          const scale = targetLength / Math.max(sourceSize.y, sourceSize.x, sourceSize.z, 0.001);
-          overlay.scale.setScalar(scale);
-          const direction = principalDirection(allPositions(selected));
-          const layDown = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-          const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(direction.x, direction.y));
-          overlay.quaternion.copy(yaw.multiply(layDown));
-          overlay.updateMatrixWorld(true);
-          const positionedBox = new THREE.Box3().setFromObject(overlay);
-          const positionedCenter = positionedBox.getCenter(new THREE.Vector3());
-          overlay.position.add(targetCenter.sub(positionedCenter));
+          const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
+          const alignment = calculateModelAlignment(selected.landmarks, sourceSize.toArray());
+
+          // Centre the source without discarding any transforms embedded in the GLB.
+          model.position.sub(sourceCenter);
+          const sourceLong = new THREE.Vector3(...alignment.sourceLongAxis);
+          const sourceWidth = new THREE.Vector3(...alignment.sourceWidthAxis);
+          const sourceDepth = new THREE.Vector3().crossVectors(sourceLong, sourceWidth);
+          const targetLong = new THREE.Vector3(...alignment.targetLongAxis);
+          const targetWidth = new THREE.Vector3(...alignment.targetWidthAxis);
+          const sourceBasis = new THREE.Matrix4().makeBasis(sourceLong, sourceWidth, sourceDepth);
+          const targetBasis = new THREE.Matrix4().makeBasis(targetLong, targetWidth, new THREE.Vector3(0, 1, 0));
+          const rotation = targetBasis.multiply(sourceBasis.transpose());
+
+          overlay.scale.setScalar(alignment.uniformScale);
+          overlay.quaternion.setFromRotationMatrix(rotation);
+          overlay.position.set(...alignment.targetCenter);
           contentRef.current.add(overlay);
         },
         undefined,
