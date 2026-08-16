@@ -6,14 +6,14 @@ CITS3200 Professional Computing, Team 15
 A desktop and mobile application for forensic anthropologists to reconstruct human skeletons from joint coordinate data, for Dr Ambika Flavel, Centre for Forensic Anthropology, UWA.
 
 ## Team Members
-| Name | GitHub Username | Role(s) |
-|------|------------------|---------|
-| Tasveer Mann | tassiemann123 | Project Manager |
-| Ruan Van Zyl | [username] | |
-| Hogan Tan | HOGAN-T | |
-| Ivy Qi | [username] | |
-| Wenbo Zhong | wnbmlk | |
-| Suhrid Mahmood Pushan | suhrid07 | |
+| Name 
+|------
+| Tasveer Mann 
+| Ruan Van Zyl 
+| Hogan Tan 
+| Ivy Qi 
+| Wenbo Zhong 
+| Suhrid Mahmood Pushan 
 
 ## Client
 Dr Ambika Flavel, Centre for Forensic Anthropology, UWA
