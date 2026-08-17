@@ -2,32 +2,50 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bone,
   Camera,
+  ClipboardList,
   Database,
   Focus,
   Grid3X3,
+  Info,
   PanelRight,
   RotateCcw,
   Save,
   ShieldCheck,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
+import { CoordinatePanel } from "./components/CoordinatePanel";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { SceneViewport, type SceneViewportHandle } from "./components/SceneViewport";
+import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema";
+import { toBackendLandmarks } from "./lib/backendCoordinates";
+import { exportJson } from "./lib/jsonExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
-import type { Landmark, ModelLoadState, ViewerModel } from "./types";
+import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel } from "./types";
 
-type MobilePane = "scene" | "details";
+type MobilePane = "scene" | "panel";
+type SidePanel = "coordinates" | "details";
 
 interface ViewerPreferences {
-  projectName: string;
-  notes: string;
+  workspaceName: string;
+  records: SkeletonRecord[];
+  activeRecordId: string;
 }
 
 const STORAGE_KEY = "osteoplot.reference-viewer.v1";
-const DEFAULT_PREFERENCES: ViewerPreferences = {
-  projectName: "Skeletal Model Workspace",
+const DEFAULT_RECORD: SkeletonRecord = {
+  id: "skeleton-record-1",
+  name: "Skeleton 1",
+  coordinates: {},
+  excludedGroups: [],
   notes: "",
+};
+const DEFAULT_PREFERENCES: ViewerPreferences = {
+  workspaceName: "Skeletal Model Workspace",
+  records: [DEFAULT_RECORD],
+  activeRecordId: DEFAULT_RECORD.id,
 };
 
 const INITIAL_MODEL: ViewerModel = {
@@ -38,8 +56,7 @@ const INITIAL_MODEL: ViewerModel = {
   attribution: "Skeleton Pre-cut · Maxime66410 · Sketchfab Standard",
 };
 
-// Replace this empty collection with coordinate points returned by the backend.
-const BACKEND_COORDINATES: Landmark[] = [];
+const GROUP_IDS = new Set<PointGroupId>(CFA_GROUPS.map((group) => group.id));
 
 function modelNameFromFile(fileName: string): string {
   const name = fileName.replace(/\.glb$/i, "").replace(/[-_]+/g, " ").trim();
@@ -52,14 +69,60 @@ function formatFileSize(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+function createRecord(index: number): SkeletonRecord {
+  return {
+    id: `skeleton-record-${crypto.randomUUID()}`,
+    name: `Skeleton ${index}`,
+    coordinates: {},
+    excludedGroups: [],
+    notes: "",
+  };
+}
+
+function normaliseRecord(value: unknown, index: number): SkeletonRecord | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<SkeletonRecord>;
+  if (typeof candidate.id !== "string" || !candidate.id) return null;
+  const excludedGroups = Array.isArray(candidate.excludedGroups)
+    ? candidate.excludedGroups.filter((group): group is PointGroupId => GROUP_IDS.has(group as PointGroupId))
+    : [];
+  return {
+    id: candidate.id,
+    name: typeof candidate.name === "string" && candidate.name.trim() ? candidate.name : `Skeleton ${index}`,
+    coordinates: candidate.coordinates && typeof candidate.coordinates === "object" ? candidate.coordinates : {},
+    excludedGroups,
+    notes: typeof candidate.notes === "string" ? candidate.notes : "",
+  };
+}
+
 function loadPreferences(): ViewerPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PREFERENCES;
-    const saved = JSON.parse(raw) as Partial<ViewerPreferences>;
+    const saved = JSON.parse(raw) as Partial<ViewerPreferences> & { projectName?: unknown; notes?: unknown };
+    const records = Array.isArray(saved.records)
+      ? saved.records.map(normaliseRecord).filter((record): record is SkeletonRecord => Boolean(record))
+      : [];
+
+    if (records.length === 0) {
+      records.push({
+        ...DEFAULT_RECORD,
+        notes: typeof saved.notes === "string" ? saved.notes : "",
+      });
+    }
+
+    const activeRecordId = typeof saved.activeRecordId === "string" && records.some((record) => record.id === saved.activeRecordId)
+      ? saved.activeRecordId
+      : records[0].id;
+
     return {
-      projectName: typeof saved.projectName === "string" ? saved.projectName : DEFAULT_PREFERENCES.projectName,
-      notes: typeof saved.notes === "string" ? saved.notes : "",
+      workspaceName: typeof saved.workspaceName === "string"
+        ? saved.workspaceName
+        : typeof saved.projectName === "string"
+          ? saved.projectName
+          : DEFAULT_PREFERENCES.workspaceName,
+      records,
+      activeRecordId,
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -72,10 +135,14 @@ export function App() {
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>("loading");
   const [showGrid, setShowGrid] = useState(true);
   const [mobilePane, setMobilePane] = useState<MobilePane>("scene");
+  const [sidePanel, setSidePanel] = useState<SidePanel>("coordinates");
   const [toast, setToast] = useState<string | null>(null);
   const viewportRef = useRef<SceneViewportHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importedObjectUrlRef = useRef<string | null>(null);
+
+  const activeRecord = preferences.records.find((record) => record.id === preferences.activeRecordId) ?? preferences.records[0];
+  const backendCoordinates = toBackendLandmarks(activeRecord);
 
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
@@ -90,9 +157,16 @@ export function App() {
     setPreferences((current) => ({ ...current, ...patch }));
   };
 
+  const patchActiveRecord = (update: (record: SkeletonRecord) => SkeletonRecord) => {
+    setPreferences((current) => ({
+      ...current,
+      records: current.records.map((record) => record.id === current.activeRecordId ? update(record) : record),
+    }));
+  };
+
   const persist = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    notify("Viewer preferences saved locally");
+    notify(`${preferences.records.length} skeleton record${preferences.records.length === 1 ? "" : "s"} saved locally`);
   };
 
   const openModelPicker = () => fileInputRef.current?.click();
@@ -122,26 +196,97 @@ export function App() {
     });
     setModelLoadState("loading");
     setMobilePane("scene");
-    notify(`${file.name} opened as a project`);
+    notify(`${file.name} opened as the reference model`);
   };
 
-  const resetToInitialProject = () => {
+  const resetToInitialModel = () => {
     if (model.origin === "bundled") {
-      notify("The default project is already active");
+      notify("The bundled reference model is already active");
       return;
     }
     releaseImportedModel();
     setModel(INITIAL_MODEL);
     setModelLoadState("loading");
     setMobilePane("scene");
-    notify("Default project restored");
+    notify("Bundled reference model restored");
+  };
+
+  const addRecord = () => {
+    const record = createRecord(preferences.records.length + 1);
+    setPreferences((current) => ({
+      ...current,
+      records: [...current.records, record],
+      activeRecordId: record.id,
+    }));
+    setSidePanel("coordinates");
+    setMobilePane("panel");
+    notify(`${record.name} created`);
+  };
+
+  const setCoordinate = (point: PointName, axis: 0 | 1 | 2, value: number | null) => {
+    patchActiveRecord((record) => {
+      const coordinate: CoordinateDraft = [...(record.coordinates[point] ?? [null, null, null])] as CoordinateDraft;
+      coordinate[axis] = value;
+      return { ...record, coordinates: { ...record.coordinates, [point]: coordinate } };
+    });
+  };
+
+  const setGroupPresence = (groupId: PointGroupId, present: boolean) => {
+    patchActiveRecord((record) => ({
+      ...record,
+      excludedGroups: present
+        ? record.excludedGroups.filter((id) => id !== groupId)
+        : [...new Set([...record.excludedGroups, groupId])],
+    }));
+  };
+
+  const resetCoordinates = () => {
+    const hasData = Object.keys(activeRecord.coordinates).length > 0 || activeRecord.excludedGroups.length > 0;
+    if (!hasData) {
+      notify("This record is already empty");
+      return;
+    }
+    if (!window.confirm(`Reset all coordinates and presence settings for ${activeRecord.name}?`)) return;
+    patchActiveRecord((record) => ({ ...record, coordinates: {}, excludedGroups: [] }));
+    notify(`${activeRecord.name} coordinates reset`);
   };
 
   const exportScreenshot = async () => {
     const blob = await viewportRef.current?.capturePng();
     if (!blob) return notify("The screenshot could not be generated.");
-    downloadFile(blob, `${safeFilename(preferences.projectName)}-${safeFilename(model.name)}.png`, "image/png");
+    downloadFile(blob, `${safeFilename(preferences.workspaceName)}-${safeFilename(model.name)}.png`, "image/png");
     notify("Model screenshot exported");
+  };
+
+  const exportActiveRecord = async () => {
+    const payload = {
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      record: {
+        id: activeRecord.id,
+        name: activeRecord.name.trim() || "Untitled skeleton",
+        excludedGroups: activeRecord.excludedGroups,
+        notes: activeRecord.notes,
+        coordinates: backendCoordinates,
+      },
+    };
+    try {
+      const result = await exportJson(
+        JSON.stringify(payload, null, 2),
+        `${safeFilename(activeRecord.name)}-coordinates.json`,
+      );
+      notify(result.destination === "documents"
+        ? `JSON saved to ${result.displayPath}`
+        : `${backendCoordinates.length} backend-ready point${backendCoordinates.length === 1 ? "" : "s"} exported`);
+    } catch (error) {
+      console.error("Coordinate export failed", error);
+      notify("The coordinate JSON could not be saved");
+    }
+  };
+
+  const showPanel = (panel: SidePanel) => {
+    setSidePanel(panel);
+    setMobilePane("panel");
   };
 
   return (
@@ -149,25 +294,25 @@ export function App() {
       <header className="app-header">
         <div className="brand-block">
           <div className="brand-mark"><Bone size={22} /></div>
-          <div><strong>OsteoPlot</strong><span>3D SKELETAL REFERENCE</span></div>
+          <div><strong>OsteoPlot</strong><span>SKELETAL COORDINATE WORKSPACE</span></div>
         </div>
         <div className="project-title-block">
-          <span className="offline-badge"><ShieldCheck size={14} /> Offline collection</span>
+          <span className="offline-badge"><ShieldCheck size={14} /> Offline workspace</span>
           <input
-            aria-label="Collection name"
-            value={preferences.projectName}
-            onChange={(event) => patchPreferences({ projectName: event.target.value })}
+            aria-label="Workspace name"
+            value={preferences.workspaceName}
+            onChange={(event) => patchPreferences({ workspaceName: event.target.value })}
           />
         </div>
         <div className="header-actions">
-          <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Switch Project</span></button>
+          <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Switch Model</span></button>
           <button type="button" className="header-button" onClick={persist}><Save size={17} /><span>Save</span></button>
           <button type="button" className="primary-header-button" onClick={() => void exportScreenshot()}><Camera size={17} /><span>Screenshot</span></button>
           <button
             type="button"
             className="mobile-menu-button"
-            aria-label="Toggle model details"
-            onClick={() => setMobilePane((pane) => pane === "scene" ? "details" : "scene")}
+            aria-label="Toggle workspace panel"
+            onClick={() => setMobilePane((pane) => pane === "scene" ? "panel" : "scene")}
           >
             <PanelRight size={20} />
           </button>
@@ -179,7 +324,7 @@ export function App() {
         className="model-file-input"
         type="file"
         accept=".glb,model/gltf-binary"
-        aria-label="Choose another project GLB"
+        aria-label="Choose another reference model GLB"
         onChange={(event) => {
           importModel(event.currentTarget.files?.[0]);
           event.currentTarget.value = "";
@@ -198,7 +343,7 @@ export function App() {
           <div className="viewport-topbar">
             <div className="active-model-label">
               <Bone size={16} />
-              <span><strong>{model.name}</strong><small>{model.origin === "bundled" ? "DEFAULT PROJECT" : "IMPORTED PROJECT"}</small></span>
+              <span><strong>{model.name}</strong><small>{model.origin === "bundled" ? "BUNDLED REFERENCE" : "IMPORTED REFERENCE"}</small></span>
             </div>
             <div className="viewport-tools">
               <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
@@ -206,7 +351,18 @@ export function App() {
               <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
             </div>
           </div>
-          <div className="collection-badge"><span>SINGLE PROJECT WORKSPACE</span><strong>Switch projects with a compatible GLB</strong></div>
+          <button type="button" className="active-record-badge" onClick={() => showPanel("coordinates")}>
+            <ClipboardList size={15} />
+            <span>
+              <strong>{activeRecord.name.trim() || "Untitled skeleton"}</strong>
+              <small>{backendCoordinates.length} BACKEND-READY POINTS</small>
+            </span>
+          </button>
+          <div className="viewport-zoom-tools" aria-label="Model zoom controls">
+            <button type="button" onClick={() => viewportRef.current?.zoomBy(0.82)} title="Zoom in"><ZoomIn size={18} /></button>
+            <button type="button" onClick={() => viewportRef.current?.zoomBy(1.22)} title="Zoom out"><ZoomOut size={18} /></button>
+          </div>
+          <div className="collection-badge"><span>REFERENCE MODEL</span><strong>{activeRecord.name} · {backendCoordinates.length} backend-ready points</strong></div>
           <div className="orientation-cube" aria-hidden="true">
             <span className="axis-y">Y↑</span><span className="axis-x">X→</span><span className="axis-z">Z↘</span>
           </div>
@@ -222,22 +378,48 @@ export function App() {
           <div className="touch-hint">Drag to rotate · Pinch or scroll to zoom · Two-finger pan</div>
         </section>
 
-        <div className={`workspace-pane right-pane ${mobilePane === "details" ? "mobile-active" : ""}`}>
-          <DetailsPanel
-            model={model}
-            coordinates={BACKEND_COORDINATES}
-            notes={preferences.notes}
-            isInitialProject={model.origin === "bundled"}
-            onImportClick={openModelPicker}
-            onResetProject={resetToInitialProject}
-            onNotesChange={(notes) => patchPreferences({ notes })}
-          />
+        <div className={`workspace-pane right-pane side-panel-shell ${mobilePane === "panel" ? "mobile-active" : ""}`}>
+          <div className="side-panel-tabs" role="tablist" aria-label="Workspace tools">
+            <button type="button" role="tab" aria-selected={sidePanel === "coordinates"} className={sidePanel === "coordinates" ? "active" : ""} onClick={() => setSidePanel("coordinates")}>
+              <ClipboardList size={15} /> Coordinates
+            </button>
+            <button type="button" role="tab" aria-selected={sidePanel === "details"} className={sidePanel === "details" ? "active" : ""} onClick={() => setSidePanel("details")}>
+              <Info size={15} /> Details
+            </button>
+          </div>
+          <div className="side-panel-body">
+            {sidePanel === "coordinates" ? (
+              <CoordinatePanel
+                records={preferences.records}
+                activeRecord={activeRecord}
+                onSelectRecord={(activeRecordId) => patchPreferences({ activeRecordId })}
+                onCreateRecord={addRecord}
+                onRenameRecord={(name) => patchActiveRecord((record) => ({ ...record, name }))}
+                onCoordinateChange={setCoordinate}
+                onGroupPresenceChange={setGroupPresence}
+                onResetCoordinates={resetCoordinates}
+              />
+            ) : (
+              <DetailsPanel
+                model={model}
+                recordName={activeRecord.name}
+                coordinates={backendCoordinates}
+                notes={activeRecord.notes}
+                isInitialModel={model.origin === "bundled"}
+                onImportClick={openModelPicker}
+                onResetModel={resetToInitialModel}
+                onExportRecord={exportActiveRecord}
+                onNotesChange={(notes) => patchActiveRecord((record) => ({ ...record, notes }))}
+              />
+            )}
+          </div>
         </div>
       </main>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
         <button type="button" className={mobilePane === "scene" ? "active" : ""} onClick={() => setMobilePane("scene")}><Database size={19} />3D Model</button>
-        <button type="button" className={mobilePane === "details" ? "active" : ""} onClick={() => setMobilePane("details")}><PanelRight size={19} />Details</button>
+        <button type="button" className={mobilePane === "panel" && sidePanel === "coordinates" ? "active" : ""} onClick={() => showPanel("coordinates")}><ClipboardList size={19} />Coordinates</button>
+        <button type="button" className={mobilePane === "panel" && sidePanel === "details" ? "active" : ""} onClick={() => showPanel("details")}><PanelRight size={19} />Details</button>
       </nav>
 
       {toast && <div className="toast"><ShieldCheck size={17} />{toast}<button type="button" onClick={() => setToast(null)}><X size={15} /></button></div>}

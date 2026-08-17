@@ -1,4 +1,10 @@
+import type { PointGroupId, PointName } from "./data/cfaSchema";
+
 export type Vec3 = [number, number, number];
+
+export type CoordinateDraft = [number | null, number | null, number | null];
+
+export type SkeletonCoordinates = Partial<Record<PointName, CoordinateDraft>>;
 
 export type ModelType = "landmarks" | "male" | "female";
 
@@ -21,6 +27,14 @@ export interface Landmark {
   id: string;
   label: string;
   position: Vec3;
+}
+
+export interface SkeletonRecord {
+  id: string;
+  name: string;
+  coordinates: SkeletonCoordinates;
+  excludedGroups: PointGroupId[];
+  notes: string;
 }
 
 export interface SkeletonLayer {

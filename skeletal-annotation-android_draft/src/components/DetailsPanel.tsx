@@ -1,13 +1,15 @@
-import { Database, Info, RotateCcw, Upload } from "lucide-react";
+import { Database, Download, Info, RotateCcw, Upload } from "lucide-react";
 import type { Landmark, ViewerModel } from "../types";
 
 interface DetailsPanelProps {
   model: ViewerModel;
+  recordName: string;
   coordinates: Landmark[];
   notes: string;
-  isInitialProject: boolean;
+  isInitialModel: boolean;
   onImportClick: () => void;
-  onResetProject: () => void;
+  onResetModel: () => void;
+  onExportRecord: () => void;
   onNotesChange: (notes: string) => void;
 }
 
@@ -15,35 +17,35 @@ function formatCoordinate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(3) : "—";
 }
 
-export function DetailsPanel({ model, coordinates, notes, isInitialProject, onImportClick, onResetProject, onNotesChange }: DetailsPanelProps) {
+export function DetailsPanel({ model, recordName, coordinates, notes, isInitialModel, onImportClick, onResetModel, onExportRecord, onNotesChange }: DetailsPanelProps) {
   return (
     <aside className="panel details-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">ACTIVE PROJECT</p>
-          <h2>{model.name}</h2>
+          <p className="eyebrow">ACTIVE SKELETON RECORD</p>
+          <h2>{recordName}</h2>
         </div>
       </div>
 
       <label className="field-label">
-        Project model
+        Reference model
         <input value={model.name} readOnly />
       </label>
 
       <div className="project-action-stack">
         <button type="button" className="model-import-button" onClick={onImportClick}>
           <Upload size={16} />
-          <span><strong>Switch to another project</strong><small>Choose a project GLB from this device</small></span>
+          <span><strong>Switch reference model</strong><small>Choose a compatible GLB from this device</small></span>
         </button>
-        <button type="button" className="model-reset-button" onClick={onResetProject} disabled={isInitialProject}>
+        <button type="button" className="model-reset-button" onClick={onResetModel} disabled={isInitialModel}>
           <RotateCcw size={15} />
-          <span><strong>Reset to default project</strong><small>{isInitialProject ? "Default project is active" : "Restore the original bundled skeleton"}</small></span>
+          <span><strong>Reset reference model</strong><small>{isInitialModel ? "Bundled model is active" : "Restore the original bundled skeleton"}</small></span>
         </button>
       </div>
 
       <div className="research-note">
         <Info size={16} />
-        <p>The default project is always available. Other project files remain local to this session and can be reset safely at any time.</p>
+        <p>Changing the reference model does not replace or delete the coordinate records. Imported GLB files remain local to this session.</p>
       </div>
       <p className="model-attribution">{model.attribution}</p>
 
@@ -54,8 +56,19 @@ export function DetailsPanel({ model, coordinates, notes, isInitialProject, onIm
 
       <section className="backend-coordinate-section" aria-labelledby="backend-coordinate-title">
         <div className="section-title">
-          <span id="backend-coordinate-title">Backend coordinates</span>
-          <small>{coordinates.length > 0 ? `${coordinates.length} POINTS` : "BACKEND DATA"}</small>
+          <span id="backend-coordinate-title">Backend-ready coordinates</span>
+          <div className="section-title-actions">
+            <small>{coordinates.length > 0 ? `${coordinates.length} COMPLETE` : "NO COMPLETE POINTS"}</small>
+            <button
+              type="button"
+              className="coordinate-export-button"
+              onClick={onExportRecord}
+              disabled={coordinates.length === 0}
+              title={coordinates.length === 0 ? "Complete at least one coordinate before exporting" : "Export backend-ready JSON"}
+            >
+              <Download size={13} /> JSON
+            </button>
+          </div>
         </div>
         {coordinates.length > 0 ? (
           <div className="backend-coordinate-table-wrap">
@@ -77,8 +90,8 @@ export function DetailsPanel({ model, coordinates, notes, isInitialProject, onIm
           <div className="coordinate-empty-state">
             <Database size={19} />
             <div>
-              <strong>Waiting for backend coordinates</strong>
-              <p>Point labels and X, Y, Z values returned by the backend will appear here.</p>
+              <strong>No complete coordinates yet</strong>
+              <p>Enter X, Y and Z values in Coordinates. Complete, present points will appear here for backend integration.</p>
             </div>
           </div>
         )}

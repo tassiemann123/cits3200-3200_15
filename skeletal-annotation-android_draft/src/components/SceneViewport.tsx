@@ -8,6 +8,7 @@ import type { ModelLoadState } from "../types";
 export interface SceneViewportHandle {
   resetCamera: () => void;
   focusModel: () => void;
+  zoomBy: (factor: number) => void;
   capturePng: () => Promise<Blob | null>;
 }
 
@@ -73,9 +74,25 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     controls.update();
   };
 
+  const zoomBy = (factor: number) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls || !Number.isFinite(factor) || factor <= 0) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const distance = THREE.MathUtils.clamp(
+      offset.length() * factor,
+      controls.minDistance,
+      controls.maxDistance,
+    );
+    if (offset.lengthSq() === 0) offset.set(0, 0, 1);
+    camera.position.copy(controls.target).add(offset.setLength(distance));
+    controls.update();
+  };
+
   useImperativeHandle(ref, () => ({
     resetCamera,
     focusModel,
+    zoomBy,
     capturePng: () => new Promise((resolve) => {
       const renderer = rendererRef.current;
       const scene = sceneRef.current;

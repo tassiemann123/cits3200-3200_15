@@ -1,0 +1,25 @@
+import { Capacitor } from "@capacitor/core";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { downloadFile } from "./projectStorage";
+
+export interface JsonExportResult {
+  destination: "documents" | "download";
+  displayPath: string;
+}
+
+export async function exportJson(contents: string, filename: string): Promise<JsonExportResult> {
+  if (Capacitor.isNativePlatform()) {
+    const relativePath = `OsteoPlot/${filename}`;
+    await Filesystem.writeFile({
+      path: relativePath,
+      data: contents,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+      recursive: true,
+    });
+    return { destination: "documents", displayPath: `Documents/${relativePath}` };
+  }
+
+  downloadFile(contents, filename, "application/json");
+  return { destination: "download", displayPath: filename };
+}
