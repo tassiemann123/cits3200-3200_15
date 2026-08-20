@@ -1,4 +1,4 @@
-import { Database, Download, Info, RotateCcw, Upload } from "lucide-react";
+import { Database, Info, RotateCcw, Upload } from "lucide-react";
 import type { Landmark, ViewerModel } from "../types";
 
 interface DetailsPanelProps {
@@ -9,7 +9,6 @@ interface DetailsPanelProps {
   isInitialModel: boolean;
   onImportClick: () => void;
   onResetModel: () => void;
-  onExportRecord: () => void;
   onNotesChange: (notes: string) => void;
 }
 
@@ -17,7 +16,7 @@ function formatCoordinate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(3) : "—";
 }
 
-export function DetailsPanel({ model, recordName, coordinates, notes, isInitialModel, onImportClick, onResetModel, onExportRecord, onNotesChange }: DetailsPanelProps) {
+export function DetailsPanel({ model, recordName, coordinates, notes, isInitialModel, onImportClick, onResetModel, onNotesChange }: DetailsPanelProps) {
   return (
     <aside className="panel details-panel">
       <div className="panel-heading">
@@ -57,18 +56,7 @@ export function DetailsPanel({ model, recordName, coordinates, notes, isInitialM
       <section className="backend-coordinate-section" aria-labelledby="backend-coordinate-title">
         <div className="section-title">
           <span id="backend-coordinate-title">Backend-ready coordinates</span>
-          <div className="section-title-actions">
-            <small>{coordinates.length > 0 ? `${coordinates.length} COMPLETE` : "NO COMPLETE POINTS"}</small>
-            <button
-              type="button"
-              className="coordinate-export-button"
-              onClick={onExportRecord}
-              disabled={coordinates.length === 0}
-              title={coordinates.length === 0 ? "Complete at least one coordinate before exporting" : "Export backend-ready JSON"}
-            >
-              <Download size={13} /> JSON
-            </button>
-          </div>
+          <small>{coordinates.length > 0 ? `${coordinates.length} COMPLETE` : "NO COMPLETE POINTS"}</small>
         </div>
         {coordinates.length > 0 ? (
           <div className="backend-coordinate-table-wrap">

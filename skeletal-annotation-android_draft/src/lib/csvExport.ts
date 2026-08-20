@@ -2,12 +2,12 @@ import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { downloadFile } from "./projectStorage";
 
-export interface JsonExportResult {
+export interface CsvExportResult {
   destination: "documents" | "download";
   displayPath: string;
 }
 
-export async function exportJson(contents: string, filename: string): Promise<JsonExportResult> {
+export async function exportCsv(contents: string, filename: string): Promise<CsvExportResult> {
   if (Capacitor.isNativePlatform()) {
     const relativePath = `OsteoPlot/${filename}`;
     await Filesystem.writeFile({
@@ -20,6 +20,6 @@ export async function exportJson(contents: string, filename: string): Promise<Js
     return { destination: "documents", displayPath: `Documents/${relativePath}` };
   }
 
-  downloadFile(contents, filename, "application/json");
+  downloadFile(contents, filename, "text/csv;charset=utf-8");
   return { destination: "download", displayPath: filename };
 }

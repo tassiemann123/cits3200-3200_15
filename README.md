@@ -13,7 +13,7 @@ OsteoPlot is an Android-ready prototype for reviewing a 3D skeletal reference mo
 - Create, switch, and rename multiple skeleton records.
 - Keep research notes per skeleton record and save records in local browser/device storage.
 - See the active skeleton record directly from the 3D viewer and use explicit zoom controls when pinch gestures are inconvenient.
-- Preview complete, backend-ready points, export them as JSON, and export a PNG screenshot of the viewer.
+- Preview complete, backend-ready points, import and export them as CSV, and export a PNG screenshot of the viewer.
 - Run as a Vite web app or a Capacitor Android app.
 
 ## Data model
@@ -91,33 +91,19 @@ GLB files are excluded from Git while redistribution rights are reviewed. Add th
 
 ## Backend connection
 
-Complete coordinates are converted by `src/lib/backendCoordinates.ts`. Partial coordinates and groups marked **Not present** are not included in the generated `Landmark[]`.
+Complete coordinates are converted by `src/lib/backendCoordinates.ts`. Partial coordinates and groups marked **Not present** are not included in backend output.
 
-The **JSON** button in Details exports this exact backend-ready payload locally, so coordinate mapping can be tested before the live API is connected. In Android it uses Capacitor Filesystem and writes to `Documents/OsteoPlot/`; in a browser it downloads the JSON normally.
+The bottom action bar in **Coordinates** imports coordinate CSV files, exports the active record's backend-ready CSV, and saves all records locally. Imported skeleton IDs are added as new records, so existing work is not overwritten. In Android, CSV export uses Capacitor Filesystem and writes to `Documents/OsteoPlot/`; in a browser it downloads the file normally.
 
-A recommended request for one skeleton record is:
+The backend CSV contract is:
 
-```http
-POST /api/skeleton-records
-Content-Type: application/json
+```csv
+skeleton_id,joint_name,x,y,z
+Skeleton 1,centre_of_head,1.245,0.832,-2.104
+Skeleton 1,chin,1.310,0.755,-2.080
 ```
 
-```json
-{
-  "recordId": "skeleton-record-1",
-  "name": "Skeleton 1",
-  "excludedGroups": ["left_arm"],
-  "coordinates": [
-    {
-      "id": "centre_of_head",
-      "label": "Centre Of Head",
-      "position": [1.245, 0.832, -2.104]
-    }
-  ]
-}
-```
-
-Each position must contain three finite numbers in `[x, y, z]` order. When the backend is ready, put its base URL in a local environment variable such as `VITE_API_BASE_URL` and send the active record through an API service instead of directly from the UI component.
+Each row must contain a recognised CFA `joint_name` and three finite numbers in X, Y, Z order. Export uses canonical snake-case joint names; import also accepts their display labels. Invalid rows are skipped and reported. When direct backend upload is added, put its base URL in a local environment variable such as `VITE_API_BASE_URL` and send the CSV through an API service instead of directly from the UI component.
 
 Networking notes:
 

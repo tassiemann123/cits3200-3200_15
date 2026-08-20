@@ -21,7 +21,8 @@ import { DetailsPanel } from "./components/DetailsPanel";
 import { SceneViewport, type SceneViewportHandle } from "./components/SceneViewport";
 import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema";
 import { toBackendLandmarks } from "./lib/backendCoordinates";
-import { exportJson } from "./lib/jsonExport";
+import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv";
+import { exportCsv } from "./lib/csvExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
 import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel } from "./types";
 
@@ -259,34 +260,62 @@ export function App() {
   };
 
   const exportActiveRecord = async () => {
-    const payload = {
-      schemaVersion: 1,
-      exportedAt: new Date().toISOString(),
-      record: {
-        id: activeRecord.id,
-        name: activeRecord.name.trim() || "Untitled skeleton",
-        excludedGroups: activeRecord.excludedGroups,
-        notes: activeRecord.notes,
-        coordinates: backendCoordinates,
-      },
-    };
     try {
-      const result = await exportJson(
-        JSON.stringify(payload, null, 2),
-        `${safeFilename(activeRecord.name)}-coordinates.json`,
+      const result = await exportCsv(
+        serialiseCoordinateCsv(activeRecord),
+        `${safeFilename(activeRecord.name)}-coordinates.csv`,
       );
       notify(result.destination === "documents"
-        ? `JSON saved to ${result.displayPath}`
+        ? `CSV saved to ${result.displayPath}`
         : `${backendCoordinates.length} backend-ready point${backendCoordinates.length === 1 ? "" : "s"} exported`);
     } catch (error) {
       console.error("Coordinate export failed", error);
-      notify("The coordinate JSON could not be saved");
+      notify("The coordinate CSV could not be saved");
+    }
+  };
+
+  const importCoordinateCsv = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      notify("Choose a CSV coordinate file.");
+      return;
+    }
+
+    try {
+      const result = parseCoordinateCsv(await file.text());
+      if (result.records.length === 0) {
+        notify(result.warnings[0] ?? "The CSV contains no usable coordinates");
+        return;
+      }
+
+      const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
+        id: `skeleton-record-${crypto.randomUUID()}`,
+        name: record.name,
+        coordinates: record.coordinates,
+        excludedGroups: [],
+        notes: "",
+      }));
+      setPreferences((current) => ({
+        ...current,
+        records: [...current.records, ...importedRecords],
+        activeRecordId: importedRecords[0].id,
+      }));
+      setSidePanel("coordinates");
+      setMobilePane("panel");
+      notify(`${importedRecords.length} CSV record${importedRecords.length === 1 ? "" : "s"} imported${result.warnings.length ? ` · ${result.warnings.length} row warning${result.warnings.length === 1 ? "" : "s"}` : ""}`);
+    } catch (error) {
+      console.error("Coordinate import failed", error);
+      notify("The coordinate CSV could not be read");
     }
   };
 
   const showPanel = (panel: SidePanel) => {
     setSidePanel(panel);
     setMobilePane("panel");
+  };
+
+  const saveFromCoordinates = () => {
+    persist();
+    showPanel("coordinates");
   };
 
   return (
@@ -398,6 +427,10 @@ export function App() {
                 onCoordinateChange={setCoordinate}
                 onGroupPresenceChange={setGroupPresence}
                 onResetCoordinates={resetCoordinates}
+                onImportCsv={(file) => void importCoordinateCsv(file)}
+                onExportRecord={() => void exportActiveRecord()}
+                onSave={saveFromCoordinates}
+                canExport={backendCoordinates.length > 0}
               />
             ) : (
               <DetailsPanel
@@ -408,7 +441,6 @@ export function App() {
                 isInitialModel={model.origin === "bundled"}
                 onImportClick={openModelPicker}
                 onResetModel={resetToInitialModel}
-                onExportRecord={exportActiveRecord}
                 onNotesChange={(notes) => patchActiveRecord((record) => ({ ...record, notes }))}
               />
             )}
@@ -422,7 +454,7 @@ export function App() {
         <button type="button" className={mobilePane === "panel" && sidePanel === "details" ? "active" : ""} onClick={() => showPanel("details")}><PanelRight size={19} />Details</button>
       </nav>
 
-      {toast && <div className="toast"><ShieldCheck size={17} />{toast}<button type="button" onClick={() => setToast(null)}><X size={15} /></button></div>}
+      {toast && <div className={`toast ${mobilePane === "panel" && sidePanel === "coordinates" ? "above-coordinate-actions" : ""}`}><ShieldCheck size={17} />{toast}<button type="button" onClick={() => setToast(null)}><X size={15} /></button></div>}
     </div>
   );
 }

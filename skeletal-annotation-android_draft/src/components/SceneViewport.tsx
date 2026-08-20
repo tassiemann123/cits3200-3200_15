@@ -108,8 +108,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     if (!host) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#061418");
-    scene.fog = new THREE.FogExp2("#061418", 0.055);
+    scene.background = new THREE.Color("#20252A");
+    scene.fog = new THREE.FogExp2("#20252A", 0.055);
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
     camera.position.copy(DEFAULT_CAMERA);
@@ -138,7 +138,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     controls.maxPolarAngle = Math.PI * 0.92;
     controls.update();
 
-    const grid = new THREE.GridHelper(8, 32, "#477873", "#17353a");
+    const grid = new THREE.GridHelper(8, 32, "#52697A", "#303B44");
     grid.position.y = -0.075;
     const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
     gridMaterials.forEach((material) => {
@@ -149,7 +149,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
-      new THREE.MeshStandardMaterial({ color: "#07191d", roughness: 0.96, metalness: 0.02 }),
+      new THREE.MeshStandardMaterial({ color: "#1C2227", roughness: 0.96, metalness: 0.02 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.09;
@@ -158,7 +158,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
     const pedestal = new THREE.Mesh(
       new THREE.CylinderGeometry(1.18, 1.28, 0.09, 72),
-      new THREE.MeshStandardMaterial({ color: "#102c31", roughness: 0.72, metalness: 0.18 }),
+      new THREE.MeshStandardMaterial({ color: "#2B333A", roughness: 0.72, metalness: 0.18 }),
     );
     pedestal.position.y = -0.045;
     pedestal.receiveShadow = true;
@@ -166,13 +166,13 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(1.17, 1.195, 96),
-      new THREE.MeshBasicMaterial({ color: "#69d9c3", transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: "#C8A96B", transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.006;
     scene.add(ring);
 
-    scene.add(new THREE.HemisphereLight("#e6fff9", "#071113", 2.1));
+    scene.add(new THREE.HemisphereLight("#F4F0E6", "#171B1F", 2.1));
     const keyLight = new THREE.DirectionalLight("#fff1d9", 3.1);
     keyLight.position.set(3.8, 6.5, 4.2);
     keyLight.castShadow = true;
@@ -184,7 +184,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     keyLight.shadow.camera.top = 4;
     keyLight.shadow.camera.bottom = -1;
     scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight("#61d8cf", 1.7);
+    const rimLight = new THREE.DirectionalLight("#6F8FA8", 1.7);
     rimLight.position.set(-4, 2.6, -3.5);
     scene.add(rimLight);
 

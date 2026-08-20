@@ -1,4 +1,5 @@
-import { Ban, Check, Plus, RotateCcw } from "lucide-react";
+import { useRef } from "react";
+import { Ban, Check, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { SkeletonRecord } from "../types";
 
@@ -11,6 +12,10 @@ interface CoordinatePanelProps {
   onCoordinateChange: (point: PointName, axis: 0 | 1 | 2, value: number | null) => void;
   onGroupPresenceChange: (groupId: PointGroupId, present: boolean) => void;
   onResetCoordinates: () => void;
+  onImportCsv: (file: File) => void;
+  onExportRecord: () => void;
+  onSave: () => void;
+  canExport: boolean;
 }
 
 function isComplete(record: SkeletonRecord, point: PointName): boolean {
@@ -27,7 +32,12 @@ export function CoordinatePanel({
   onCoordinateChange,
   onGroupPresenceChange,
   onResetCoordinates,
+  onImportCsv,
+  onExportRecord,
+  onSave,
+  canExport,
 }: CoordinatePanelProps) {
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const availablePoints = ALL_CFA_POINTS.filter((point) => {
     const group = CFA_GROUPS.find((candidate) => (candidate.points as readonly PointName[]).includes(point));
     return group ? !activeRecord.excludedGroups.includes(group.id) : true;
@@ -137,6 +147,41 @@ export function CoordinatePanel({
 
         <button type="button" className="reset-coordinates-button" onClick={onResetCoordinates}>
           <RotateCcw size={14} /> Reset coordinates for this record
+        </button>
+      </div>
+
+      <div className="coordinate-action-bar" aria-label="Coordinate record actions">
+        <input
+          ref={csvInputRef}
+          className="coordinate-csv-input"
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="Import coordinate CSV"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) onImportCsv(file);
+            event.currentTarget.value = "";
+          }}
+        />
+        <button
+          type="button"
+          className="coordinate-footer-button import"
+          onClick={() => csvInputRef.current?.click()}
+          title="Import skeleton coordinates from CSV"
+        >
+          <Upload size={16} /> Import CSV
+        </button>
+        <button
+          type="button"
+          className="coordinate-footer-button export"
+          onClick={onExportRecord}
+          disabled={!canExport}
+          title={canExport ? "Export backend-ready CSV" : "Complete at least one coordinate before exporting"}
+        >
+          <Download size={16} /> Export CSV
+        </button>
+        <button type="button" className="coordinate-footer-button save" onClick={onSave}>
+          <Save size={16} /> Save locally
         </button>
       </div>
     </aside>
