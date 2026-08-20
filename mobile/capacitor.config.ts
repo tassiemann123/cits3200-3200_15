@@ -1,9 +1,15 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.example.app',
-  appName: 'cits3200-3200_15',
-  webDir: 'dist'
+  appId: "au.edu.research.osteoplot",
+  appName: "Skeletal Coordinate App",
+  webDir: "dist",
+  server: {
+    androidScheme: "https",
+  },
+  android: {
+    backgroundColor: "#0c1f24",
+  },
 };
 
 export default config;
