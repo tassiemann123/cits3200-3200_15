@@ -9,7 +9,7 @@ export interface CsvExportResult {
 
 export async function exportCsv(contents: string, filename: string): Promise<CsvExportResult> {
   if (Capacitor.isNativePlatform()) {
-    const relativePath = `OsteoPlot/${filename}`;
+    const relativePath = `Skeletal Coordinate App/${filename}`;
     await Filesystem.writeFile({
       path: relativePath,
       data: contents,

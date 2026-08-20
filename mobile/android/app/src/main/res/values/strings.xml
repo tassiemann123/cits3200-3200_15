@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">OsteoPlot</string>
-    <string name="title_activity_main">OsteoPlot</string>
+    <string name="app_name">Skeletal Coordinate App</string>
+    <string name="title_activity_main">Skeletal Coordinate App</string>
     <string name="package_name">au.edu.research.osteoplot</string>
     <string name="custom_url_scheme">au.edu.research.osteoplot</string>
 </resources>

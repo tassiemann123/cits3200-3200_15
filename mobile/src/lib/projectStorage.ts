@@ -35,5 +35,5 @@ export function downloadFile(contents: BlobPart, filename: string, type: string)
 }
 
 export function safeFilename(value: string): string {
-  return value.trim().replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]+/g, "-").replace(/^-+|-+$/g, "") || "osteoplot-project";
+  return value.trim().replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]+/g, "-").replace(/^-+|-+$/g, "") || "skeletal-coordinate-project";
 }

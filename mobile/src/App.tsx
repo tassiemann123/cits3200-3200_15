@@ -323,7 +323,7 @@ export function App() {
       <header className="app-header">
         <div className="brand-block">
           <div className="brand-mark"><Bone size={22} /></div>
-          <div><strong>OsteoPlot</strong><span>SKELETAL COORDINATE WORKSPACE</span></div>
+          <div><strong>Skeletal Coordinate App</strong><span>SKELETAL COORDINATE WORKSPACE</span></div>
         </div>
         <div className="project-title-block">
           <span className="offline-badge"><ShieldCheck size={14} /> Offline workspace</span>
