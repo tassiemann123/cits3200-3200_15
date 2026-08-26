@@ -2,6 +2,7 @@ import type { Vec3, Landmark, Segment } from "../types";
 import type { PointName } from "../data/cfaSchema";
 import { surveyToWorld } from "./coordinates";
 import { ALL_CFA_POINTS } from "../data/cfaSchema";
+import type { Vec3, Landmark, Segment, SkeletonCoordinates } from "../types";
 
 
 export const boneMap: [PointName, PointName][] = [
@@ -100,4 +101,19 @@ export function buildLandmarksAndSegments(
   }
 
   return { landmarks, segments };
+}
+
+
+export function fromSkeletonCoordinates(
+  coords: SkeletonCoordinates,
+): Partial<Record<PointName, Vec3>> {
+  const result: Partial<Record<PointName, Vec3>> = {};
+  for (const point of ALL_CFA_POINTS) {
+    const draft = coords[point];
+    if (!draft) continue;
+    const [x, y, z] = draft;
+    if (x === null || y === null || z === null) continue;
+    result[point] = [x, y, z];
+  }
+  return result;
 }
