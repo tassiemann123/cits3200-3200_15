@@ -76,3 +76,28 @@ function toWorldCoordinates(
   }
   return world;
 }
+
+
+import { pointLabel } from "../data/cfaSchema";
+
+export function buildLandmarksAndSegments(
+  coordinates: Partial<Record<PointName, Vec3>>,
+): { landmarks: Landmark[]; segments: Segment[] } {
+  const world = toWorldCoordinates(coordinates);
+
+  const landmarks: Landmark[] = ALL_CFA_POINTS.filter((point) => world[point]).map((point) => ({
+    id: point,
+    label: pointLabel(point),
+    position: world[point]!,
+  }));
+
+  const segments: Segment[] = [];
+  for (const [fromPoint, toPoint] of boneMap) {
+    const from = world[fromPoint];
+    const to = world[toPoint];
+    if (!from || !to) continue;
+    segments.push({ from, to });
+  }
+
+  return { landmarks, segments };
+}
