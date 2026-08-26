@@ -115,3 +115,21 @@ export function fromSkeletonCoordinates(
   }
   return result;
 }
+
+
+/**
+ * Converts Ruan's {x, y, z} object shape (from sharedbackend_code) into the
+ * [x, y, z] tuple shape used everywhere else in the existing app (types.ts,
+ * coordinates.ts, modelAlignment.ts). This does not change his code or the
+ * app's code, it just bridges between the two until the team agrees on one
+ * standard shape.
+ */
+interface XYZObject {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export function objectToTupleVec3(point: XYZObject): Vec3 {
+  return [point.x, point.y, point.z];
+}
