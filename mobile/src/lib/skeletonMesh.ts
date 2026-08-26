@@ -2,8 +2,6 @@ import type { Vec3, Landmark, Segment } from "../types";
 import type { PointName } from "../data/cfaSchema";
 import { surveyToWorld } from "./coordinates";
 import { ALL_CFA_POINTS } from "../data/cfaSchema";
-import type { Vec3, Landmark, Segment, SkeletonCoordinates } from "../types";
-
 
 export const boneMap: [PointName, PointName][] = [
   ["head_proximal", "centre_of_head"],
