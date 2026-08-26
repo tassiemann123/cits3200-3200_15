@@ -1,19 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import init_db
-from .routers import graveyards, skeletons
+from .db_init import init_db
+from .routes import graveyards, skeletons
 
 app = FastAPI(title="Skeleton Visualisation API")
 
-# Capacitor apps make requests from origins like capacitor://localhost (iOS)
-# and http://localhost (Android), not a normal web origin — so these need to
-# be explicitly allowed rather than relying on a wildcard-friendly default.
 ALLOWED_ORIGINS = [
     "capacitor://localhost",
     "http://localhost",
     "https://localhost",
-    "http://localhost:5173",   # Vite dev server, if you're testing in a browser
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -24,16 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def on_startup():
     init_db()
 
-
 app.include_router(graveyards.router)
 app.include_router(skeletons.router)
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
