@@ -2,7 +2,7 @@
 
 This guide explains how to set up and run the Android frontend on a Mac from a fresh Android Studio installation.
 
-The project uses React, Three.js, Capacitor and Android Studio. Python and a running backend are not required to run the current prototype.
+The project uses React, Three.js, Capacitor and Android Studio. It remains usable offline, but Save & Sync and Load Backend require the FastAPI/PostgreSQL backend in the repository root.
 
 ## 1. Required software
 
@@ -137,6 +137,22 @@ Android Studio should open the project located at:
 ```text
 mobile/android
 ```
+
+### Start the backend for Save & Sync
+
+Install Docker Desktop and Python 3.12, then run these commands from the repository root:
+
+```bash
+cd backend
+docker compose up -d
+python3.12 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The web app uses `http://127.0.0.1:8000`. The Android emulator automatically uses `http://10.0.2.2:8000`. For a physical phone, copy `.env.example` to `.env.local`, set `VITE_API_URL` to the Mac's LAN IP, and rebuild the mobile app.
 
 If it does not open automatically, start Android Studio and open that directory manually.
 
