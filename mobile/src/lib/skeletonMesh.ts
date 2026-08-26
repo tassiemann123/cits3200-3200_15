@@ -1,4 +1,4 @@
-import type { Vec3, Landmark, Segment } from "../types";
+import type { Vec3, Landmark, Segment, SkeletonCoordinates } from "../types";
 import type { PointName } from "../data/cfaSchema";
 import { surveyToWorld } from "./coordinates";
 import { ALL_CFA_POINTS } from "../data/cfaSchema";
