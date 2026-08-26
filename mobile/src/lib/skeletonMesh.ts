@@ -28,3 +28,34 @@ export const boneMap: [PointName, PointName][] = [
   ["right_knee", "right_ankle"],
   ["right_ankle", "right_toes"],
 ];
+
+
+// PLACEHOLDER values — pending Ruan's confirmed measurements.
+// Survey order (x, z, y), y = height above the manubrium origin, in millimetres.
+export const defaultSurveyCoordinates: Partial<Record<PointName, Vec3>> = {
+  manubrium:            [0, 0, 0],
+  head_proximal:        [0, 0, 311],
+  centre_of_head:       [0, 0, 194],
+  chin:                 [0, 30, 194],
+  sacral_promontory:    [0, 0, -400],
+  left_shoulder:        [-120, 0, 20],
+  left_elbow:           [-220, 0, -300],
+  left_wrist:           [-260, 0, -560],
+  left_fingertips:      [-280, 0, -762],
+  right_shoulder:       [120, 0, 20],
+  right_elbow:          [220, 0, -300],
+  right_wrist:          [260, 0, -562],
+  right_fingertips:     [280, 0, -762],
+  left_ilium_superior:  [-140, 0, -420],
+  left_acetabulum:      [-100, 0, -450],
+  left_ischium:         [-110, 0, -500],
+  left_knee:            [-110, 0, -882],
+  left_ankle:           [-110, 0, -1288],
+  left_toes:            [-110, 100, -1554],
+  right_ilium_superior: [140, 0, -420],
+  right_acetabulum:     [100, 0, -450],
+  right_ischium:        [110, 0, -500],
+  right_knee:           [110, 0, -882],
+  right_ankle:          [110, 0, -1288],
+  right_toes:           [110, 100, -1554],
+};
