@@ -13,6 +13,7 @@
 
 // Types and Interfaces
 // Vec3 defines the default vector structure for use in describing a joints coordinates
+// Object structure employed to ensure consistency of joint coordinate directions (incorret coordinate inputs would be ignored in [] array form)
 export interface Vec3 {
     x: number;
     y: number;
