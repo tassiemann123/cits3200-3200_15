@@ -1,0 +1,16 @@
+{
+  "name": "sharedbackend-code",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.3",
+    "typescript": "^7.0.2"
+  }
+}
