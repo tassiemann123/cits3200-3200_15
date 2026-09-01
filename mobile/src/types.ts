@@ -35,6 +35,8 @@ export interface SkeletonRecord {
   coordinates: SkeletonCoordinates;
   excludedGroups: PointGroupId[];
   notes: string;
+  backendId?: string;
+  lastSyncedAt?: string;
 }
 
 export interface SkeletonLayer {

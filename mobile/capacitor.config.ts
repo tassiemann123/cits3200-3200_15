@@ -6,9 +6,12 @@ const config: CapacitorConfig = {
   webDir: "dist",
   server: {
     androidScheme: "https",
+    // The prototype backend runs over HTTP on the developer's Mac.
+    cleartext: true,
   },
   android: {
     backgroundColor: "#0c1f24",
+    allowMixedContent: true,
   },
 };
 

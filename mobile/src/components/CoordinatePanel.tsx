@@ -1,6 +1,7 @@
 import { useRef } from "react";
-import { Ban, Check, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
+import { Ban, Check, CloudDownload, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
+import type { BackendConnectionState } from "../lib/backendApi";
 import type { SkeletonRecord } from "../types";
 
 interface CoordinatePanelProps {
@@ -15,6 +16,8 @@ interface CoordinatePanelProps {
   onImportCsv: (file: File) => void;
   onExportRecord: () => void;
   onSave: () => void;
+  onLoadFromBackend: () => void;
+  backendStatus: BackendConnectionState;
   canExport: boolean;
 }
 
@@ -35,6 +38,8 @@ export function CoordinatePanel({
   onImportCsv,
   onExportRecord,
   onSave,
+  onLoadFromBackend,
+  backendStatus,
   canExport,
 }: CoordinatePanelProps) {
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +49,15 @@ export function CoordinatePanel({
   });
   const completedPoints = availablePoints.filter((point) => isComplete(activeRecord, point)).length;
   const completion = availablePoints.length === 0 ? 0 : Math.round((completedPoints / availablePoints.length) * 100);
+  const backendRecordLabel = activeRecord.backendId
+    ? "Linked to backend"
+    : backendStatus === "online"
+      ? "Backend ready · not synced yet"
+      : backendStatus === "syncing"
+        ? "Syncing backend…"
+        : backendStatus === "checking"
+          ? "Checking backend…"
+          : "Offline · saved locally";
 
   return (
     <aside className="panel coordinate-panel">
@@ -77,6 +91,14 @@ export function CoordinatePanel({
             onBlur={(event) => onRenameRecord(event.target.value.trim() || "Untitled skeleton")}
           />
         </label>
+        <div className="backend-record-row">
+          <span className={activeRecord.backendId || backendStatus === "online" ? "linked" : "local"}>
+            {backendRecordLabel}
+          </span>
+          <button type="button" onClick={onLoadFromBackend} disabled={backendStatus === "syncing"}>
+            <CloudDownload size={13} /> {backendStatus === "syncing" ? "Syncing…" : "Load backend"}
+          </button>
+        </div>
         <div className="coordinate-progress" aria-label={`${completion}% complete`}>
           <span style={{ width: `${completion}%` }} />
         </div>
@@ -180,8 +202,8 @@ export function CoordinatePanel({
         >
           <Download size={16} /> Export CSV
         </button>
-        <button type="button" className="coordinate-footer-button save" onClick={onSave}>
-          <Save size={16} /> Save locally
+        <button type="button" className="coordinate-footer-button save" onClick={onSave} disabled={backendStatus === "syncing"}>
+          <Save size={16} /> {backendStatus === "syncing" ? "Syncing…" : "Save & sync"}
         </button>
       </div>
     </aside>

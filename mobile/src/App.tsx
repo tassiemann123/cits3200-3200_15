@@ -3,10 +3,13 @@ import {
   Bone,
   Camera,
   ClipboardList,
+  Cloud,
+  CloudOff,
   Database,
   Focus,
   Grid3X3,
   Info,
+  LoaderCircle,
   PanelRight,
   RotateCcw,
   Save,
@@ -20,6 +23,14 @@ import { CoordinatePanel } from "./components/CoordinatePanel";
 import { DetailsPanel } from "./components/DetailsPanel";
 import { SceneViewport, type SceneViewportHandle } from "./components/SceneViewport";
 import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema";
+import {
+  backendSkeletonToRecord,
+  checkBackendConnection,
+  ensureWorkspaceGraveyard,
+  loadGraveyardSkeletons,
+  syncSkeletonRecord,
+  type BackendConnectionState,
+} from "./lib/backendApi";
 import { toBackendLandmarks } from "./lib/backendCoordinates";
 import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv";
 import { exportCsv } from "./lib/csvExport";
@@ -33,6 +44,7 @@ interface ViewerPreferences {
   workspaceName: string;
   records: SkeletonRecord[];
   activeRecordId: string;
+  backendGraveyardId?: string;
 }
 
 const STORAGE_KEY = "osteoplot.reference-viewer.v1";
@@ -93,6 +105,8 @@ function normaliseRecord(value: unknown, index: number): SkeletonRecord | null {
     coordinates: candidate.coordinates && typeof candidate.coordinates === "object" ? candidate.coordinates : {},
     excludedGroups,
     notes: typeof candidate.notes === "string" ? candidate.notes : "",
+    backendId: typeof candidate.backendId === "string" ? candidate.backendId : undefined,
+    lastSyncedAt: typeof candidate.lastSyncedAt === "string" ? candidate.lastSyncedAt : undefined,
   };
 }
 
@@ -124,6 +138,7 @@ function loadPreferences(): ViewerPreferences {
           : DEFAULT_PREFERENCES.workspaceName,
       records,
       activeRecordId,
+      backendGraveyardId: typeof saved.backendGraveyardId === "string" ? saved.backendGraveyardId : undefined,
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -138,6 +153,7 @@ export function App() {
   const [mobilePane, setMobilePane] = useState<MobilePane>("scene");
   const [sidePanel, setSidePanel] = useState<SidePanel>("coordinates");
   const [toast, setToast] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendConnectionState>("checking");
   const viewportRef = useRef<SceneViewportHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importedObjectUrlRef = useRef<string | null>(null);
@@ -147,6 +163,20 @@ export function App() {
 
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    checkBackendConnection()
+      .then(() => {
+        if (active) setBackendStatus("online");
+      })
+      .catch(() => {
+        if (active) setBackendStatus("offline");
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const notify = (message: string) => {
@@ -165,9 +195,105 @@ export function App() {
     }));
   };
 
-  const persist = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
-    notify(`${preferences.records.length} skeleton record${preferences.records.length === 1 ? "" : "s"} saved locally`);
+  const persistAndSync = async () => {
+    if (backendStatus === "syncing") return;
+
+    const snapshot = preferences;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    setBackendStatus("syncing");
+
+    try {
+      const graveyard = await ensureWorkspaceGraveyard(snapshot.workspaceName, snapshot.backendGraveyardId);
+      const backendIds = new Map<string, string>();
+      const syncedAt = new Date().toISOString();
+
+      for (const record of snapshot.records) {
+        const syncedRecord = await syncSkeletonRecord(record, graveyard.graveyard_id);
+        backendIds.set(record.id, syncedRecord.skeleton_id);
+        setPreferences((current) => {
+          const updated = {
+            ...current,
+            backendGraveyardId: graveyard.graveyard_id,
+            records: current.records.map((candidate) => candidate.id === record.id
+              ? { ...candidate, backendId: syncedRecord.skeleton_id, lastSyncedAt: syncedAt }
+              : candidate),
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      setPreferences((current) => {
+        const updated = {
+          ...current,
+          backendGraveyardId: graveyard.graveyard_id,
+          records: current.records.map((record) => ({
+            ...record,
+            backendId: backendIds.get(record.id) ?? record.backendId,
+            lastSyncedAt: backendIds.has(record.id) ? syncedAt : record.lastSyncedAt,
+          })),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      setBackendStatus("online");
+      notify(`${snapshot.records.length} skeleton record${snapshot.records.length === 1 ? "" : "s"} saved locally and synced`);
+    } catch (error) {
+      console.error("Backend sync failed", error);
+      setBackendStatus("offline");
+      notify("Saved locally · backend is currently unavailable");
+    }
+  };
+
+  const loadFromBackend = async () => {
+    if (backendStatus === "syncing") return;
+    setBackendStatus("syncing");
+
+    try {
+      const graveyard = await ensureWorkspaceGraveyard(preferences.workspaceName, preferences.backendGraveyardId);
+      const remoteSkeletons = await loadGraveyardSkeletons(graveyard.graveyard_id);
+      if (remoteSkeletons.length === 0) {
+        setPreferences((current) => {
+          const updated = { ...current, backendGraveyardId: graveyard.graveyard_id };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+        setBackendStatus("online");
+        notify("Backend is connected · no remote skeleton records yet");
+        return;
+      }
+
+      setPreferences((current) => {
+        const existingByBackendId = new Map(
+          current.records.flatMap((record) => record.backendId ? [[record.backendId, record] as const] : []),
+        );
+        const remoteRecords = remoteSkeletons.map((skeleton) => (
+          backendSkeletonToRecord(skeleton, existingByBackendId.get(skeleton.skeleton_id))
+        ));
+        const remoteIds = new Set(remoteSkeletons.map((skeleton) => skeleton.skeleton_id));
+        const unmatchedLocalRecords = current.records.filter(
+          (record) => !record.backendId || !remoteIds.has(record.backendId),
+        );
+        const records = [...remoteRecords, ...unmatchedLocalRecords];
+        const activeRecordId = records.some((record) => record.id === current.activeRecordId)
+          ? current.activeRecordId
+          : records[0].id;
+        const updated = {
+          ...current,
+          backendGraveyardId: graveyard.graveyard_id,
+          records,
+          activeRecordId,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      setBackendStatus("online");
+      notify(`${remoteSkeletons.length} backend record${remoteSkeletons.length === 1 ? "" : "s"} loaded`);
+    } catch (error) {
+      console.error("Backend load failed", error);
+      setBackendStatus("offline");
+      notify("Backend records could not be loaded");
+    }
   };
 
   const openModelPicker = () => fileInputRef.current?.click();
@@ -314,9 +440,17 @@ export function App() {
   };
 
   const saveFromCoordinates = () => {
-    persist();
+    void persistAndSync();
     showPanel("coordinates");
   };
+
+  const backendStatusLabel = backendStatus === "online"
+    ? "Backend connected"
+    : backendStatus === "syncing"
+      ? "Syncing backend"
+      : backendStatus === "checking"
+        ? "Checking backend"
+        : "Offline · local save available";
 
   return (
     <div className="app-shell">
@@ -326,7 +460,14 @@ export function App() {
           <div><strong>Skeletal Coordinate App</strong><span>SKELETAL COORDINATE WORKSPACE</span></div>
         </div>
         <div className="project-title-block">
-          <span className="offline-badge"><ShieldCheck size={14} /> Offline workspace</span>
+          <span className={`backend-badge ${backendStatus}`}>
+            {backendStatus === "offline"
+              ? <CloudOff size={14} />
+              : backendStatus === "checking" || backendStatus === "syncing"
+                ? <LoaderCircle className="status-spinner" size={14} />
+                : <Cloud size={14} />}
+            {backendStatusLabel}
+          </span>
           <input
             aria-label="Workspace name"
             value={preferences.workspaceName}
@@ -335,7 +476,9 @@ export function App() {
         </div>
         <div className="header-actions">
           <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Switch Model</span></button>
-          <button type="button" className="header-button" onClick={persist}><Save size={17} /><span>Save</span></button>
+          <button type="button" className="header-button" onClick={() => void persistAndSync()} disabled={backendStatus === "syncing"}>
+            <Save size={17} /><span>{backendStatus === "syncing" ? "Syncing" : "Save & Sync"}</span>
+          </button>
           <button type="button" className="primary-header-button" onClick={() => void exportScreenshot()}><Camera size={17} /><span>Screenshot</span></button>
           <button
             type="button"
@@ -430,6 +573,8 @@ export function App() {
                 onImportCsv={(file) => void importCoordinateCsv(file)}
                 onExportRecord={() => void exportActiveRecord()}
                 onSave={saveFromCoordinates}
+                onLoadFromBackend={() => void loadFromBackend()}
+                backendStatus={backendStatus}
                 canExport={backendCoordinates.length > 0}
               />
             ) : (
