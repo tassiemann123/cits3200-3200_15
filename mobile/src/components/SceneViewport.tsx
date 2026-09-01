@@ -3,7 +3,11 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
-import type { ModelLoadState } from "../types";
+import type { Landmark, ModelLoadState } from "../types";
+import { CFA_CONNECTIONS } from "../data/cfaConnections";
+import { SKELETON_PIECES } from "../data/skeletonPieces";
+import { landmarksToDisplayPositions } from "../lib/coordinates";
+import { poseSkeletonPiece } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
   resetCamera: () => void;
@@ -16,12 +20,19 @@ interface SceneViewportProps {
   modelUrl: string;
   modelName: string;
   showGrid: boolean;
+  landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
 }
 
-const DEFAULT_CAMERA = new THREE.Vector3(3.2, 1.8, 4.4);
-const DEFAULT_TARGET = new THREE.Vector3(0, 1.12, 0);
-const DISPLAY_HEIGHT = 2.25;
+const DEFAULT_CAMERA = new THREE.Vector3(2.6, 1.4, 3.4);
+const DEFAULT_TARGET = new THREE.Vector3(0, 0.85, 0);
+// The bundled GLB isn't modeled to real-world scale (its raw geometry is
+// only ~1.2 units tall with no compensating node transform), so it's scaled
+// to a plausible average adult height in real metres instead of an
+// arbitrary cosmetic number. This makes it a meaningful size reference once
+// entered coordinates are also plotted in real metres -- a taller or
+// shorter skeleton than this will visibly read as taller or shorter.
+const DISPLAY_HEIGHT = 1.7;
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
@@ -34,7 +45,7 @@ function disposeObject(root: THREE.Object3D): void {
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { modelUrl, modelName, showGrid, onLoadStateChange },
+  { modelUrl, modelName, showGrid, landmarks, onLoadStateChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -45,6 +56,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const contentRef = useRef<THREE.Group | null>(null);
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
+  const overlayRef = useRef<THREE.Group | null>(null);
+  const piecesRef = useRef<Map<string, { object: THREE.Object3D; restBox: THREE.Box3 }>>(new Map());
 
   const resetCamera = () => {
     const camera = cameraRef.current;
@@ -191,6 +204,11 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     const content = new THREE.Group();
     scene.add(content);
 
+    const overlay = new THREE.Group();
+    overlay.name = "coordinate-overlay";
+    overlay.renderOrder = 999;
+    scene.add(overlay);
+
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
       if (width === 0 || height === 0) return;
@@ -216,6 +234,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     controlsRef.current = controls;
     contentRef.current = content;
     gridRef.current = grid;
+    overlayRef.current = overlay;
 
     return () => {
       cancelAnimationFrame(frame);
@@ -231,12 +250,94 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       contentRef.current = null;
       gridRef.current = null;
       modelBoxRef.current = null;
+      overlayRef.current = null;
+      piecesRef.current = new Map();
     };
   }, []);
 
   useEffect(() => {
     if (gridRef.current) gridRef.current.visible = showGrid;
   }, [showGrid]);
+
+  // Draws the entered CFA coordinates as a joint-and-bone stick figure, so a
+  // researcher can visually compare it against the skeleton in the grave.
+  // Coordinates are plotted exactly as entered (no scaling/rotation math) --
+  // if the figure looks like it's lying on its side, the entry form's X/Y/Z
+  // axes probably don't match Three.js's Y-up convention and will need a swap
+  // (see surveyToWorld() in lib/coordinates.ts for the same issue solved
+  // for the CSV/ROT import path).
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    overlay.children.slice().forEach((child) => {
+      overlay.remove(child);
+      disposeObject(child);
+    });
+
+    // depthTest disabled so entered points stay visible even when they sit
+    // "inside" the solid reference mesh (e.g. torso points behind the ribcage) --
+    // this is a see-through comparison overlay, not physical geometry.
+    const jointGeometry = new THREE.SphereGeometry(0.025, 12, 12);
+    const jointMaterial = new THREE.MeshStandardMaterial({
+      color: "#F4C542",
+      roughness: 0.4,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const boneMaterial = new THREE.LineBasicMaterial({
+      color: "#F4C542",
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const positionById = landmarksToDisplayPositions(landmarks);
+
+    landmarks.forEach((landmark) => {
+      const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+      const [px, py, pz] = positionById.get(landmark.id)!;
+      joint.position.set(px, py, pz);
+      overlay.add(joint);
+    });
+
+    CFA_CONNECTIONS.forEach(([fromId, toId]) => {
+      const from = positionById.get(fromId);
+      const to = positionById.get(toId);
+      if (!from || !to) return;
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(from[0], from[1], from[2]),
+        new THREE.Vector3(to[0], to[1], to[2]),
+      ]);
+      overlay.add(new THREE.Line(geometry, boneMaterial));
+    });
+  }, [landmarks]);
+
+  // Poses each of the 18 known skeleton pieces directly from the entered
+  // coordinates, once they've been loaded and matched by name (see the
+  // GLTFLoader callback below). A piece missing either of its two
+  // landmarks is hidden rather than left in a stale or default position.
+  useEffect(() => {
+    if (piecesRef.current.size === 0) return;
+    const positions = landmarksToDisplayPositions(landmarks);
+    SKELETON_PIECES.forEach(({ nodeName, from, to }) => {
+      const piece = piecesRef.current.get(nodeName);
+      if (!piece) return;
+      const fromPos = positions.get(from);
+      const toPos = positions.get(to);
+      if (!fromPos || !toPos) {
+        piece.object.visible = false;
+        return;
+      }
+      poseSkeletonPiece(
+        piece.object,
+        piece.restBox,
+        new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
+        new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
+      );
+    });
+    const content = contentRef.current;
+    if (content) modelBoxRef.current = new THREE.Box3().setFromObject(content);
+  }, [landmarks]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -246,6 +347,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       disposeObject(child);
     });
     modelBoxRef.current = null;
+    piecesRef.current = new Map();
     onLoadStateChange("loading");
 
     let cancelled = false;
@@ -257,27 +359,55 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
           return;
         }
 
+        const tint = new THREE.Color("#D8CBB7");
+        const tintMaterials = (object: THREE.Object3D) => {
+          object.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            child.castShadow = true;
+            child.receiveShadow = true;
+            const materials = (Array.isArray(child.material) ? child.material : [child.material]).map((source) => {
+              const material = source.clone();
+              if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(tint, 0.3);
+              if ("roughness" in material && typeof material.roughness === "number") material.roughness = Math.max(material.roughness, 0.58);
+              if ("metalness" in material && typeof material.metalness === "number") material.metalness = Math.min(material.metalness, 0.08);
+              return material;
+            });
+            child.material = Array.isArray(child.material) ? materials : materials[0];
+          });
+        };
+
+        // The bundled skeleton_pre-cut.glb has no bone rig -- it's cut into
+        // 18 separately-named rigid pieces (see data/skeletonPieces.ts). If
+        // every named piece is found, pose each one directly from the
+        // entered coordinates instead of showing one static whole-model
+        // mesh. Any other GLB (a different reference model, or a
+        // researcher-imported one) falls back to the old behaviour: show
+        // it whole, auto-oriented upright and scaled to DISPLAY_HEIGHT.
+        const foundPieces = new Map<string, { object: THREE.Object3D; restBox: THREE.Box3 }>();
+        SKELETON_PIECES.forEach(({ nodeName }) => {
+          const found = gltf.scene.getObjectByName(nodeName);
+          if (found) foundPieces.set(nodeName, { object: found, restBox: new THREE.Box3().setFromObject(found) });
+        });
+
+        if (foundPieces.size === SKELETON_PIECES.length) {
+          foundPieces.forEach(({ object }) => {
+            tintMaterials(object);
+            contentRef.current!.add(object);
+          });
+          piecesRef.current = foundPieces;
+          modelBoxRef.current = new THREE.Box3().setFromObject(contentRef.current);
+          onLoadStateChange("ready");
+          return;
+        }
+
+        piecesRef.current = new Map();
         const model = clone(gltf.scene);
         const oriented = new THREE.Group();
         const pivot = new THREE.Group();
         pivot.name = `${modelName}-reference-model`;
         oriented.add(model);
         pivot.add(oriented);
-        const tint = new THREE.Color("#D8CBB7");
-
-        model.traverse((object) => {
-          if (!(object instanceof THREE.Mesh)) return;
-          object.castShadow = true;
-          object.receiveShadow = true;
-          const materials = (Array.isArray(object.material) ? object.material : [object.material]).map((source) => {
-            const material = source.clone();
-            if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(tint, 0.3);
-            if ("roughness" in material && typeof material.roughness === "number") material.roughness = Math.max(material.roughness, 0.58);
-            if ("metalness" in material && typeof material.metalness === "number") material.metalness = Math.min(material.metalness, 0.08);
-            return material;
-          });
-          object.material = Array.isArray(object.material) ? materials : materials[0];
-        });
+        tintMaterials(model);
 
         model.updateMatrixWorld(true);
         const sourceBox = new THREE.Box3().setFromObject(model);

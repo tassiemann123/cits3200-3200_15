@@ -367,6 +367,7 @@ export function App() {
             modelUrl={model.url}
             modelName={model.name}
             showGrid={showGrid}
+            landmarks={backendCoordinates}
             onLoadStateChange={setModelLoadState}
           />
           <div className="viewport-topbar">
