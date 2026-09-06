@@ -2,7 +2,7 @@ skeleton_id,joint_name,x,y,z
 Standard Skeleton,head_proximal,0,0.07,0.82
 Standard Skeleton,centre_of_head,0,0.07,0.703
 Standard Skeleton,chin,0,0.15,0.62
-Standard Skeleton,manubrium,0,0.18,0.509
+Standard Skeleton,manubrium,0,0,0.509
 Standard Skeleton,sacral_promontory,0,0,0
 Standard Skeleton,left_shoulder,0.249,0.07,0.529
 Standard Skeleton,left_elbow,0.281,0.07,0.205
