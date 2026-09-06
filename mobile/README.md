@@ -17,6 +17,6 @@ pnpm run android:open
 
 Add the bundled model locally at `public/models/skeleton_pre-cut.glb`. GLB files are intentionally excluded from Git while redistribution rights are reviewed.
 
-The bottom of the Coordinates page contains **Import CSV**, **Export CSV**, and **Save locally** actions. Coordinate CSV uses `skeleton_id,joint_name,x,y,z`; imported skeletons are added as new records. On Android, backend-ready CSV exports are saved under `Documents/Skeletal Coordinate App/` through the Capacitor Filesystem plugin.
+The bottom of the Coordinates page contains **Import CSV**, **Export CSV**, and **Save locally** actions. Coordinate CSV uses `skeleton_id,joint_name,x,y,z`; imported skeletons are added as new records. On Android, backend-ready CSV exports are saved under `Documents/Skeletal Coordinate App/` through the Capacitor Filesystem plugin. `public/samples/standard-skeleton-coordinates.csv` is a ready-made, fully-filled neutral standing pose covering all 25 CFA points -- import it via **Import CSV** to get a working baseline skeleton to tweak instead of starting from scratch.
 
 See the [repository README](../README.md) for Android Studio instructions, the backend payload, networking notes, and attribution.
