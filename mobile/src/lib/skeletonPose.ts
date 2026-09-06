@@ -1,6 +1,50 @@
 import * as THREE from "three";
 
 /**
+ * Precomputed facts about a piece's own rest-pose geometry, gathered once
+ * when the model loads (see computeRawPieceGeometry + resolvePieceRestInfo
+ * in SceneViewport.tsx) and reused on every re-pose.
+ *
+ * `fromTip`/`toTip` are NOT bounding-box corners -- they're the averaged
+ * position of the piece's own real vertices that sit at each extreme of
+ * its longest axis. A box corner is frequently a point in thin air next to
+ * the mesh, not on it: bones aren't symmetric prisms, so the box's overall
+ * centre-line often misses a tapered or off-centre joint entirely. Two
+ * adjoining pieces (say, an upper arm and a forearm) are each posed so
+ * their own idea of the elbow lands on the exact same target coordinate,
+ * but if that idea is a corner floating outside the mesh, the two pieces'
+ * actual surfaces still end up visibly apart even though the maths lines
+ * up perfectly on paper. Using the real, nearby vertices instead keeps
+ * both pieces' visible surfaces meeting where the joint actually is.
+ *
+ * Which of the two tips is `fromTip` (matching this piece's `from`
+ * landmark, e.g. the wrist end of a hand) versus `toTip` (its `to`
+ * landmark, e.g. the fingertip end) is resolved once, from the model's own
+ * rest-pose geometry, by resolvePieceRestInfo -- never re-guessed per pose.
+ * An earlier version of this code picked whichever assignment needed the
+ * smaller rotation away from the *current* pose, which works only as long
+ * as the requested pose stays close to the model's resting position. A
+ * pose that genuinely differs a lot (an arm raised overhead instead of
+ * hanging at the side) could then get the two tips backwards -- e.g. a
+ * hand's fingertip end anchored at the wrist target instead of its wrist
+ * end, leaving the hand pointing the wrong way entirely. Resolving each
+ * piece's own tip identities once, from its fixed neighbour-to-neighbour
+ * adjacency in the rest pose, is correct for every pose, not just ones
+ * similar to rest.
+ *
+ * `topTip` is the same kind of real-vertex centroid, but always taken from
+ * the piece's highest points (world +Y) regardless of which axis is
+ * longest -- for a single-landmark piece (see the anchor branch below),
+ * where there are no two ends to choose between.
+ */
+export interface PieceRestInfo {
+  axisIndex: 0 | 1 | 2;
+  fromTip: THREE.Vector3;
+  toTip: THREE.Vector3;
+  topTip: THREE.Vector3;
+}
+
+/**
  * Repositions, rotates, and stretches a single rigid mesh piece so its
  * long axis spans from `fromTarget` to `toTarget`, measured in the same
  * coordinate space as the piece's own untransformed position (i.e. the
@@ -8,47 +52,27 @@ import * as THREE from "three";
  *
  * If both targets are the same point, the piece is just translated there
  * with no rotation or stretch -- for single-anchor pieces like the pelvis.
- *
- * `restBox` must be the piece's own bounding box, measured before this
- * function has ever been called on it (its *rest* pose).
  */
 export function poseSkeletonPiece(
   piece: THREE.Object3D,
-  restBox: THREE.Box3,
+  rest: PieceRestInfo,
   fromTarget: THREE.Vector3,
   toTarget: THREE.Vector3,
+  stretch: "rod" | "uniform" | "anchor" = "rod",
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
-    const center = restBox.getCenter(new THREE.Vector3());
+    // Only one landmark to go on, so there's no direction to derive an
+    // attachment point from. The one piece this applies to (the pelvis)
+    // hangs from its single landmark at the *top* -- most of its mass
+    // (hip sockets, ischium) is below the sacral attachment, not centred
+    // on it -- so topTip (not the piece's overall centre) is what should
+    // land on that landmark.
     piece.quaternion.identity();
     piece.scale.set(1, 1, 1);
-    piece.position.copy(fromTarget).sub(center);
+    piece.position.copy(fromTarget).sub(rest.topTip);
     piece.visible = true;
     return;
   }
-
-  const size = restBox.getSize(new THREE.Vector3());
-  const axisIndex = [0, 1, 2].reduce(
-    (longest, index) => (size.getComponent(index) > size.getComponent(longest) ? index : longest),
-    0,
-  );
-  const axisDir = new THREE.Vector3();
-  axisDir.setComponent(axisIndex, 1);
-
-  const center = restBox.getCenter(new THREE.Vector3());
-  const halfLength = size.getComponent(axisIndex) / 2;
-  const endA = center.clone().addScaledVector(axisDir, -halfLength);
-  const endB = center.clone().addScaledVector(axisDir, halfLength);
-
-  // The proximal ("from") end is whichever axis extreme sits closer to the
-  // model's own vertical centre -- true for a hanging limb in a normal
-  // standing pose (a shoulder or hip sits nearer torso height than an
-  // elbow, knee, wrist, or ankle does). This is a heuristic, not something
-  // read directly from the file -- if a piece ends up flipped end-to-end,
-  // this is the line to revisit for that specific piece.
-  const proximalIsA = Math.abs(endA.y) < Math.abs(endB.y);
-  const localFrom = proximalIsA ? endA : endB;
-  const localTo = proximalIsA ? endB : endA;
 
   const targetDir = new THREE.Vector3().subVectors(toTarget, fromTarget);
   const targetLength = targetDir.length();
@@ -58,14 +82,53 @@ export function poseSkeletonPiece(
   }
   targetDir.normalize();
 
+  // Which tip is the proximal ("from") end is already resolved, once, from
+  // the model's own rest-pose geometry (see the PieceRestInfo comment) --
+  // no per-pose guessing needed here.
+  const localFrom = rest.fromTip;
+  const localTo = rest.toTip;
+
   const restLength = Math.max(localTo.distanceTo(localFrom), 1e-6);
-  const scaleFactor = targetLength / restLength;
+  // For "anchor" pieces, the two assigned landmarks are just reference
+  // points on the piece -- not necessarily its two extreme ends the way a
+  // limb's joints are (the gap between "centre_of_head" and
+  // "head_proximal" is a fraction of the skull's actual height, for
+  // instance). Sizing the *entire* piece to match that gap would shrink or
+  // balloon it to something with no real relationship to its actual size,
+  // so anchor pieces keep their true, modelled size and only move into
+  // position; "rod" and "uniform" pieces still resize, since their two
+  // landmarks genuinely are that bone's two ends.
+  const scaleFactor = stretch === "anchor" ? 1 : targetLength / restLength;
 
-  const localAxis = new THREE.Vector3().subVectors(localTo, localFrom).normalize();
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(localAxis, targetDir);
+  // A real long bone (upper arm, forearm, thigh, shin, spine) reads fine
+  // stretched along just its one long axis -- it still looks like a bone,
+  // only longer or shorter. A chunky, rounded, or irregular piece (the
+  // ribcage) visibly warps if it's squashed or stretched that way instead,
+  // so it's resized evenly on all three axes to keep its proportions intact.
+  const scale = stretch === "rod"
+    ? new THREE.Vector3(1, 1, 1).setComponent(rest.axisIndex, scaleFactor)
+    : new THREE.Vector3(scaleFactor, scaleFactor, scaleFactor);
 
-  const scale = new THREE.Vector3(1, 1, 1);
-  scale.setComponent(axisIndex, scaleFactor);
+  // Pointing a piece from one landmark to the other only ever controls two
+  // of its three rotational degrees of freedom -- which way its long axis
+  // aims. The twist *around* that axis is left for the maths to pick
+  // arbitrarily, which a roughly round, radially-symmetric rod (an upper
+  // arm, a forearm, a thigh) can get away with, since it looks the same at
+  // any twist. A piece with an actual front/back or a clear facing
+  // direction -- a skull, the clavicle/shoulder-blade piece, a hand, a
+  // foot -- can end up with an arbitrary twist around its own length axis
+  // this way (e.g. a palm facing an odd way). But leaving that piece
+  // unrotated entirely is worse: once its limb bends far from the rest
+  // pose (an arm raised overhead instead of hanging at the side), an
+  // unrotated hand or foot keeps pointing the *original* rest direction,
+  // which reads as badly broken rather than just slightly twisted. So
+  // every piece aligns its long axis to the real target direction; only
+  // the *scale* distinction between "anchor" and the others remains
+  // (anchor pieces keep their true modelled size instead of stretching).
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3().subVectors(localTo, localFrom).normalize(),
+    targetDir,
+  );
 
   piece.scale.copy(scale);
   piece.quaternion.copy(quaternion);

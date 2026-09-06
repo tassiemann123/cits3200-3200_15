@@ -7,7 +7,7 @@ import type { Landmark, ModelLoadState } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions } from "../lib/coordinates";
-import { poseSkeletonPiece } from "../lib/skeletonPose";
+import { poseSkeletonPiece, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
   resetCamera: () => void;
@@ -44,6 +44,180 @@ function disposeObject(root: THREE.Object3D): void {
   });
 }
 
+/**
+ * Each named skeleton piece sits several levels deep inside the loaded
+ * file (Sketchfab_model -> SkeletonBodyPart.fbx -> RootNode -> the piece
+ * itself), and those in-between levels carry a hidden scale and rotation
+ * left over from how the file was originally exported. getObjectByName()
+ * only grabs the piece's own node -- if that node is then reparented
+ * straight under our own scene group (which it needs to be, so it can be
+ * posed independently of the others), the hidden scale/rotation from its
+ * old ancestors is silently dropped instead of carried along, and the
+ * piece renders at the wrong size and angle from the moment it loads,
+ * before any coordinate math even runs.
+ *
+ * This bakes each piece's true, fully-resolved position/rotation/scale
+ * directly into a fresh copy of its own geometry, so the returned group
+ * has no leftover transform of its own and can be moved anywhere safely --
+ * which is exactly what poseSkeletonPiece() assumes it's working with.
+ */
+function bakePieceWorldTransform(pieceNode: THREE.Object3D): THREE.Group {
+  const baked = new THREE.Group();
+  baked.name = pieceNode.name;
+  pieceNode.updateWorldMatrix(true, false);
+  pieceNode.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.updateWorldMatrix(true, false);
+    const geometry = child.geometry.clone();
+    geometry.applyMatrix4(child.matrixWorld);
+    const mesh = new THREE.Mesh(geometry, child.material);
+    mesh.name = child.name;
+    baked.add(mesh);
+  });
+  return baked;
+}
+
+/**
+ * The centroid of a piece's own real vertices sitting within a small band
+ * of its extreme along one axis -- not a bounding-box corner, which is
+ * frequently a point in thin air next to the mesh rather than on it (see
+ * the comment on PieceRestInfo in lib/skeletonPose.ts for why that matters).
+ */
+function tipCentroid(baked: THREE.Object3D, axisIndex: 0 | 1 | 2, sign: 1 | -1, axisExtent: number): THREE.Vector3 {
+  const probe = new THREE.Vector3();
+  let extreme = sign > 0 ? -Infinity : Infinity;
+  baked.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const position = child.geometry.attributes.position;
+    for (let i = 0; i < position.count; i += 1) {
+      probe.fromBufferAttribute(position, i);
+      const value = probe.getComponent(axisIndex);
+      if (sign > 0 ? value > extreme : value < extreme) extreme = value;
+    }
+  });
+
+  const threshold = Math.max(axisExtent * 0.05, 1e-4);
+  const sum = new THREE.Vector3();
+  let count = 0;
+  baked.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const position = child.geometry.attributes.position;
+    for (let i = 0; i < position.count; i += 1) {
+      probe.fromBufferAttribute(position, i);
+      if (Math.abs(probe.getComponent(axisIndex) - extreme) <= threshold) {
+        sum.add(probe);
+        count += 1;
+      }
+    }
+  });
+  return count > 0 ? sum.divideScalar(count) : new THREE.Vector3();
+}
+
+/** A piece's own two extreme-tip candidates, before we know which one is
+ * anatomically its `from` end versus its `to` end -- see
+ * resolvePieceRestInfo, which turns this into a real PieceRestInfo. */
+interface RawPieceGeometry {
+  axisIndex: 0 | 1 | 2;
+  tipMin: THREE.Vector3;
+  tipMax: THREE.Vector3;
+  topTip: THREE.Vector3;
+}
+
+function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
+  const box = new THREE.Box3().setFromObject(baked);
+  const size = box.getSize(new THREE.Vector3());
+  const axisIndex = ([0, 1, 2] as const).reduce(
+    (longest, index) => (size.getComponent(index) > size.getComponent(longest) ? index : longest),
+    0 as 0 | 1 | 2,
+  );
+  return {
+    axisIndex,
+    tipMin: tipCentroid(baked, axisIndex, -1, size.getComponent(axisIndex)),
+    tipMax: tipCentroid(baked, axisIndex, 1, size.getComponent(axisIndex)),
+    topTip: tipCentroid(baked, 1, 1, size.y),
+  };
+}
+
+/**
+ * Turns each piece's raw, direction-agnostic tip pair into a real
+ * PieceRestInfo whose `fromTip`/`toTip` genuinely match its `from`/`to`
+ * landmark (see the PieceRestInfo comment in lib/skeletonPose.ts for why
+ * this can't just be guessed per-pose).
+ *
+ * This is resolved once, from the rest-pose model alone, by walking the
+ * body outward from the spine: each piece's own two tips are compared
+ * against the *already-resolved* neighbour it physically joins in the
+ * rest pose (found via the shared landmark name in SKELETON_PIECES, e.g.
+ * the forearm's "elbow" end and the upper arm's "elbow" end), and
+ * whichever tip sits closer to that neighbour is this piece's `fromTip`.
+ * A few pieces have no such name-sharing predecessor (the legs' hip end,
+ * and the skull) -- those resolve against the nearest fixed rest-pose
+ * landmark instead (the pelvis piece's own top, and the spine's top).
+ */
+function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<string, PieceRestInfo> {
+  const resolved = new Map<string, PieceRestInfo>();
+
+  const withOrder = (raw: RawPieceGeometry, fromTip: THREE.Vector3, toTip: THREE.Vector3): PieceRestInfo => ({
+    axisIndex: raw.axisIndex,
+    fromTip,
+    toTip,
+    topTip: raw.topTip,
+  });
+
+  // The spine is the one piece we can orient outright: in the rest pose
+  // (standing upright) its sacral (from) end is simply the lower of its
+  // own two tips, its manubrium (to) end the higher.
+  const spineRaw = rawByName.get("SK_Spine");
+  if (!spineRaw) return resolved;
+  const spineLower = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMin : spineRaw.tipMax;
+  const spineUpper = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMax : spineRaw.tipMin;
+  resolved.set("SK_Spine", withOrder(spineRaw, spineLower, spineUpper));
+
+  const sideRaw = rawByName.get("SK_Side");
+  if (sideRaw) {
+    const sideLower = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMin : sideRaw.tipMax;
+    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
+    resolved.set("SK_Side", withOrder(sideRaw, sideLower, sideUpper));
+  }
+
+  // The pelvis is a single-landmark piece -- its only meaningful reference
+  // point is its own top (see the single-target branch in
+  // poseSkeletonPiece), which also doubles as the rest-pose anchor the
+  // upper legs resolve against below.
+  const coccyxRaw = rawByName.get("SK_Coccyx");
+  if (coccyxRaw) {
+    resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
+  }
+
+  function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined): void {
+    const raw = rawByName.get(nodeName);
+    if (!raw || !anchor) return;
+    const dMin = raw.tipMin.distanceTo(anchor);
+    const dMax = raw.tipMax.distanceTo(anchor);
+    const fromTip = dMin < dMax ? raw.tipMin : raw.tipMax;
+    const toTip = dMin < dMax ? raw.tipMax : raw.tipMin;
+    resolved.set(nodeName, withOrder(raw, fromTip, toTip));
+  }
+
+  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip);
+  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip);
+  resolveAgainst("SK_RArmUp", resolved.get("SK_RClavicle")?.toTip);
+  resolveAgainst("SK_LArmUp", resolved.get("SK_LClavicle")?.toTip);
+  resolveAgainst("SK_RArmDown", resolved.get("SK_RArmUp")?.toTip);
+  resolveAgainst("SK_LArmDown", resolved.get("SK_LArmUp")?.toTip);
+  resolveAgainst("SK_HandR", resolved.get("SK_RArmDown")?.toTip);
+  resolveAgainst("SK_HandL", resolved.get("SK_LArmDown")?.toTip);
+  resolveAgainst("SK_RLegUp", resolved.get("SK_Coccyx")?.topTip);
+  resolveAgainst("SK_LLegUp", resolved.get("SK_Coccyx")?.topTip);
+  resolveAgainst("SK_RLegDown", resolved.get("SK_RLegUp")?.toTip);
+  resolveAgainst("SK_LLegDown", resolved.get("SK_LLegUp")?.toTip);
+  resolveAgainst("SK_RFoot", resolved.get("SK_RLegDown")?.toTip);
+  resolveAgainst("SK_LFoot", resolved.get("SK_LLegDown")?.toTip);
+  resolveAgainst("SK_Head", resolved.get("SK_Spine")?.toTip);
+
+  return resolved;
+}
+
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
   { modelUrl, modelName, showGrid, landmarks, onLoadStateChange },
   ref,
@@ -57,7 +231,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
   const overlayRef = useRef<THREE.Group | null>(null);
-  const piecesRef = useRef<Map<string, { object: THREE.Object3D; restBox: THREE.Box3 }>>(new Map());
+  const piecesRef = useRef<Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>>(new Map());
 
   const resetCamera = () => {
     const camera = cameraRef.current;
@@ -319,7 +493,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   useEffect(() => {
     if (piecesRef.current.size === 0) return;
     const positions = landmarksToDisplayPositions(landmarks);
-    SKELETON_PIECES.forEach(({ nodeName, from, to }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       const fromPos = positions.get(from);
@@ -330,9 +504,10 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       }
       poseSkeletonPiece(
         piece.object,
-        piece.restBox,
+        piece.rest,
         new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
         new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
+        stretch,
       );
     });
     const content = contentRef.current;
@@ -383,10 +558,58 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         // mesh. Any other GLB (a different reference model, or a
         // researcher-imported one) falls back to the old behaviour: show
         // it whole, auto-oriented upright and scaled to DISPLAY_HEIGHT.
-        const foundPieces = new Map<string, { object: THREE.Object3D; restBox: THREE.Box3 }>();
+        gltf.scene.updateMatrixWorld(true);
+        const bakedByName = new Map<string, THREE.Group>();
+        const nativeBox = new THREE.Box3();
         SKELETON_PIECES.forEach(({ nodeName }) => {
           const found = gltf.scene.getObjectByName(nodeName);
-          if (found) foundPieces.set(nodeName, { object: found, restBox: new THREE.Box3().setFromObject(found) });
+          if (!found) return;
+          const baked = bakePieceWorldTransform(found);
+          bakedByName.set(nodeName, baked);
+          nativeBox.union(new THREE.Box3().setFromObject(baked));
+        });
+
+        // The 18 pieces are baked straight out of the file's own units,
+        // which aren't real-world metres (see the DISPLAY_HEIGHT comment
+        // above) -- but the coordinates each piece gets posed to (from
+        // landmarksToDisplayPositions) genuinely are metres. Left
+        // uncorrected, every piece's rest length comes out roughly double
+        // its real target length, and poseSkeletonPiece has to compress
+        // it back down to fit -- shrinking its long axis while its width
+        // stays at the file's native (oversized) scale, which is what
+        // turns ordinary bones into pinched, flared stumps at every joint.
+        // Rescaling every piece by one shared factor -- fixed for this
+        // file, not recomputed per patient -- so the whole assembly's own
+        // native height matches DISPLAY_HEIGHT fixes that at the source:
+        // each piece's rest length then already sits close to a real
+        // adult's, so the per-piece stretch that follows only has to
+        // account for genuine person-to-person variation, not a leftover
+        // file-scale mismatch.
+        const nativeHeight = nativeBox.getSize(new THREE.Vector3()).y;
+        const globalScale = nativeHeight > 0.0001 ? DISPLAY_HEIGHT / nativeHeight : 1;
+
+        const rawGeometryByName = new Map<string, RawPieceGeometry>();
+        bakedByName.forEach((baked, nodeName) => {
+          if (Math.abs(globalScale - 1) > 1e-6) {
+            const scaleMatrix = new THREE.Matrix4().makeScale(globalScale, globalScale, globalScale);
+            baked.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) return;
+              child.geometry.applyMatrix4(scaleMatrix);
+            });
+          }
+          rawGeometryByName.set(nodeName, computeRawPieceGeometry(baked));
+        });
+
+        // Which tip of each piece is its `from` end versus its `to` end is
+        // resolved once here, from the whole assembly's rest-pose geometry
+        // -- not re-guessed per pose (see resolvePieceRestInfo above).
+        const restInfoByName = resolvePieceRestInfo(rawGeometryByName);
+
+        const foundPieces = new Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>();
+        bakedByName.forEach((baked, nodeName) => {
+          const rest = restInfoByName.get(nodeName);
+          if (!rest) return;
+          foundPieces.set(nodeName, { object: baked, rest });
         });
 
         if (foundPieces.size === SKELETON_PIECES.length) {
