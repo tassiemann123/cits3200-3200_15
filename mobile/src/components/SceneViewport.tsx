@@ -493,7 +493,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   useEffect(() => {
     if (piecesRef.current.size === 0) return;
     const positions = landmarksToDisplayPositions(landmarks);
-    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       const fromPos = positions.get(from);
@@ -502,12 +502,18 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         piece.object.visible = false;
         return;
       }
+      // The twist landmark (e.g. chin) is optional even when the piece
+      // declares one -- an archaeologist may not have recorded it yet.
+      // Falling back to no twist correction just means this piece keeps
+      // its old two-point-only behaviour until that coordinate is entered.
+      const twistPos = twist ? positions.get(twist) : undefined;
       poseSkeletonPiece(
         piece.object,
         piece.rest,
         new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
         new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
         stretch,
+        twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined,
       );
     });
     const content = contentRef.current;

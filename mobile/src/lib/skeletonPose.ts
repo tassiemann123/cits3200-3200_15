@@ -45,6 +45,16 @@ export interface PieceRestInfo {
 }
 
 /**
+ * Every piece in the bundled GLB was modelled facing the same way in its
+ * untransformed rest pose -- confirmed directly by isolating the skull
+ * mesh and checking which axis its face actually protrudes along -- so
+ * this is a fixed constant for the whole model, not something measured
+ * per piece. Only pieces that opt in with a `twist` landmark (see
+ * SkeletonPieceSpec) use it.
+ */
+const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
+
+/**
  * Repositions, rotates, and stretches a single rigid mesh piece so its
  * long axis spans from `fromTarget` to `toTarget`, measured in the same
  * coordinate space as the piece's own untransformed position (i.e. the
@@ -59,6 +69,7 @@ export function poseSkeletonPiece(
   fromTarget: THREE.Vector3,
   toTarget: THREE.Vector3,
   stretch: "rod" | "uniform" | "anchor" = "rod",
+  twistTarget?: THREE.Vector3,
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
@@ -125,10 +136,35 @@ export function poseSkeletonPiece(
   // every piece aligns its long axis to the real target direction; only
   // the *scale* distinction between "anchor" and the others remains
   // (anchor pieces keep their true modelled size instead of stretching).
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(
+  let quaternion = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3().subVectors(localTo, localFrom).normalize(),
     targetDir,
   );
+
+  // A third landmark (e.g. the chin, for the skull) resolves exactly the
+  // twist ambiguity described above, instead of leaving it arbitrary.
+  // Project the piece's now-rotated facing direction, and the direction
+  // toward the twist target, both onto the plane perpendicular to the
+  // piece's main axis -- since both vectors are perpendicular to that same
+  // axis, the rotation that takes one to the other is necessarily a pure
+  // rotation *about* that axis, i.e. exactly the twist correction needed,
+  // leaving the primary alignment above untouched.
+  if (twistTarget) {
+    const rotatedForward = NATIVE_FORWARD.clone().applyQuaternion(quaternion);
+    const projRotated = rotatedForward.clone().addScaledVector(targetDir, -rotatedForward.dot(targetDir));
+    const targetForwardRaw = new THREE.Vector3().subVectors(twistTarget, fromTarget);
+    const projTarget = targetForwardRaw.clone().addScaledVector(targetDir, -targetForwardRaw.dot(targetDir));
+    // Degenerate only if the twist landmark sits (almost) exactly on the
+    // main axis itself, e.g. entered identical to one of the other two
+    // landmarks -- there's no facing direction to derive a twist from, so
+    // fall back to the primary alignment alone rather than divide by ~0.
+    if (projRotated.lengthSq() > 1e-10 && projTarget.lengthSq() > 1e-10) {
+      projRotated.normalize();
+      projTarget.normalize();
+      const twist = new THREE.Quaternion().setFromUnitVectors(projRotated, projTarget);
+      quaternion = twist.multiply(quaternion);
+    }
+  }
 
   piece.scale.copy(scale);
   piece.quaternion.copy(quaternion);

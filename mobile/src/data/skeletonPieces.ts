@@ -40,11 +40,24 @@ export interface SkeletonPieceSpec {
    * twisted an arbitrary, often visibly wrong way around the third.
    */
   stretch?: "rod" | "uniform" | "anchor";
+  /**
+   * A third landmark, off the piece's main axis, used to resolve the twist
+   * *around* that axis that a two-point aim can't determine (see the
+   * "anchor" note above -- this is what actually fixes that ambiguity for
+   * pieces that have one). Only meaningful alongside "anchor": rotates the
+   * piece so its real, modelled facing direction (assumed +Z in the
+   * model's own rest pose -- confirmed by inspecting the skull mesh
+   * directly) points from `from` toward this landmark, instead of landing
+   * on an arbitrary twist. Currently only the skull uses this (`chin`),
+   * turning the head to face where the chin is actually recorded instead
+   * of always facing forward.
+   */
+  twist?: PointName;
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
-  { nodeName: "SK_Head", from: "centre_of_head", to: "head_proximal", stretch: "anchor" },
-  { nodeName: "SK_Spine", from: "sacral_promontory", to: "manubrium" },
+  { nodeName: "SK_Head", from: "centre_of_head", to: "head_proximal", stretch: "anchor", twist: "chin" },
+  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal" },
   { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", stretch: "uniform" },
   { nodeName: "SK_Coccyx", from: "sacral_promontory", to: "sacral_promontory" },
 
