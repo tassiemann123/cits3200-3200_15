@@ -166,6 +166,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .coordinate-progress { height: 4px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: #deddd8; }
 .coordinate-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--bone), var(--accent)); transition: width .2s ease; }
 .record-card > p { margin: 6px 0 0; color: #7a8085; font-size: 8px; line-height: 1.4; }
+.coordinate-focus-banner { display: none; }
 .coordinate-scroll-area { flex: 1; min-height: 0; margin: 0 -5px; padding: 0 5px 18px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #b8bfc4 transparent; }
 .coordinate-group { margin-bottom: 9px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .coordinate-group.excluded { border-style: dashed; background: #faf9f6; }
@@ -305,6 +306,34 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .toast.above-coordinate-actions { bottom: 136px; }
   .dialog-grid { grid-template-columns: 1fr 1fr 1fr; }
   .dialog-grid .field-label:nth-child(1), .dialog-grid .field-label:nth-child(2) { grid-column: span 3; }
+
+  html.coordinate-keyboard-active .app-shell { grid-template-rows: minmax(0, 1fr); }
+  html.coordinate-keyboard-active .app-header,
+  html.coordinate-keyboard-active .mobile-nav,
+  html.coordinate-keyboard-active .side-panel-tabs,
+  html.coordinate-keyboard-active .coordinate-heading,
+  html.coordinate-keyboard-active .coordinate-panel > .record-card,
+  html.coordinate-keyboard-active .coordinate-action-bar { display: none; }
+  html.coordinate-keyboard-active .coordinate-panel { padding: 8px 12px 0; }
+  html.coordinate-keyboard-active .coordinate-focus-banner {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    margin: 0 -12px 8px;
+    padding: 7px 12px;
+    color: var(--text);
+    border-bottom: 1px solid var(--line);
+    background: #f4f2ed;
+  }
+  html.coordinate-keyboard-active .coordinate-focus-banner span { color: var(--muted); font-size: 9px; }
+  html.coordinate-keyboard-active .coordinate-focus-banner strong { overflow: hidden; font-size: 11px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+  html.coordinate-keyboard-active .coordinate-scroll-area {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    scroll-padding-block: 54px 24px;
+  }
 }
 
 @media (max-width: 480px) {
