@@ -493,6 +493,25 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   useEffect(() => {
     if (piecesRef.current.size === 0) return;
     const positions = landmarksToDisplayPositions(landmarks);
+
+    // One overall body-scale factor, derived from the spine (the piece
+    // whose two landmarks -- sacral_promontory to head_proximal -- already
+    // track true stature correctly), so "anchor" pieces (skull, hands,
+    // feet, clavicles) can resize toward it too instead of staying frozen
+    // at adult size regardless of what's entered. See the scaleFactor
+    // comment in poseSkeletonPiece for why this is an approximation, not
+    // an exact fix.
+    let bodyScale: number | undefined;
+    const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
+    const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
+    const spineFromPos = spineSpec ? positions.get(spineSpec.from) : undefined;
+    const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
+    if (spinePiece && spineFromPos && spineToPos) {
+      const restLength = spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip);
+      const targetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
+      if (restLength > 1e-6) bodyScale = targetLength / restLength;
+    }
+
     SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
@@ -514,6 +533,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
         stretch,
         twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined,
+        bodyScale,
       );
     });
     const content = contentRef.current;

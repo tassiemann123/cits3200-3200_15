@@ -70,6 +70,7 @@ export function poseSkeletonPiece(
   toTarget: THREE.Vector3,
   stretch: "rod" | "uniform" | "anchor" = "rod",
   twistTarget?: THREE.Vector3,
+  bodyScale?: number,
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
@@ -104,12 +105,20 @@ export function poseSkeletonPiece(
   // points on the piece -- not necessarily its two extreme ends the way a
   // limb's joints are (the gap between "centre_of_head" and
   // "head_proximal" is a fraction of the skull's actual height, for
-  // instance). Sizing the *entire* piece to match that gap would shrink or
-  // balloon it to something with no real relationship to its actual size,
-  // so anchor pieces keep their true, modelled size and only move into
-  // position; "rod" and "uniform" pieces still resize, since their two
-  // landmarks genuinely are that bone's two ends.
-  const scaleFactor = stretch === "anchor" ? 1 : targetLength / restLength;
+  // instance). Sizing the piece to match *that* gap directly
+  // would shrink or balloon it to something with no real relationship to
+  // its actual size. But leaving it permanently frozen at 1 is its own
+  // problem: a skeleton entered at infant proportions would still get an
+  // adult-sized skull, hands, and feet stuck onto a shortened body.
+  // `bodyScale` -- one overall scale factor derived from a piece that DOES
+  // resize correctly (the spine, which spans true stature) -- gives anchor
+  // pieces a reasonable size to track without using their own unreliable
+  // two-landmark gap. It's an approximation (a real infant's head is
+  // proportionally larger, not just uniformly smaller, than an adult's),
+  // but it's far closer than never resizing at all, and needs no new
+  // landmark data. "rod" and "uniform" pieces ignore it entirely -- their
+  // own two landmarks already are that bone's real two ends.
+  const scaleFactor = stretch === "anchor" ? (bodyScale ?? 1) : targetLength / restLength;
 
   // A real long bone (upper arm, forearm, thigh, shin, spine) reads fine
   // stretched along just its one long axis -- it still looks like a bone,
