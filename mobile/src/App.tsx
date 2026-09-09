@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Bone,
   Camera,
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { CoordinatePanel } from "./components/CoordinatePanel";
 import { DetailsPanel } from "./components/DetailsPanel";
-import { SceneViewport, type SceneViewportHandle } from "./components/SceneViewport";
+import type { SceneViewportHandle } from "./components/SceneViewport";
 import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema";
 import {
   backendSkeletonToRecord,
@@ -36,6 +36,11 @@ import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv"
 import { exportCsv } from "./lib/csvExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
 import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel } from "./types";
+
+const SceneViewport = lazy(async () => {
+  const module = await import("./components/SceneViewport");
+  return { default: module.SceneViewport };
+});
 
 type MobilePane = "scene" | "panel";
 type SidePanel = "coordinates" | "details";
@@ -164,6 +169,12 @@ export function App() {
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
   }, []);
+
+  // Coordinate entry is field data, so every edit is persisted locally as
+  // soon as React commits it. Backend synchronisation remains explicit.
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  }, [preferences]);
 
   useEffect(() => {
     let active = true;
@@ -450,7 +461,7 @@ export function App() {
       ? "Syncing backend"
       : backendStatus === "checking"
         ? "Checking backend"
-        : "Offline · local save available";
+        : "Offline · local autosave active";
 
   return (
     <div className="app-shell">
@@ -505,14 +516,16 @@ export function App() {
 
       <main className="workspace-grid model-viewer-grid">
         <section className={`viewport-section ${mobilePane === "scene" ? "mobile-active" : ""}`}>
-          <SceneViewport
-            ref={viewportRef}
-            modelUrl={model.url}
-            modelName={model.name}
-            showGrid={showGrid}
-            landmarks={backendCoordinates}
-            onLoadStateChange={setModelLoadState}
-          />
+          <Suspense fallback={<div className="model-load-state loading">Loading 3D viewer…</div>}>
+            <SceneViewport
+              ref={viewportRef}
+              modelUrl={model.url}
+              modelName={model.name}
+              showGrid={showGrid}
+              landmarks={backendCoordinates}
+              onLoadStateChange={setModelLoadState}
+            />
+          </Suspense>
           <div className="viewport-topbar">
             <div className="active-model-label">
               <Bone size={16} />

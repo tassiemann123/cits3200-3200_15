@@ -311,8 +311,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Keep the reference model shadow-free. A projected silhouette beneath
+    // the bones can be mistaken for recorded skeletal evidence in field use.
+    renderer.shadowMap.enabled = false;
     host.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -340,7 +341,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.09;
-    floor.receiveShadow = true;
     scene.add(floor);
 
     const pedestal = new THREE.Mesh(
@@ -348,7 +348,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       new THREE.MeshStandardMaterial({ color: "#2B333A", roughness: 0.72, metalness: 0.18 }),
     );
     pedestal.position.y = -0.045;
-    pedestal.receiveShadow = true;
     scene.add(pedestal);
 
     const ring = new THREE.Mesh(
@@ -362,14 +361,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     scene.add(new THREE.HemisphereLight("#F4F0E6", "#171B1F", 2.1));
     const keyLight = new THREE.DirectionalLight("#fff1d9", 3.1);
     keyLight.position.set(3.8, 6.5, 4.2);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 14;
-    keyLight.shadow.camera.left = -3;
-    keyLight.shadow.camera.right = 3;
-    keyLight.shadow.camera.top = 4;
-    keyLight.shadow.camera.bottom = -1;
     scene.add(keyLight);
     const rimLight = new THREE.DirectionalLight("#6F8FA8", 1.7);
     rimLight.position.set(-4, 2.6, -3.5);
@@ -564,8 +555,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         const tintMaterials = (object: THREE.Object3D) => {
           object.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
-            child.castShadow = true;
-            child.receiveShadow = true;
+            child.castShadow = false;
+            child.receiveShadow = false;
             const materials = (Array.isArray(child.material) ? child.material : [child.material]).map((source) => {
               const material = source.clone();
               if ("color" in material && material.color instanceof THREE.Color) material.color.lerp(tint, 0.3);
