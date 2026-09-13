@@ -1,4 +1,4 @@
-package com.example.app;
+package au.edu.research.osteoplot;
 
 import com.getcapacitor.BridgeActivity;
 

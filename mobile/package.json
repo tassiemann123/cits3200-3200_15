@@ -1,28 +1,37 @@
 {
-  "name": "cits3200-3200_15",
+  "name": "skeletal-annotation-android",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "pnpm run models:prepare",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "models:prepare": "node scripts/convert-spec-gloss.mjs public/models/skeleton_pre-cut.glb public/models/skeleton_pre-cut.glb",
+    "preview": "vite preview",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
-    "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "lucide-react": "^1.28.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "oxlint": "^1.75.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.2.0"
+    "@capacitor/cli": "^8.5.0",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/three": "^0.185.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }

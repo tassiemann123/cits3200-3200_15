@@ -1,0 +1,26 @@
+skeleton_id,joint_name,x,y,z
+Standard Skeleton,head_proximal,0,0.07,0.82
+Standard Skeleton,centre_of_head,0,0.07,0.703
+Standard Skeleton,chin,0,0.15,0.62
+Standard Skeleton,manubrium,0,0,0.509
+Standard Skeleton,sacral_promontory,0,0,0
+Standard Skeleton,left_shoulder,0.249,0.07,0.529
+Standard Skeleton,left_elbow,0.281,0.07,0.205
+Standard Skeleton,left_wrist,0.292,0.07,-0.057
+Standard Skeleton,left_fingertips,0.292,0.07,-0.259
+Standard Skeleton,left_ilium_superior,0.19,0.03,0.041
+Standard Skeleton,left_ischium,0.09,0,-0.08
+Standard Skeleton,left_acetabulum,0.18,0.07,-0.05
+Standard Skeleton,left_knee,0.129,0.09,-0.459
+Standard Skeleton,left_ankle,0.069,0.06,-0.861
+Standard Skeleton,left_toes,0.069,0.266,-0.966
+Standard Skeleton,right_shoulder,-0.249,0.07,0.529
+Standard Skeleton,right_elbow,-0.281,0.07,0.205
+Standard Skeleton,right_wrist,-0.292,0.07,-0.057
+Standard Skeleton,right_fingertips,-0.292,0.07,-0.259
+Standard Skeleton,right_ilium_superior,-0.19,0.03,0.041
+Standard Skeleton,right_ischium,-0.09,0,-0.08
+Standard Skeleton,right_acetabulum,-0.18,0.07,-0.05
+Standard Skeleton,right_knee,-0.129,0.09,-0.459
+Standard Skeleton,right_ankle,-0.069,0.06,-0.861
+Standard Skeleton,right_toes,-0.069,0.266,-0.966
