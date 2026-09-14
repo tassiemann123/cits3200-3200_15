@@ -12,9 +12,14 @@ import type { PointName } from "./cfaSchema";
  * kinematics or a rig.
  *
  * `from` is the proximal (closer to the torso) end, `to` is the distal
- * end. Where a piece has no natural second endpoint (the pelvis), `from`
- * and `to` are the same landmark and the piece is just moved there rather
- * than stretched or rotated.
+ * end. Where a piece has no natural second endpoint of its own, `from`
+ * and `to` are the same landmark. The pelvis/coccyx is then just moved
+ * there, borrowing rotation via `rigidWith` since it's rigidly fused to
+ * the sacrum rather than free-floating. The skull is different again:
+ * since `centre_of_head` was removed at the CFA's request, it has no
+ * second landmark of its own any more, but it also isn't rigidly fused to
+ * anything -- so instead it sets `offsetFromRatio` (see below), which
+ * synthesises a second point for it to span from.
  */
 export interface SkeletonPieceSpec {
   nodeName: string;
@@ -41,25 +46,82 @@ export interface SkeletonPieceSpec {
    */
   stretch?: "rod" | "uniform" | "anchor";
   /**
-   * A third landmark, off the piece's main axis, used to resolve the twist
-   * *around* that axis that a two-point aim can't determine (see the
-   * "anchor" note above -- this is what actually fixes that ambiguity for
-   * pieces that have one). Only meaningful alongside "anchor": rotates the
-   * piece so its real, modelled facing direction (assumed +Z in the
-   * model's own rest pose -- confirmed by inspecting the skull mesh
-   * directly) points from `from` toward this landmark, instead of landing
-   * on an arbitrary twist. Currently only the skull uses this (`chin`),
-   * turning the head to face where the chin is actually recorded instead
-   * of always facing forward.
+   * One landmark, or several averaged together, off the piece's main axis,
+   * used to resolve the twist *around* that axis that a two-point aim
+   * can't determine. Works for any piece with two distinct `from`/`to`
+   * landmarks (not just "anchor" pieces) -- rotates the piece so its real,
+   * modelled facing direction (assumed +Z in the model's own rest pose --
+   * confirmed by inspecting the skull mesh directly) points from `from`
+   * toward this landmark, or toward the averaged position of the listed
+   * landmarks, instead of landing on an arbitrary twist.
+   *
+   * A single landmark only works as a twist reference if it genuinely
+   * sits in front of (or behind) the piece rather than off to one side --
+   * the skull's `chin` does. A bilateral pair like the two ASIS points
+   * (`left_ilium_superior` / `right_ilium_superior`) does not: either one
+   * alone is mostly a *sideways* offset from the spine axis, so using just
+   * one would twist the piece to face off toward that side. Passing both
+   * as an array averages them, cancelling the left/right offset and
+   * leaving only the forward component -- giving a proper front-facing
+   * reference the same way a single midline landmark would.
    */
-  twist?: PointName;
+  twist?: PointName | PointName[];
+  /**
+   * Which direction, in this piece's own untransformed rest-pose local
+   * space, actually counts as "facing forward" for the twist correction
+   * above. Defaults to +Z, which holds for every piece checked so far
+   * (the skull, and now SK_Side too -- see the fix that corrected its
+   * earlier, wrong -Z override, confirmed this time by actually rendering
+   * a posed front and back view and checking the sternum landed on the
+   * front one, not the shoulder blades). Kept as an override, not removed
+   * outright, in case a future piece's own rest-pose front genuinely does
+   * run the other way. Only meaningful alongside `twist`.
+   */
+  twistForward?: [number, number, number];
+  /**
+   * Another piece's nodeName this one is rigidly fused to and should
+   * borrow the posed rotation and scale from, instead of computing its
+   * own. Only meaningful for a single-landmark piece (`from === to`),
+   * which otherwise defaults to the identity rotation regardless of how
+   * the rest of the body is actually posed -- fine near the rest pose
+   * (standing) but visibly wrong once the body is posed very differently
+   * (lying down): the piece would keep facing its rest-pose direction
+   * while everything physically attached to it has rotated. The coccyx is
+   * fused to the sacrum end of SK_Side, not free-floating, so it should
+   * rotate along with it rather than staying fixed. The referenced piece
+   * must appear earlier in SKELETON_PIECES so it's already been posed.
+   */
+  rigidWith?: string;
+  /**
+   * For a piece with no second landmark of its own, but that ISN'T
+   * rigidly fused to anything either (currently just the skull) --
+   * synthesises the missing `from` point instead, so the piece still gets
+   * a real two-point pose (direction, twist, and a sensible attachment
+   * point) rather than defaulting to an identity rotation or needing its
+   * own special-cased posing branch.
+   *
+   * The synthetic point sits this fraction of the body's entered
+   * sacral_promontory-to-head_proximal length below `to` (head_proximal),
+   * measured along the body's own current up direction -- so it scales
+   * with stature and still works for a body recorded lying down, not just
+   * standing. 0.143 was chosen to match the ratio the skull's old, real
+   * `centre_of_head` landmark sat below `head_proximal` in the CFA's own
+   * sample data, before it was removed: anchoring the skull's actual
+   * bottom-most mesh vertices at that point (rather than pinning its
+   * crown exactly to head_proximal, which is what a naive single-landmark
+   * treatment does) is what leaves the neck visible below it, since the
+   * skull mesh's own real height is otherwise easy to misjudge from its
+   * raw geometry alone -- see the fix that introduced this field for the
+   * full comparison against the old behaviour.
+   */
+  offsetFromRatio?: number;
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
-  { nodeName: "SK_Head", from: "centre_of_head", to: "head_proximal", stretch: "anchor", twist: "chin" },
+  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
   { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal" },
-  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", stretch: "uniform" },
-  { nodeName: "SK_Coccyx", from: "sacral_promontory", to: "sacral_promontory" },
+  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", stretch: "uniform", twist: ["left_ilium_superior", "right_ilium_superior"] },
+  { nodeName: "SK_Coccyx", from: "sacral_promontory", to: "sacral_promontory", rigidWith: "SK_Side" },
 
   { nodeName: "SK_RClavicle", from: "manubrium", to: "right_shoulder", stretch: "anchor" },
   { nodeName: "SK_RArmUp", from: "right_shoulder", to: "right_elbow" },

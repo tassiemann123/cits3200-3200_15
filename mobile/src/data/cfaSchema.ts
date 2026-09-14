@@ -2,7 +2,7 @@ export const CFA_GROUPS = [
   {
     id: "head_torso",
     label: "Head & torso",
-    points: ["head_proximal", "centre_of_head", "chin", "manubrium", "sacral_promontory"],
+    points: ["head_proximal", "chin", "manubrium", "sacral_promontory"],
   },
   {
     id: "left_arm",
