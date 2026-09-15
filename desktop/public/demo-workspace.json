@@ -1,0 +1,1403 @@
+{
+  "version": 1,
+  "name": "Skeletal recording · Demo collection",
+  "updatedAt": "2026-09-13T10:10:24.187Z",
+  "individuals": [
+    {
+      "id": "IND-001",
+      "name": "IND-001",
+      "accession": "DEMO-2026",
+      "color": "#6a8d77",
+      "visible": true,
+      "notes": "Synthetic demonstration coordinates. Not the BP002 field record.",
+      "joints": [
+        {
+          "id": "proximal_skull",
+          "label": "Proximal skull point",
+          "region": "Head & torso",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "spine",
+              "label": "Axial skeleton",
+              "coordinate": [
+                -0.62,
+                0,
+                1.73
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sacral_promontory",
+          "label": "Sacral promontory",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "spine",
+              "label": "Axial skeleton",
+              "coordinate": [
+                -0.62,
+                0,
+                1.04
+              ]
+            },
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                -0.62,
+                0,
+                1.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_shoulder",
+          "label": "Left shoulder",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "shoulder_girdle",
+              "label": "Shoulder girdle",
+              "coordinate": [
+                -0.39,
+                0,
+                1.48
+              ]
+            },
+            {
+              "boneId": "left_humerus",
+              "label": "Left humerus",
+              "coordinate": [
+                -0.39,
+                0,
+                1.48
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_elbow",
+          "label": "Left elbow",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_humerus",
+              "label": "Left humerus",
+              "coordinate": [
+                -0.3,
+                0.025,
+                1.18
+              ]
+            },
+            {
+              "boneId": "left_forearm",
+              "label": "Left forearm",
+              "coordinate": [
+                -0.3,
+                0.025,
+                1.18
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_wrist",
+          "label": "Left wrist",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_forearm",
+              "label": "Left forearm",
+              "coordinate": [
+                -0.23,
+                0.045,
+                0.93
+              ]
+            },
+            {
+              "boneId": "left_hand",
+              "label": "Left hand",
+              "coordinate": [
+                -0.23,
+                0.045,
+                0.93
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_fingertips",
+          "label": "Left fingertips",
+          "region": "Left arm",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "left_hand",
+              "label": "Left hand",
+              "coordinate": [
+                -0.19,
+                0.05,
+                0.78
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_acetabulum",
+          "label": "Left acetabulum",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                -0.5,
+                0,
+                0.94
+              ]
+            },
+            {
+              "boneId": "left_femur",
+              "label": "Left femur",
+              "coordinate": [
+                -0.5,
+                0,
+                0.94
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_knee",
+          "label": "Left knee",
+          "region": "Left leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_femur",
+              "label": "Left femur",
+              "coordinate": [
+                -0.48,
+                0.025,
+                0.51
+              ]
+            },
+            {
+              "boneId": "left_lower_leg",
+              "label": "Left lower leg",
+              "coordinate": [
+                -0.48,
+                0.025,
+                0.51
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ankle",
+          "label": "Left ankle",
+          "region": "Left leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_lower_leg",
+              "label": "Left lower leg",
+              "coordinate": [
+                -0.47,
+                0,
+                0.09
+              ]
+            },
+            {
+              "boneId": "left_foot",
+              "label": "Left foot",
+              "coordinate": [
+                -0.47,
+                0,
+                0.09
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_toes",
+          "label": "Left toes",
+          "region": "Left leg",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "left_foot",
+              "label": "Left foot",
+              "coordinate": [
+                -0.46,
+                0.18,
+                0.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ilium_superior",
+          "label": "Left superior ilium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ischium",
+          "label": "Left ischium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_shoulder",
+          "label": "Right shoulder",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "shoulder_girdle",
+              "label": "Shoulder girdle",
+              "coordinate": [
+                -0.85,
+                0,
+                1.48
+              ]
+            },
+            {
+              "boneId": "right_humerus",
+              "label": "Right humerus",
+              "coordinate": [
+                -0.85,
+                0,
+                1.48
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_elbow",
+          "label": "Right elbow",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_humerus",
+              "label": "Right humerus",
+              "coordinate": [
+                -0.94,
+                0.025,
+                1.18
+              ]
+            },
+            {
+              "boneId": "right_forearm",
+              "label": "Right forearm",
+              "coordinate": [
+                -0.94,
+                0.025,
+                1.18
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_wrist",
+          "label": "Right wrist",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_forearm",
+              "label": "Right forearm",
+              "coordinate": [
+                -1.01,
+                0.045,
+                0.93
+              ]
+            },
+            {
+              "boneId": "right_hand",
+              "label": "Right hand",
+              "coordinate": [
+                -1.01,
+                0.045,
+                0.93
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_fingertips",
+          "label": "Right fingertips",
+          "region": "Right arm",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "right_hand",
+              "label": "Right hand",
+              "coordinate": [
+                -1.05,
+                0.05,
+                0.78
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_acetabulum",
+          "label": "Right acetabulum",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                -0.74,
+                0,
+                0.94
+              ]
+            },
+            {
+              "boneId": "right_femur",
+              "label": "Right femur",
+              "coordinate": [
+                -0.74,
+                0,
+                0.94
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_knee",
+          "label": "Right knee",
+          "region": "Right leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_femur",
+              "label": "Right femur",
+              "coordinate": [
+                -0.76,
+                0.025,
+                0.51
+              ]
+            },
+            {
+              "boneId": "right_lower_leg",
+              "label": "Right lower leg",
+              "coordinate": [
+                -0.76,
+                0.025,
+                0.51
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ankle",
+          "label": "Right ankle",
+          "region": "Right leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_lower_leg",
+              "label": "Right lower leg",
+              "coordinate": [
+                -0.77,
+                0,
+                0.09
+              ]
+            },
+            {
+              "boneId": "right_foot",
+              "label": "Right foot",
+              "coordinate": [
+                -0.77,
+                0,
+                0.09
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_toes",
+          "label": "Right toes",
+          "region": "Right leg",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "right_foot",
+              "label": "Right foot",
+              "coordinate": [
+                -0.78,
+                0.18,
+                0.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ilium_superior",
+          "label": "Right superior ilium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ischium",
+          "label": "Right ischium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        }
+      ],
+      "bones": [
+        {
+          "id": "spine",
+          "label": "Axial skeleton",
+          "status": "present",
+          "from": {
+            "jointId": "proximal_skull",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "sacral_promontory",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "shoulder_girdle",
+          "label": "Shoulder girdle",
+          "status": "present",
+          "from": {
+            "jointId": "left_shoulder",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "right_shoulder",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "pelvis",
+          "label": "Pelvis",
+          "status": "present",
+          "from": {
+            "jointId": "left_acetabulum",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "right_acetabulum",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_humerus",
+          "label": "Left humerus",
+          "status": "present",
+          "from": {
+            "jointId": "left_shoulder",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_elbow",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_forearm",
+          "label": "Left forearm",
+          "status": "present",
+          "from": {
+            "jointId": "left_elbow",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_wrist",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_hand",
+          "label": "Left hand",
+          "status": "present",
+          "from": {
+            "jointId": "left_wrist",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_fingertips",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_femur",
+          "label": "Left femur",
+          "status": "present",
+          "from": {
+            "jointId": "left_acetabulum",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_knee",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_lower_leg",
+          "label": "Left lower leg",
+          "status": "present",
+          "from": {
+            "jointId": "left_knee",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_ankle",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_foot",
+          "label": "Left foot",
+          "status": "present",
+          "from": {
+            "jointId": "left_ankle",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_toes",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_humerus",
+          "label": "Right humerus",
+          "status": "present",
+          "from": {
+            "jointId": "right_shoulder",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_elbow",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_forearm",
+          "label": "Right forearm",
+          "status": "present",
+          "from": {
+            "jointId": "right_elbow",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_wrist",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_hand",
+          "label": "Right hand",
+          "status": "present",
+          "from": {
+            "jointId": "right_wrist",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_fingertips",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_femur",
+          "label": "Right femur",
+          "status": "present",
+          "from": {
+            "jointId": "right_acetabulum",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_knee",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_lower_leg",
+          "label": "Right lower leg",
+          "status": "present",
+          "from": {
+            "jointId": "right_knee",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_ankle",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_foot",
+          "label": "Right foot",
+          "status": "present",
+          "from": {
+            "jointId": "right_ankle",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_toes",
+            "endpointIndex": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "IND-002",
+      "name": "IND-002",
+      "accession": "DEMO-2026",
+      "color": "#b6925c",
+      "visible": true,
+      "notes": "Synthetic demonstration coordinates. Not the BP002 field record.",
+      "joints": [
+        {
+          "id": "proximal_skull",
+          "label": "Proximal skull point",
+          "region": "Head & torso",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "spine",
+              "label": "Axial skeleton",
+              "coordinate": [
+                0.62,
+                0,
+                1.73
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sacral_promontory",
+          "label": "Sacral promontory",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "spine",
+              "label": "Axial skeleton",
+              "coordinate": [
+                0.62,
+                0,
+                1.04
+              ]
+            },
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                0.62,
+                0,
+                1.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_shoulder",
+          "label": "Left shoulder",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "shoulder_girdle",
+              "label": "Shoulder girdle",
+              "coordinate": [
+                0.85,
+                0,
+                1.48
+              ]
+            },
+            {
+              "boneId": "left_humerus",
+              "label": "Left humerus",
+              "coordinate": [
+                0.85,
+                0,
+                1.48
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_elbow",
+          "label": "Left elbow",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_humerus",
+              "label": "Left humerus",
+              "coordinate": [
+                0.94,
+                0.025,
+                1.18
+              ]
+            },
+            {
+              "boneId": "left_forearm",
+              "label": "Left forearm",
+              "coordinate": [
+                0.94,
+                0.025,
+                1.18
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_wrist",
+          "label": "Left wrist",
+          "region": "Left arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_forearm",
+              "label": "Left forearm",
+              "coordinate": [
+                1.01,
+                0.045,
+                0.93
+              ]
+            },
+            {
+              "boneId": "left_hand",
+              "label": "Left hand",
+              "coordinate": [
+                1.01,
+                0.045,
+                0.93
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_fingertips",
+          "label": "Left fingertips",
+          "region": "Left arm",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "left_hand",
+              "label": "Left hand",
+              "coordinate": [
+                1.05,
+                0.05,
+                0.78
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_acetabulum",
+          "label": "Left acetabulum",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                0.74,
+                0,
+                0.94
+              ]
+            },
+            {
+              "boneId": "left_femur",
+              "label": "Left femur",
+              "coordinate": [
+                0.74,
+                0,
+                0.94
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_knee",
+          "label": "Left knee",
+          "region": "Left leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_femur",
+              "label": "Left femur",
+              "coordinate": [
+                0.76,
+                0.025,
+                0.51
+              ]
+            },
+            {
+              "boneId": "left_lower_leg",
+              "label": "Left lower leg",
+              "coordinate": [
+                0.76,
+                0.025,
+                0.51
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ankle",
+          "label": "Left ankle",
+          "region": "Left leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "left_lower_leg",
+              "label": "Left lower leg",
+              "coordinate": [
+                0.77,
+                0,
+                0.09
+              ]
+            },
+            {
+              "boneId": "left_foot",
+              "label": "Left foot",
+              "coordinate": [
+                0.77,
+                0,
+                0.09
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_toes",
+          "label": "Left toes",
+          "region": "Left leg",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "left_foot",
+              "label": "Left foot",
+              "coordinate": [
+                0.78,
+                0.18,
+                0.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ilium_superior",
+          "label": "Left superior ilium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "left_ischium",
+          "label": "Left ischium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_shoulder",
+          "label": "Right shoulder",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "shoulder_girdle",
+              "label": "Shoulder girdle",
+              "coordinate": [
+                0.39,
+                0,
+                1.48
+              ]
+            },
+            {
+              "boneId": "right_humerus",
+              "label": "Right humerus",
+              "coordinate": [
+                0.39,
+                0,
+                1.48
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_elbow",
+          "label": "Right elbow",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_humerus",
+              "label": "Right humerus",
+              "coordinate": [
+                0.3,
+                0.025,
+                1.18
+              ]
+            },
+            {
+              "boneId": "right_forearm",
+              "label": "Right forearm",
+              "coordinate": [
+                0.3,
+                0.025,
+                1.18
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_wrist",
+          "label": "Right wrist",
+          "region": "Right arm",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_forearm",
+              "label": "Right forearm",
+              "coordinate": [
+                0.23,
+                0.045,
+                0.93
+              ]
+            },
+            {
+              "boneId": "right_hand",
+              "label": "Right hand",
+              "coordinate": [
+                0.23,
+                0.045,
+                0.93
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_fingertips",
+          "label": "Right fingertips",
+          "region": "Right arm",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "right_hand",
+              "label": "Right hand",
+              "coordinate": [
+                0.19,
+                0.05,
+                0.78
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_acetabulum",
+          "label": "Right acetabulum",
+          "region": "Pelvis",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                0.5,
+                0,
+                0.94
+              ]
+            },
+            {
+              "boneId": "right_femur",
+              "label": "Right femur",
+              "coordinate": [
+                0.5,
+                0,
+                0.94
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_knee",
+          "label": "Right knee",
+          "region": "Right leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_femur",
+              "label": "Right femur",
+              "coordinate": [
+                0.48,
+                0.025,
+                0.51
+              ]
+            },
+            {
+              "boneId": "right_lower_leg",
+              "label": "Right lower leg",
+              "coordinate": [
+                0.48,
+                0.025,
+                0.51
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ankle",
+          "label": "Right ankle",
+          "region": "Right leg",
+          "linked": true,
+          "endpoints": [
+            {
+              "boneId": "right_lower_leg",
+              "label": "Right lower leg",
+              "coordinate": [
+                0.47,
+                0,
+                0.09
+              ]
+            },
+            {
+              "boneId": "right_foot",
+              "label": "Right foot",
+              "coordinate": [
+                0.47,
+                0,
+                0.09
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_toes",
+          "label": "Right toes",
+          "region": "Right leg",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "right_foot",
+              "label": "Right foot",
+              "coordinate": [
+                0.46,
+                0.18,
+                0.04
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ilium_superior",
+          "label": "Right superior ilium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "id": "right_ischium",
+          "label": "Right ischium (optional)",
+          "region": "Pelvis",
+          "linked": false,
+          "endpoints": [
+            {
+              "boneId": "pelvis",
+              "label": "Pelvis",
+              "coordinate": [
+                null,
+                null,
+                null
+              ]
+            }
+          ]
+        }
+      ],
+      "bones": [
+        {
+          "id": "spine",
+          "label": "Axial skeleton",
+          "status": "present",
+          "from": {
+            "jointId": "proximal_skull",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "sacral_promontory",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "shoulder_girdle",
+          "label": "Shoulder girdle",
+          "status": "present",
+          "from": {
+            "jointId": "left_shoulder",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "right_shoulder",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "pelvis",
+          "label": "Pelvis",
+          "status": "present",
+          "from": {
+            "jointId": "left_acetabulum",
+            "endpointIndex": 0
+          },
+          "to": {
+            "jointId": "right_acetabulum",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_humerus",
+          "label": "Left humerus",
+          "status": "present",
+          "from": {
+            "jointId": "left_shoulder",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_elbow",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_forearm",
+          "label": "Left forearm",
+          "status": "present",
+          "from": {
+            "jointId": "left_elbow",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_wrist",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_hand",
+          "label": "Left hand",
+          "status": "present",
+          "from": {
+            "jointId": "left_wrist",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_fingertips",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_femur",
+          "label": "Left femur",
+          "status": "absent",
+          "from": {
+            "jointId": "left_acetabulum",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_knee",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_lower_leg",
+          "label": "Left lower leg",
+          "status": "present",
+          "from": {
+            "jointId": "left_knee",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_ankle",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "left_foot",
+          "label": "Left foot",
+          "status": "present",
+          "from": {
+            "jointId": "left_ankle",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "left_toes",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_humerus",
+          "label": "Right humerus",
+          "status": "present",
+          "from": {
+            "jointId": "right_shoulder",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_elbow",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_forearm",
+          "label": "Right forearm",
+          "status": "present",
+          "from": {
+            "jointId": "right_elbow",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_wrist",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_hand",
+          "label": "Right hand",
+          "status": "present",
+          "from": {
+            "jointId": "right_wrist",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_fingertips",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_femur",
+          "label": "Right femur",
+          "status": "present",
+          "from": {
+            "jointId": "right_acetabulum",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_knee",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_lower_leg",
+          "label": "Right lower leg",
+          "status": "present",
+          "from": {
+            "jointId": "right_knee",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_ankle",
+            "endpointIndex": 0
+          }
+        },
+        {
+          "id": "right_foot",
+          "label": "Right foot",
+          "status": "present",
+          "from": {
+            "jointId": "right_ankle",
+            "endpointIndex": 1
+          },
+          "to": {
+            "jointId": "right_toes",
+            "endpointIndex": 0
+          }
+        }
+      ]
+    }
+  ]
+}
