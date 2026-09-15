@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Ban, Check, CloudDownload, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
@@ -42,7 +42,63 @@ export function CoordinatePanel({
   backendStatus,
   canExport,
 }: CoordinatePanelProps) {
+  const panelRef = useRef<HTMLElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const fullViewportHeightRef = useRef(0);
+  const [focusedCoordinate, setFocusedCoordinate] = useState<string | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const viewportHeight = () => viewport?.height ?? window.innerHeight;
+    fullViewportHeightRef.current = Math.max(fullViewportHeightRef.current, viewportHeight());
+
+    if (!focusedCoordinate) {
+      setKeyboardOpen(false);
+      return;
+    }
+
+    const handleResize = () => {
+      const currentHeight = viewportHeight();
+      const isOpen = currentHeight < fullViewportHeightRef.current - 120;
+      setKeyboardOpen(isOpen);
+      if (!isOpen) fullViewportHeightRef.current = Math.max(fullViewportHeightRef.current, currentHeight);
+    };
+
+    viewport?.addEventListener("resize", handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      viewport?.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [focusedCoordinate]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("coordinate-keyboard-active", keyboardOpen);
+    return () => document.documentElement.classList.remove("coordinate-keyboard-active");
+  }, [keyboardOpen]);
+
+  const focusCoordinate = (input: HTMLInputElement, label: string) => {
+    setFocusedCoordinate(label);
+    setKeyboardOpen(true);
+    window.setTimeout(() => {
+      input.closest(".coordinate-point-row")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 250);
+  };
+
+  const handlePanelBlur = () => {
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      const isAnotherCoordinateInput = activeElement instanceof HTMLInputElement
+        && panelRef.current?.contains(activeElement)
+        && Boolean(activeElement.closest(".axis-inputs"));
+      if (!isAnotherCoordinateInput) {
+        setFocusedCoordinate(null);
+        setKeyboardOpen(false);
+      }
+    });
+  };
+
   const availablePoints = ALL_CFA_POINTS.filter((point) => {
     const group = CFA_GROUPS.find((candidate) => (candidate.points as readonly PointName[]).includes(point));
     return group ? !activeRecord.excludedGroups.includes(group.id) : true;
@@ -60,7 +116,7 @@ export function CoordinatePanel({
           : "Offline · saved locally";
 
   return (
-    <aside className="panel coordinate-panel">
+    <aside ref={panelRef} className="panel coordinate-panel" onBlurCapture={handlePanelBlur}>
       <div className="panel-heading coordinate-heading">
         <div>
           <p className="eyebrow">CFA DATA ENTRY</p>
@@ -105,6 +161,11 @@ export function CoordinatePanel({
         <p>{completion}% complete · only complete X, Y, Z points are backend-ready</p>
       </div>
 
+      <div className="coordinate-focus-banner" role="status" aria-live="polite">
+        <span>Editing coordinate</span>
+        <strong>{focusedCoordinate}</strong>
+      </div>
+
       <div className="coordinate-scroll-area">
         {CFA_GROUPS.map((group) => {
           const present = !activeRecord.excludedGroups.includes(group.id);
@@ -147,6 +208,10 @@ export function CoordinatePanel({
                                 step="any"
                                 aria-label={`${pointLabel(point)} ${axisLabel}`}
                                 value={coordinate[axis] ?? ""}
+                                onFocus={(event) => focusCoordinate(
+                                  event.currentTarget,
+                                  `${group.label} · ${pointLabel(point)} · ${axisLabel}`,
+                                )}
                                 onChange={(event) => {
                                   const rawValue = event.target.value;
                                   const value = rawValue === "" ? null : Number(rawValue);
