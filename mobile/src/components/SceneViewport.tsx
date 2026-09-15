@@ -3,10 +3,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
-import type { Landmark, ModelLoadState } from "../types";
+import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
-import { landmarksToDisplayPositions } from "../lib/coordinates";
+import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
@@ -20,6 +20,7 @@ interface SceneViewportProps {
   modelUrl: string;
   modelName: string;
   showGrid: boolean;
+  showLandmarks: boolean;
   landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
 }
@@ -219,7 +220,7 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { modelUrl, modelName, showGrid, landmarks, onLoadStateChange },
+  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -424,6 +425,16 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     if (gridRef.current) gridRef.current.visible = showGrid;
   }, [showGrid]);
 
+  // Lets a researcher hide the entered-coordinate overlay (the yellow
+  // joint markers and their connecting "bone" lines) to see the bare
+  // reference model underneath, without losing or re-entering the
+  // coordinates themselves -- the overlay-building effect below still
+  // runs on every landmark change, this just controls whether its result
+  // is shown.
+  useEffect(() => {
+    if (overlayRef.current) overlayRef.current.visible = showLandmarks;
+  }, [showLandmarks]);
+
   // Draws the entered CFA coordinates as a joint-and-bone stick figure, so a
   // researcher can visually compare it against the skeleton in the grave.
   // Coordinates are plotted exactly as entered (no scaling/rotation math) --
@@ -493,17 +504,39 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     // comment in poseSkeletonPiece for why this is an approximation, not
     // an exact fix.
     let bodyScale: number | undefined;
+    let spineTargetLength: number | undefined;
     const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
     const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
     const spineFromPos = spineSpec ? positions.get(spineSpec.from) : undefined;
     const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
-    if (spinePiece && spineFromPos && spineToPos) {
+    if (spineFromPos && spineToPos) {
+      spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
+    }
+    if (spinePiece && spineTargetLength !== undefined) {
       const restLength = spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip);
-      const targetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
-      if (restLength > 1e-6) bodyScale = targetLength / restLength;
+      if (restLength > 1e-6) bodyScale = spineTargetLength / restLength;
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist }) => {
+    // Tracked so a `rigidWith` piece (see skeletonPieces.ts) can copy the
+    // rotation/scale another, already-posed piece ended up with, instead
+    // of defaulting to an identity rotation that ignores how the body is
+    // actually posed. Relies on that referenced piece appearing earlier in
+    // SKELETON_PIECES, so its transform is already in here by the time a
+    // later piece looks it up.
+    const posedTransforms = new Map<string, { quaternion: THREE.Quaternion; scale: THREE.Vector3 }>();
+
+    // The body's own current "up" direction (sacral_promontory -> head_
+    // proximal), used to synthesise the skull's missing second landmark
+    // (see `offsetFromRatio` in skeletonPieces.ts). Derived from the
+    // entered pose rather than assumed to be world-up, since a body can
+    // be recorded lying down.
+    let bodyUpDirection: THREE.Vector3 | undefined;
+    if (spineFromPos && spineToPos) {
+      const up = new THREE.Vector3(...spineToPos).sub(new THREE.Vector3(...spineFromPos));
+      if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
+    }
+
+    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist, twistForward, rigidWith, offsetFromRatio }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       const fromPos = positions.get(from);
@@ -512,20 +545,43 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         piece.object.visible = false;
         return;
       }
-      // The twist landmark (e.g. chin) is optional even when the piece
-      // declares one -- an archaeologist may not have recorded it yet.
-      // Falling back to no twist correction just means this piece keeps
-      // its old two-point-only behaviour until that coordinate is entered.
-      const twistPos = twist ? positions.get(twist) : undefined;
+      // The twist landmark is optional even when the piece declares one --
+      // an archaeologist may not have recorded it yet -- and a piece can
+      // declare several landmarks to be averaged together instead of one
+      // (see the SK_Side comment in skeletonPieces.ts for why). Falling
+      // back to no twist correction just means this piece keeps its old
+      // two-point-only behaviour until those coordinates are entered.
+      const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
+      const twistSamples = twistLandmarks
+        .map((point) => positions.get(point))
+        .filter((pos): pos is Vec3 => pos !== undefined);
+      const twistPos =
+        twistSamples.length > 0 && twistSamples.length === twistLandmarks.length
+          ? centroid(twistSamples)
+          : undefined;
+
+      const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
+      // A piece with no real second landmark of its own (currently just
+      // the skull, since `centre_of_head` was removed) gets one
+      // synthesised here instead of reusing `from`'s (identical) position
+      // -- see the `offsetFromRatio` comment in skeletonPieces.ts for why.
+      const fromVector =
+        offsetFromRatio !== undefined && bodyUpDirection && spineTargetLength !== undefined
+          ? toVector.clone().addScaledVector(bodyUpDirection, -offsetFromRatio * spineTargetLength)
+          : new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]);
+
       poseSkeletonPiece(
         piece.object,
         piece.rest,
-        new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
-        new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
+        fromVector,
+        toVector,
         stretch,
         twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined,
         bodyScale,
+        twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined,
+        rigidWith ? posedTransforms.get(rigidWith) : undefined,
       );
+      posedTransforms.set(nodeName, { quaternion: piece.object.quaternion.clone(), scale: piece.object.scale.clone() });
     });
     const content = contentRef.current;
     if (content) modelBoxRef.current = new THREE.Box3().setFromObject(content);
