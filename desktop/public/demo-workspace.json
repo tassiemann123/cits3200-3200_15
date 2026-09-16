@@ -1283,7 +1283,7 @@
         {
           "id": "left_femur",
           "label": "Left femur",
-          "status": "absent",
+          "status": "present",
           "from": {
             "jointId": "left_acetabulum",
             "endpointIndex": 1

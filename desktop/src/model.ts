@@ -95,7 +95,7 @@ function makeIndividual(id: string, color: string, offsetX: number): Individual 
 
 export function createDemoProject(): Project {
   const first = makeIndividual('IND-001', '#6a8d77', -.62);
-  const second = applyScenario(makeIndividual('IND-002', '#b6925c', .62), 'missing-femur');
+  const second = makeIndividual('IND-002', '#b6925c', .62);
   return { version: 1, name: 'Skeletal recording · Demo collection', updatedAt: new Date().toISOString(), individuals: [first, second] };
 }
 

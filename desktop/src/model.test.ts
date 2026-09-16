@@ -11,6 +11,8 @@ describe('bone-owned desktop coordinates', () => {
   it('starts with two independent individuals, paired joint coordinates and single terminal points', () => {
     const project = createDemoProject();
     expect(project.individuals.map((person) => person.id)).toEqual(['IND-001', 'IND-002']);
+    expect(project.individuals.every((person) => person.bones.every((bone) => bone.status === 'present'))).toBe(true);
+    expect(project.individuals.map((person) => getRenderableBones(person).length)).toEqual([15, 15]);
     const person = project.individuals[0];
     expect(knee(person).endpoints.map((e) => e.boneId)).toEqual(['left_femur', 'left_lower_leg']);
     expect(knee(person).endpoints[0].coordinate).toEqual(knee(person).endpoints[1].coordinate);
@@ -139,6 +141,7 @@ describe('project import and export', () => {
 
   it('exports one row per bone-owned endpoint, including missing inventory and blank coordinates', () => {
     const project = createDemoProject();
+    project.individuals[1] = applyScenario(project.individuals[1], 'missing-femur');
     const csv = toCoordinateCsv(project);
     expect(csv.split('\r\n')).toHaveLength(1 + project.individuals.reduce((n, p) => n + p.joints.reduce((m, j) => m + j.endpoints.length, 0), 0));
     expect(csv).toContain('"left_femur","absent"');

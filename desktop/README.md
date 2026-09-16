@@ -25,7 +25,7 @@ Open the production address (normally `http://127.0.0.1:4174`) and wait until th
 
 ## Five-minute meeting demonstration
 
-1. Start in an empty workspace: no preset skeletons or coordinates. Enter coordinates, or use the example menu → Open sample workspace to explicitly load two individuals.
+1. Start in an empty workspace: no preset skeletons or coordinates. Enter coordinates, or use the example menu → Open complete sample workspace to explicitly load two fully articulated individuals.
 2. Select the left knee in the joint editor. It has separate coordinates for the femur and lower-leg endpoints. While linked, editing the first coordinate updates the second automatically.
 3. Expand the second coordinate. Expansion only reveals the fields; unlinking allows independent editing. Change one endpoint and inspect the resulting separation. Collapsing the editor preserves both values.
 4. Turn on recorded joint markers from the viewport toolbar. Matching bone endpoints share one visible marker; a separated joint shows both bone-owned endpoints. Markers remain hidden by default so the anatomical model stays clear.
