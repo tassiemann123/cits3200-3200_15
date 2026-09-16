@@ -11,14 +11,12 @@ export interface SceneViewportProps {
   onSelect: (individualId: string, jointId: string) => void;
   showGrid: boolean;
   showMarkers: boolean;
-  showLabels: boolean;
   view: 'perspective' | 'front' | 'top';
   frameKey: number;
   zoom: number;
 }
 
 type JointTarget = { individualId: string; jointId: string };
-type SceneLabel = { element: HTMLDivElement; position: THREE.Vector3 };
 type SceneState = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -28,7 +26,6 @@ type SceneState = {
   floor: THREE.Group;
   targets: THREE.Object3D[];
   rings: THREE.Object3D[];
-  labels: SceneLabel[];
   bounds: THREE.Box3;
   framed: boolean;
   baseDistance: number;
@@ -69,9 +66,8 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
 
 /** Anatomical bone pieces and their recorded endpoints in the shared coordinate space. */
 export default function SceneViewport(props: SceneViewportProps) {
-  const { individuals, selectedId, selectedJointId, showGrid, showMarkers, showLabels, view, frameKey, zoom } = props;
+  const { individuals, selectedId, selectedJointId, showGrid, showMarkers, view, frameKey, zoom } = props;
   const canvasHost = useRef<HTMLDivElement>(null);
-  const labelHost = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
@@ -143,7 +139,7 @@ export default function SceneViewport(props: SceneViewportProps) {
     const content = new THREE.Group();
     const floor = new THREE.Group();
     scene.add(content, floor);
-    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], labels: [], bounds: new THREE.Box3(), framed: false, baseDistance: 4 };
+    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], bounds: new THREE.Box3(), framed: false, baseDistance: 4 };
     stateRef.current = state;
     const resize = new ResizeObserver(() => {
       const { width, height } = host.getBoundingClientRect();
@@ -185,16 +181,10 @@ export default function SceneViewport(props: SceneViewportProps) {
     controls.addEventListener('start', startDrag);
     controls.addEventListener('end', stopDrag);
     let animation = 0;
-    const projected = new THREE.Vector3();
     const animate = () => {
       animation = requestAnimationFrame(animate);
       controls.update();
       state.rings.forEach((ring) => ring.quaternion.copy(camera.quaternion));
-      state.labels.forEach(({ element, position }) => {
-        projected.copy(position).project(camera);
-        element.style.transform = `translate(-50%, -50%) translate(${(projected.x * 0.5 + 0.5) * host.clientWidth}px, ${(-projected.y * 0.5 + 0.5) * host.clientHeight}px)`;
-        element.style.visibility = projected.z < 1 && Math.abs(projected.x) < 1.2 && Math.abs(projected.y) < 1.2 ? 'visible' : 'hidden';
-      });
       renderer.render(scene, camera);
     };
     animate();
@@ -210,7 +200,6 @@ export default function SceneViewport(props: SceneViewportProps) {
       disposeContents(content);
       disposeContents(floor);
       sun.shadow.dispose();
-      state.labels.forEach(({ element }) => element.remove());
       renderer.dispose();
       renderer.domElement.remove();
       stateRef.current = null;
@@ -222,8 +211,6 @@ export default function SceneViewport(props: SceneViewportProps) {
     if (!state) return;
     disposeContents(state.content);
     disposeContents(state.floor);
-    state.labels.forEach(({ element }) => element.remove());
-    state.labels = [];
     state.targets = [];
     state.rings = [];
     state.bounds.makeEmpty();
@@ -282,19 +269,6 @@ export default function SceneViewport(props: SceneViewportProps) {
         });
       });
       state.bounds.union(individualBounds);
-      if (!individualBounds.isEmpty() && showLabels && labelHost.current) {
-        const label = document.createElement('div');
-        label.style.cssText = `position:absolute;top:0;left:0;display:flex;align-items:center;gap:7px;white-space:nowrap;padding:6px 10px;border:1px solid ${selected ? '#c3d0bb' : '#dce1d7'};border-radius:6px;background:rgba(18,29,37,.9);box-shadow:0 2px 8px #293b1810;font:600 10px/1.2 Inter,system-ui,sans-serif;color:#dce4ea;letter-spacing:.035em;pointer-events:none;`;
-        const dot = document.createElement('span');
-        dot.style.cssText = `width:6px;height:6px;border-radius:50%;background:${individual.color}`;
-        const name = document.createElement('span');
-        name.textContent = individual.name;
-        label.append(dot, name);
-        labelHost.current.appendChild(label);
-        const position = individualBounds.getCenter(new THREE.Vector3());
-        position.z = individualBounds.max.z + 0.13;
-        state.labels.push({ element: label, position });
-      }
       if (!individualBounds.isEmpty()) {
         const center = individualBounds.getCenter(new THREE.Vector3());
         const footprint = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.255, 80), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: selected ? 0.3 : 0.16, side: THREE.DoubleSide }));
@@ -321,7 +295,7 @@ export default function SceneViewport(props: SceneViewportProps) {
       state.content.userData.modelFramed = Boolean(templates);
       frameScene(state, propsRef.current.view, propsRef.current.zoom);
     }
-  }, [individuals, selectedId, selectedJointId, showGrid, showMarkers, showLabels, templates]);
+  }, [individuals, selectedId, selectedJointId, showGrid, showMarkers, templates]);
 
   useEffect(() => {
     const state = stateRef.current;
@@ -338,7 +312,6 @@ export default function SceneViewport(props: SceneViewportProps) {
 
   return <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden', background: '#20252A', cursor: isDragging ? 'grabbing' : undefined }}>
     <div ref={canvasHost} style={{ position: 'absolute', inset: 0 }} />
-    <div ref={labelHost} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }} />
     {fallback && <div className="model-message">3D rendering is unavailable in this browser. Coordinate editing remains available.</div>}
     {!templates && !fallback && <div className="model-message">{modelError || 'Loading anatomical reference…'}</div>}
 
