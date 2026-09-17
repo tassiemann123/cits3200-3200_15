@@ -8,9 +8,8 @@ import type { PointName } from "./cfaSchema";
  */
 export const CFA_CONNECTIONS: Array<[PointName, PointName]> = [
   // Head & torso (spine)
-  ["head_proximal", "centre_of_head"],
-  ["centre_of_head", "chin"],
-  ["centre_of_head", "manubrium"],
+  ["head_proximal", "chin"],
+  ["head_proximal", "manubrium"],
   ["manubrium", "sacral_promontory"],
 
   // Left arm
