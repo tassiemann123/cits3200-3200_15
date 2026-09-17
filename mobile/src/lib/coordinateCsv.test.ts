@@ -22,21 +22,33 @@ describe("coordinate CSV transfer", () => {
         left_shoulder: [7, 8, 9],
       },
       excludedGroups: ["left_arm"],
-    }));
+    }), "Test Graveyard");
 
     expect(csv).toBe(
-      "skeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",head_proximal,1.25,2,-3\r\n",
+      "Graveyard Name,Test Graveyard\r\n\r\nskeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",head_proximal,1.25,2,-3\r\n",
     );
   });
 
   it("round-trips exported coordinates", () => {
-    const original = record({ coordinates: { head_proximal: [1, 2, 3], right_toes: [-4, 5.5, 6] } });
-    const result = parseCoordinateCsv(serialiseCoordinateCsv(original));
+    const original = record({
+      coordinates: {
+        head_proximal: [1, 2, 3],
+        right_toes: [-4, 5.5, 6],
+      },
+    });
+
+    const result = parseCoordinateCsv(
+      serialiseCoordinateCsv(original, "Test Graveyard"),
+    );
 
     expect(result.warnings).toEqual([]);
+    expect(result.graveyardName).toBe("Test Graveyard");
     expect(result.records).toEqual([{
       name: "Skeleton, A",
-      coordinates: { head_proximal: [1, 2, 3], right_toes: [-4, 5.5, 6] },
+      coordinates: {
+        head_proximal: [1, 2, 3],
+        right_toes: [-4, 5.5, 6],
+      },
     }]);
   });
 

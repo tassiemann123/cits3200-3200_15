@@ -506,7 +506,7 @@ export function App() {
   const exportActiveRecord = async () => {
     try {
       const result = await exportCsv(
-        serialiseCoordinateCsv(activeRecord),
+        serialiseCoordinateCsv(activeRecord, preferences.graveyards.find((graveyard) => graveyard.id === selectedGraveyardId)?.name ?? "Untitled graveyard"),
         `${safeFilename(activeRecord.name)}-coordinates.csv`,
       );
       notify(result.destination === "documents"
@@ -526,27 +526,62 @@ export function App() {
 
     try {
       const result = parseCoordinateCsv(await file.text());
+
       if (result.records.length === 0) {
         notify(result.warnings[0] ?? "The CSV contains no usable coordinates");
         return;
       }
 
-      const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
-        id: `skeleton-record-${crypto.randomUUID()}`,
-        name: record.name,
-        coordinates: record.coordinates,
-        excludedGroups: [],
-        notes: "",
-        graveyardId: selectedGraveyardId,
-      }));
-      setPreferences((current) => ({
-        ...current,
-        records: [...current.records, ...importedRecords],
-        activeRecordId: importedRecords[0].id,
-      }));
+      setPreferences((current) => {
+        const importedGraveyardName = result.graveyardName?.trim();
+
+        const existingGraveyard = importedGraveyardName
+          ? current.graveyards.find(
+              (graveyard) =>
+                graveyard.name.trim().toLowerCase() ===
+                importedGraveyardName.toLowerCase(),
+            )
+          : current.graveyards.find(
+              (graveyard) => graveyard.id === current.selectedGraveyardId,
+            );
+
+        const graveyard = existingGraveyard ?? {
+          id: `graveyard-${crypto.randomUUID()}`,
+          name: importedGraveyardName || "Untitled graveyard",
+        };
+
+        const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
+          id: `skeleton-record-${crypto.randomUUID()}`,
+          name: record.name,
+          coordinates: record.coordinates,
+          excludedGroups: [],
+          notes: "",
+          graveyardId: graveyard.id,
+        }));
+
+        return {
+          ...current,
+          graveyards: existingGraveyard
+            ? current.graveyards
+            : [...current.graveyards, graveyard],
+          records: [...current.records, ...importedRecords],
+          selectedGraveyardId: graveyard.id,
+          activeRecordId: importedRecords[0].id,
+        };
+      });
+
       setSidePanel("coordinates");
       setMobilePane("panel");
-      notify(`${importedRecords.length} CSV record${importedRecords.length === 1 ? "" : "s"} imported${result.warnings.length ? ` · ${result.warnings.length} row warning${result.warnings.length === 1 ? "" : "s"}` : ""}`);
+
+      const warningMessage = result.warnings.length
+        ? `\n${result.warnings.join("\n")}`
+        : "";
+
+      notify(
+        `${result.records.length} CSV record${
+          result.records.length === 1 ? "" : "s"
+        } imported${warningMessage}`,
+      );
     } catch (error) {
       console.error("Coordinate import failed", error);
       notify("The coordinate CSV could not be read");
