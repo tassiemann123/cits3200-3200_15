@@ -54,7 +54,7 @@ describe("coordinate CSV transfer", () => {
 
   it("accepts display labels and reports invalid rows", () => {
     const result = parseCoordinateCsv(
-      "skeleton_id,joint_name,x,y,z\nBP1,Centre Of Head,1,2,3\nBP1,Unknown,4,5,6\nBP1,Chin,,8,9\n",
+      "skeleton_id,joint_name,x,y,z\nBP1, head_proximal ,1,2,3\nBP1,Unknown,4,5,6\nBP1,Chin,,8,9\n",
     );
 
     expect(result.records[0].coordinates.head_proximal).toEqual([1, 2, 3]);
