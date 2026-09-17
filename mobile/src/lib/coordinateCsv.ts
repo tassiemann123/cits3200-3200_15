@@ -7,6 +7,7 @@ export interface ImportedCoordinateRecord {
 }
 
 export interface CoordinateCsvParseResult {
+  graveyardName?: string;
   records: ImportedCoordinateRecord[];
   warnings: string[];
 }
@@ -65,7 +66,7 @@ function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-export function serialiseCoordinateCsv(record: SkeletonRecord): string {
+export function serialiseCoordinateCsv(record: SkeletonRecord, graveyardName: string): string {
   const skeletonId = record.name.trim() || "Untitled skeleton";
   const rows = ALL_CFA_POINTS.flatMap((point) => {
     if (record.excludedGroups.includes(groupForPoint(point))) return [];
@@ -80,7 +81,7 @@ export function serialiseCoordinateCsv(record: SkeletonRecord): string {
     ].join(",")];
   });
 
-  return ["skeleton_id,joint_name,x,y,z", ...rows].join("\r\n") + "\r\n";
+  return [`Graveyard Name,${escapeCell(graveyardName)}`, "", "skeleton_id,joint_name,x,y,z", ...rows].join("\r\n") + "\r\n";
 }
 
 export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
@@ -88,7 +89,11 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
   const warnings: string[] = [];
   if (rows.length < 2) return { records: [], warnings: ["The CSV contains no coordinate rows."] };
 
-  const headers = rows[0].map(normaliseName);
+  const graveyardRow = rows.find((row) => normaliseName(row[0] ?? "") === "graveyard_name");
+  const graveyardName = graveyardRow?.[1]?.trim() || undefined;
+  const headerIndex = rows.findIndex((row) => normaliseName(row[0] ?? "") === "skeleton_id");
+  if (headerIndex < 0) return { graveyardName, records: [], warnings: ["The CSV must contain skeleton_id, joint_name, x, y, and z columns."] };
+  const headers = rows[headerIndex].map(normaliseName);
   const find = (...names: string[]) => headers.findIndex((header) => names.includes(header));
   const skeletonIndex = find("skeleton_id", "skeleton", "record_name");
   const jointIndex = find("joint_name", "joint", "point", "landmark");
@@ -104,8 +109,8 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
   }
 
   const records = new Map<string, SkeletonCoordinates>();
-  rows.slice(1).forEach((row, offset) => {
-    const rowNumber = offset + 2;
+  rows.slice(headerIndex + 1).forEach((row, offset) => { 
+    const rowNumber = headerIndex + offset + 2;
     const skeletonId = row[skeletonIndex]?.trim();
     const jointName = row[jointIndex]?.trim();
     const point = jointName ? POINT_BY_NAME.get(normaliseName(jointName)) : undefined;
@@ -132,6 +137,7 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
   });
 
   return {
+    graveyardName,
     records: [...records.entries()].map(([name, coordinates]) => ({ name, coordinates })),
     warnings,
   };

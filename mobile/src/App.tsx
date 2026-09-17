@@ -29,8 +29,8 @@ import {
 import { toBackendLandmarks } from "./lib/backendCoordinates";
 import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv";
 import { exportCsv } from "./lib/csvExport";
-import { safeFilename } from "./lib/projectStorage";
-import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel } from "./types";
+import { downloadFile, safeFilename } from "./lib/projectStorage";
+import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel, WorkspaceGraveyard } from "./types";
 
 const SceneViewport = lazy(async () => {
   const module = await import("./components/SceneViewport");
@@ -45,20 +45,29 @@ interface ViewerPreferences {
   records: SkeletonRecord[];
   activeRecordId: string;
   backendGraveyardId?: string;
+  graveyards: WorkspaceGraveyard[];
+  selectedGraveyardId: string;
 }
 
 const STORAGE_KEY = "osteoplot.reference-viewer.v1";
+const DEFAULT_GRAVEYARD: WorkspaceGraveyard = {
+  id: "graveyard-1",
+  name: "Skeletal Model Workspace",
+};
 const DEFAULT_RECORD: SkeletonRecord = {
   id: "skeleton-record-1",
   name: "Skeleton 1",
   coordinates: {},
   excludedGroups: [],
   notes: "",
+  graveyardId: DEFAULT_GRAVEYARD.id,
 };
 const DEFAULT_PREFERENCES: ViewerPreferences = {
   workspaceName: "Skeletal Model Workspace",
   records: [DEFAULT_RECORD],
   activeRecordId: DEFAULT_RECORD.id,
+  graveyards: [DEFAULT_GRAVEYARD],
+  selectedGraveyardId: DEFAULT_GRAVEYARD.id,
 };
 
 const INITIAL_MODEL: ViewerModel = {
@@ -82,13 +91,14 @@ function formatFileSize(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function createRecord(index: number): SkeletonRecord {
+function createRecord(index: number, graveyardId?: string): SkeletonRecord {
   return {
     id: `skeleton-record-${crypto.randomUUID()}`,
     name: `Skeleton ${index}`,
     coordinates: {},
     excludedGroups: [],
     notes: "",
+    graveyardId,
   };
 }
 
@@ -105,6 +115,19 @@ function normaliseRecord(value: unknown, index: number): SkeletonRecord | null {
     coordinates: candidate.coordinates && typeof candidate.coordinates === "object" ? candidate.coordinates : {},
     excludedGroups,
     notes: typeof candidate.notes === "string" ? candidate.notes : "",
+    graveyardId: typeof candidate.graveyardId === "string" ? candidate.graveyardId : undefined,
+    backendId: typeof candidate.backendId === "string" ? candidate.backendId : undefined,
+    lastSyncedAt: typeof candidate.lastSyncedAt === "string" ? candidate.lastSyncedAt : undefined,
+  };
+}
+
+function normaliseGraveyard(value: unknown, index: number): WorkspaceGraveyard | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<WorkspaceGraveyard>;
+  if (typeof candidate.id !== "string" || !candidate.id) return null;
+  return {
+    id: candidate.id,
+    name: typeof candidate.name === "string" && candidate.name.trim() ? candidate.name : `Graveyard ${index}`,
     backendId: typeof candidate.backendId === "string" ? candidate.backendId : undefined,
     lastSyncedAt: typeof candidate.lastSyncedAt === "string" ? candidate.lastSyncedAt : undefined,
   };
@@ -115,6 +138,22 @@ function loadPreferences(): ViewerPreferences {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PREFERENCES;
     const saved = JSON.parse(raw) as Partial<ViewerPreferences> & { projectName?: unknown; notes?: unknown };
+
+    const graveyards = Array.isArray(saved.graveyards)
+      ? saved.graveyards.map((value, index) => normaliseGraveyard(value, index + 1)).filter((g): g is WorkspaceGraveyard => Boolean(g))
+      : [];
+    if (graveyards.length === 0) {
+      graveyards.push({
+        id: DEFAULT_GRAVEYARD.id,
+        name: typeof saved.workspaceName === "string"
+          ? saved.workspaceName
+          : typeof saved.projectName === "string"
+            ? saved.projectName
+            : DEFAULT_GRAVEYARD.name,
+        backendId: typeof saved.backendGraveyardId === "string" ? saved.backendGraveyardId : undefined,
+      });
+    }
+
     const records = Array.isArray(saved.records)
       ? saved.records.map(normaliseRecord).filter((record): record is SkeletonRecord => Boolean(record))
       : [];
@@ -122,13 +161,20 @@ function loadPreferences(): ViewerPreferences {
     if (records.length === 0) {
       records.push({
         ...DEFAULT_RECORD,
+        graveyardId: graveyards[0].id,
         notes: typeof saved.notes === "string" ? saved.notes : "",
       });
     }
 
-    const activeRecordId = typeof saved.activeRecordId === "string" && records.some((record) => record.id === saved.activeRecordId)
+    const selectedGraveyardId = typeof saved.selectedGraveyardId === "string"
+      && graveyards.some((g) => g.id === saved.selectedGraveyardId)
+      ? saved.selectedGraveyardId
+      : graveyards[0].id;
+
+    const graveyardRecords = records.filter((record) => record.graveyardId === selectedGraveyardId);
+    const activeRecordId = typeof saved.activeRecordId === "string" && graveyardRecords.some((record) => record.id === saved.activeRecordId)
       ? saved.activeRecordId
-      : records[0].id;
+      : graveyardRecords[0]?.id ?? records[0].id;
 
     return {
       workspaceName: typeof saved.workspaceName === "string"
@@ -139,6 +185,8 @@ function loadPreferences(): ViewerPreferences {
       records,
       activeRecordId,
       backendGraveyardId: typeof saved.backendGraveyardId === "string" ? saved.backendGraveyardId : undefined,
+      graveyards,
+      selectedGraveyardId,
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -159,7 +207,15 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importedObjectUrlRef = useRef<string | null>(null);
 
-  const activeRecord = preferences.records.find((record) => record.id === preferences.activeRecordId) ?? preferences.records[0];
+  const selectedGraveyardId = preferences.selectedGraveyardId;
+
+  const graveyardRecords = preferences.records.filter((record) => record.graveyardId === selectedGraveyardId);
+
+  const activeRecord =
+    graveyardRecords.find((record) => record.id === preferences.activeRecordId)
+    ?? graveyardRecords[0]
+    ?? DEFAULT_RECORD;
+
   const backendCoordinates = toBackendLandmarks(activeRecord);
 
   useEffect(() => () => {
@@ -199,6 +255,33 @@ export function App() {
     setPreferences((current) => ({
       ...current,
       records: current.records.map((record) => record.id === current.activeRecordId ? update(record) : record),
+    }));
+  };
+
+  const addGraveyard = () => {
+    const graveyard: WorkspaceGraveyard = {
+      id: `graveyard-${crypto.randomUUID()}`,
+      name: `Graveyard ${preferences.graveyards.length + 1}`,
+    };
+    const record = createRecord(1, graveyard.id);
+    setPreferences((current) => ({
+      ...current,
+      graveyards: [...current.graveyards, graveyard],
+      records: [...current.records, record],
+      selectedGraveyardId: graveyard.id,
+      activeRecordId: record.id,
+    }));
+    setSidePanel("coordinates");
+    setMobilePane("panel");
+    notify(`${graveyard.name} created`);
+  };
+
+  const renameSelectedGraveyard = async (name: string) => {
+    setPreferences((current) => ({
+      ...current,
+      graveyards: current.graveyards.map((graveyard) => (
+        graveyard.id === current.selectedGraveyardId ? { ...graveyard, name } : graveyard
+      )),
     }));
   };
 
@@ -274,9 +357,10 @@ export function App() {
         const existingByBackendId = new Map(
           current.records.flatMap((record) => record.backendId ? [[record.backendId, record] as const] : []),
         );
-        const remoteRecords = remoteSkeletons.map((skeleton) => (
-          backendSkeletonToRecord(skeleton, existingByBackendId.get(skeleton.skeleton_id))
-        ));
+        const remoteRecords = remoteSkeletons.map((skeleton) => ({
+          ...backendSkeletonToRecord(skeleton, existingByBackendId.get(skeleton.skeleton_id)),
+          graveyardId: current.selectedGraveyardId,
+        }));
         const remoteIds = new Set(remoteSkeletons.map((skeleton) => skeleton.skeleton_id));
         const unmatchedLocalRecords = current.records.filter(
           (record) => !record.backendId || !remoteIds.has(record.backendId),
@@ -346,7 +430,16 @@ export function App() {
   };
 
   const addRecord = () => {
-    const record = createRecord(preferences.records.length + 1);
+    if (!selectedGraveyardId) {
+      notify("Select a graveyard first");
+      return;
+    }
+
+    const skeletonCount = preferences.records.filter(
+      (record) => record.graveyardId === selectedGraveyardId,
+    ).length;
+
+    const record = createRecord(skeletonCount + 1, selectedGraveyardId);
     setPreferences((current) => ({
       ...current,
       records: [...current.records, record],
@@ -355,6 +448,18 @@ export function App() {
     setSidePanel("coordinates");
     setMobilePane("panel");
     notify(`${record.name} created`);
+  };
+
+  const selectGraveyard = (graveyardId: string) => {
+    const records = preferences.records.filter(
+      (record) => record.graveyardId === graveyardId,
+    );
+
+    setPreferences((current) => ({
+      ...current,
+      selectedGraveyardId: graveyardId,
+      activeRecordId: records[0]?.id ?? "",
+    }));
   };
 
   const setCoordinate = (point: PointName, axis: 0 | 1 | 2, value: number | null) => {
@@ -388,7 +493,7 @@ export function App() {
   const exportActiveRecord = async () => {
     try {
       const result = await exportCsv(
-        serialiseCoordinateCsv(activeRecord),
+        serialiseCoordinateCsv(activeRecord, preferences.graveyards.find((graveyard) => graveyard.id === selectedGraveyardId)?.name ?? "Untitled graveyard"),
         `${safeFilename(activeRecord.name)}-coordinates.csv`,
       );
       notify(result.destination === "documents"
@@ -408,26 +513,62 @@ export function App() {
 
     try {
       const result = parseCoordinateCsv(await file.text());
+
       if (result.records.length === 0) {
         notify(result.warnings[0] ?? "The CSV contains no usable coordinates");
         return;
       }
 
-      const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
-        id: `skeleton-record-${crypto.randomUUID()}`,
-        name: record.name,
-        coordinates: record.coordinates,
-        excludedGroups: [],
-        notes: "",
-      }));
-      setPreferences((current) => ({
-        ...current,
-        records: [...current.records, ...importedRecords],
-        activeRecordId: importedRecords[0].id,
-      }));
+      setPreferences((current) => {
+        const importedGraveyardName = result.graveyardName?.trim();
+
+        const existingGraveyard = importedGraveyardName
+          ? current.graveyards.find(
+              (graveyard) =>
+                graveyard.name.trim().toLowerCase() ===
+                importedGraveyardName.toLowerCase(),
+            )
+          : current.graveyards.find(
+              (graveyard) => graveyard.id === current.selectedGraveyardId,
+            );
+
+        const graveyard = existingGraveyard ?? {
+          id: `graveyard-${crypto.randomUUID()}`,
+          name: importedGraveyardName || "Untitled graveyard",
+        };
+
+        const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
+          id: `skeleton-record-${crypto.randomUUID()}`,
+          name: record.name,
+          coordinates: record.coordinates,
+          excludedGroups: [],
+          notes: "",
+          graveyardId: graveyard.id,
+        }));
+
+        return {
+          ...current,
+          graveyards: existingGraveyard
+            ? current.graveyards
+            : [...current.graveyards, graveyard],
+          records: [...current.records, ...importedRecords],
+          selectedGraveyardId: graveyard.id,
+          activeRecordId: importedRecords[0].id,
+        };
+      });
+
       setSidePanel("coordinates");
       setMobilePane("panel");
-      notify(`${importedRecords.length} CSV record${importedRecords.length === 1 ? "" : "s"} imported${result.warnings.length ? ` · ${result.warnings.length} row warning${result.warnings.length === 1 ? "" : "s"}` : ""}`);
+
+      const warningMessage = result.warnings.length
+        ? `\n${result.warnings.join("\n")}`
+        : "";
+
+      notify(
+        `${result.records.length} CSV record${
+          result.records.length === 1 ? "" : "s"
+        } imported${warningMessage}`,
+      );
     } catch (error) {
       console.error("Coordinate import failed", error);
       notify("The coordinate CSV could not be read");
@@ -522,8 +663,13 @@ export function App() {
           <div className="side-panel-body">
             {sidePanel === "coordinates" ? (
               <CoordinatePanel
-                records={preferences.records}
+                records={graveyardRecords}
                 activeRecord={activeRecord}
+                graveyards={preferences.graveyards}
+                selectedGraveyardId={preferences.selectedGraveyardId}
+                onSelectGraveyard={selectGraveyard}
+                onCreateGraveyard={addGraveyard}
+                onRenameGraveyard={renameSelectedGraveyard}
                 onSelectRecord={(activeRecordId) => patchPreferences({ activeRecordId })}
                 onCreateRecord={addRecord}
                 onRenameRecord={(name) => patchActiveRecord((record) => ({ ...record, name }))}

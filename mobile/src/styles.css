@@ -129,11 +129,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .coordinate-heading { margin-bottom: 12px; }
 .record-card { margin-bottom: 12px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); }
 .record-selector-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.record-action { display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .record-selector-row label, .record-name-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; color: #70777d; font-size: 9px; font-weight: 700; }
 .record-selector-row select, .record-name-field input { min-width: 0; width: 100%; height: 34px; padding: 0 9px; color: var(--text); border: 1px solid var(--line); border-radius: 7px; background: #fff; outline: 0; font-size: 11px; }
+.record-name-field input::placeholder { color: var(--muted); }
 .new-record-button { height: 34px; display: flex; align-items: center; gap: 5px; padding: 0 10px; color: var(--accent); border: 1px solid rgba(53,92,125,.24); border-radius: 7px; background: var(--accent-dark); font-size: 10px; font-weight: 700; cursor: pointer; }
 .new-record-button:hover { background: #dce4ea; }
-.record-name-field { margin-top: 9px; }
+.record-name-field { margin-top: 9px; margin-bottom: 9px; }
 .backend-record-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
 .backend-record-row > span { overflow: hidden; font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .backend-record-row > span.linked { color: var(--success); }
