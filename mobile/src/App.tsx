@@ -6,6 +6,7 @@ import {
   Focus,
   Grid3X3,
   Info,
+  MapPin,
   PanelRight,
   RotateCcw,
   ShieldCheck,
@@ -149,6 +150,7 @@ export function App() {
   const [model, setModel] = useState<ViewerModel>(INITIAL_MODEL);
   const [modelLoadState, setModelLoadState] = useState<ModelLoadState>("loading");
   const [showGrid, setShowGrid] = useState(true);
+  const [showLandmarks, setShowLandmarks] = useState(false);
   const [mobilePane, setMobilePane] = useState<MobilePane>("scene");
   const [sidePanel, setSidePanel] = useState<SidePanel>("coordinates");
   const [toast, setToast] = useState<string | null>(null);
@@ -464,6 +466,7 @@ export function App() {
               modelUrl={model.url}
               modelName={model.name}
               showGrid={showGrid}
+              showLandmarks={showLandmarks}
               landmarks={backendCoordinates}
               onLoadStateChange={setModelLoadState}
             />
@@ -475,6 +478,7 @@ export function App() {
             </div>
             <div className="viewport-tools">
               <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
+              <button type="button" className={showLandmarks ? "active" : ""} onClick={() => setShowLandmarks((value) => !value)} title="Landmark markers"><MapPin size={18} /></button>
               <button type="button" onClick={() => viewportRef.current?.focusModel()} title="Focus model"><Focus size={18} /></button>
               <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
             </div>
