@@ -1,21 +1,15 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Bone,
-  Camera,
   ClipboardList,
-  Cloud,
-  CloudOff,
   Database,
   Focus,
   Grid3X3,
   Info,
-  LoaderCircle,
   MapPin,
   PanelRight,
   RotateCcw,
-  Save,
   ShieldCheck,
-  Upload,
   X,
   ZoomIn,
   ZoomOut,
@@ -496,13 +490,6 @@ export function App() {
     notify(`${activeRecord.name} coordinates reset`);
   };
 
-  const exportScreenshot = async () => {
-    const blob = await viewportRef.current?.capturePng();
-    if (!blob) return notify("The screenshot could not be generated.");
-    downloadFile(blob, `${safeFilename(preferences.workspaceName)}-${safeFilename(model.name)}.png`, "image/png");
-    notify("Model screenshot exported");
-  };
-
   const exportActiveRecord = async () => {
     try {
       const result = await exportCsv(
@@ -598,53 +585,8 @@ export function App() {
     showPanel("coordinates");
   };
 
-  const backendStatusLabel = backendStatus === "online"
-    ? "Backend connected"
-    : backendStatus === "syncing"
-      ? "Syncing backend"
-      : backendStatus === "checking"
-        ? "Checking backend"
-        : "Offline · local autosave active";
-
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-block">
-          <div className="brand-mark"><Bone size={22} /></div>
-          <div><strong>Skeletal Coordinate App</strong><span>SKELETAL COORDINATE WORKSPACE</span></div>
-        </div>
-        <div className="project-title-block">
-          <span className={`backend-badge ${backendStatus}`}>
-            {backendStatus === "offline"
-              ? <CloudOff size={14} />
-              : backendStatus === "checking" || backendStatus === "syncing"
-                ? <LoaderCircle className="status-spinner" size={14} />
-                : <Cloud size={14} />}
-            {backendStatusLabel}
-          </span>
-          <input
-            aria-label="Workspace name"
-            value={preferences.workspaceName}
-            onChange={(event) => patchPreferences({ workspaceName: event.target.value })}
-          />
-        </div>
-        <div className="header-actions">
-          <button type="button" className="header-button" onClick={openModelPicker}><Upload size={17} /><span>Switch Model</span></button>
-          <button type="button" className="header-button" onClick={() => void persistAndSync()} disabled={backendStatus === "syncing"}>
-            <Save size={17} /><span>{backendStatus === "syncing" ? "Syncing" : "Save & Sync"}</span>
-          </button>
-          <button type="button" className="primary-header-button" onClick={() => void exportScreenshot()}><Camera size={17} /><span>Screenshot</span></button>
-          <button
-            type="button"
-            className="mobile-menu-button"
-            aria-label="Toggle workspace panel"
-            onClick={() => setMobilePane((pane) => pane === "scene" ? "panel" : "scene")}
-          >
-            <PanelRight size={20} />
-          </button>
-        </div>
-      </header>
-
       <input
         ref={fileInputRef}
         className="model-file-input"
