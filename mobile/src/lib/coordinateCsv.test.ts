@@ -17,7 +17,7 @@ describe("coordinate CSV transfer", () => {
   it("exports only complete, present coordinates with backend headers", () => {
     const csv = serialiseCoordinateCsv(record({
       coordinates: {
-        centre_of_head: [1.25, 2, -3],
+        head_proximal: [1.25, 2, -3],
         chin: [4, null, 6],
         left_shoulder: [7, 8, 9],
       },
@@ -25,7 +25,7 @@ describe("coordinate CSV transfer", () => {
     }));
 
     expect(csv).toBe(
-      "skeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",centre_of_head,1.25,2,-3\r\n",
+      "skeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",head_proximal,1.25,2,-3\r\n",
     );
   });
 
@@ -45,7 +45,7 @@ describe("coordinate CSV transfer", () => {
       "skeleton_id,joint_name,x,y,z\nBP1,Centre Of Head,1,2,3\nBP1,Unknown,4,5,6\nBP1,Chin,,8,9\n",
     );
 
-    expect(result.records[0].coordinates.centre_of_head).toEqual([1, 2, 3]);
+    expect(result.records[0].coordinates.head_proximal).toEqual([1, 2, 3]);
     expect(result.warnings).toHaveLength(2);
   });
 });
