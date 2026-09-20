@@ -17,14 +17,14 @@ describe("toBackendLandmarks", () => {
   it("returns only complete coordinate triples", () => {
     const output = toBackendLandmarks(record({
       coordinates: {
-        centre_of_head: [1.2, 2.3, 3.4],
+        head_proximal: [1.2, 2.3, 3.4],
         chin: [4.5, null, 6.7],
       },
     }));
 
     expect(output).toEqual([{
-      id: "centre_of_head",
-      label: "Centre Of Head",
+      id: "head_proximal",
+      label: "Head Proximal",
       position: [1.2, 2.3, 3.4],
     }]);
   });

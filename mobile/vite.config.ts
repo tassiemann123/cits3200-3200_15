@@ -27,6 +27,9 @@ export default defineConfig({
         // Cache everything needed to run fully offline once installed,
         // including the 3D model and sample data.
         globPatterns: ["**/*.{js,css,html,glb,csv,svg,png}"],
+        // Default limit is 2 MB; the bundled GLB reference model is
+        // ~5.5 MB, so raise the ceiling to fit it (with headroom).
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
       },
     }),
   ],
