@@ -128,7 +128,7 @@ export function CoordinatePanel({
       <div className="record-card">
         <div className="record-selector-row">
           <label>
-            Skeleton record
+            Select skeleton
             <select value={activeRecord.id} onChange={(event) => onSelectRecord(event.target.value)}>
               {records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
             </select>
@@ -138,7 +138,7 @@ export function CoordinatePanel({
           </button>
         </div>
         <label className="record-name-field">
-          Record name
+          Rename selected skeleton
           <input
             value={activeRecord.name}
             maxLength={80}
