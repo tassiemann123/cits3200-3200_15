@@ -8,14 +8,14 @@ describe("backend API mapping", () => {
       id: "local-1",
       name: "Skeleton 1",
       coordinates: {
-        centre_of_head: [1.2, 2.3, 3.4],
+        head_proximal: [1.2, 2.3, 3.4],
         chin: [4.5, null, 6.7],
         left_elbow: [7.8, 8.9, 9.1],
       },
       excludedGroups: ["left_arm"],
       notes: "",
     })).toEqual([{
-      joint_name: "centre_of_head",
+      joint_name: "head_proximal",
       x: 1.2,
       y: 2.3,
       z: 3.4,

@@ -35,6 +35,7 @@ export interface SkeletonRecord {
   coordinates: SkeletonCoordinates;
   excludedGroups: PointGroupId[];
   notes: string;
+  graveyardId?: string;
   backendId?: string;
   lastSyncedAt?: string;
 }
@@ -67,4 +68,11 @@ export interface ProjectData {
 export interface ParseResult {
   layers: SkeletonLayer[];
   warnings: string[];
+}
+
+export interface WorkspaceGraveyard {
+  id: string;
+  name: string;
+  backendId?: string;
+  lastSyncedAt?: string;
 }
