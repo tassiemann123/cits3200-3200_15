@@ -7,11 +7,12 @@
     "dev": "vite",
     "prebuild": "pnpm run models:prepare",
     "build": "tsc -b && vite build",
+    "build:android": "pnpm run models:prepare && tsc -b && vite build --mode capacitor",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "models:prepare": "node scripts/convert-spec-gloss.mjs public/models/skeleton_pre-cut.glb public/models/skeleton_pre-cut.glb",
     "preview": "vite preview",
-    "android:sync": "cap sync android",
+    "android:sync": "pnpm run build:android && cap sync android",
     "android:open": "cap open android"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10"
   }
 }
