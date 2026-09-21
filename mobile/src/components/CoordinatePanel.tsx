@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { CoordinateInput } from "./CoordinateInput";
 import { Ban, Check, CloudDownload, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
-import type { SkeletonRecord } from "../types";
+import type { SkeletonRecord, WorkspaceGraveyard } from "../types";
 
 interface CoordinatePanelProps {
   records: SkeletonRecord[];
   activeRecord: SkeletonRecord;
+  graveyards: WorkspaceGraveyard[];
+  selectedGraveyardId?: string;
+  onSelectGraveyard: (graveyardId: string) => void;
+  onCreateGraveyard: () => void;
+  onRenameGraveyard: (name: string) => void;
   onSelectRecord: (recordId: string) => void;
   onCreateRecord: () => void;
   onRenameRecord: (name: string) => void;
@@ -26,9 +32,14 @@ function isComplete(record: SkeletonRecord, point: PointName): boolean {
   return Boolean(coordinate?.every((value) => value !== null && Number.isFinite(value)));
 }
 
-export function CoordinatePanel({
-  records,
-  activeRecord,
+export function CoordinatePanel({ 
+  records, 
+  activeRecord, 
+  graveyards, 
+  selectedGraveyardId,
+  onSelectGraveyard,
+  onCreateGraveyard,
+  onRenameGraveyard,
   onSelectRecord,
   onCreateRecord,
   onRenameRecord,
@@ -47,6 +58,8 @@ export function CoordinatePanel({
   const fullViewportHeightRef = useRef(0);
   const [focusedCoordinate, setFocusedCoordinate] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  
+  const selectedGraveyard = graveyards.find((graveyard) => graveyard.id === selectedGraveyardId);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -128,12 +141,60 @@ export function CoordinatePanel({
       <div className="record-card">
         <div className="record-selector-row">
           <label>
-            Skeleton record
-            <select value={activeRecord.id} onChange={(event) => onSelectRecord(event.target.value)}>
-              {records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
+            Graveyard
+            <select
+              value={selectedGraveyardId ?? ""}
+              onChange={(event) => onSelectGraveyard(event.target.value)}
+            >
+              {graveyards.map((graveyard) => (
+                <option key={graveyard.id} value={graveyard.id}>
+                  {graveyard.name}
+                </option>
+              ))}
             </select>
           </label>
-          <button type="button" className="new-record-button" onClick={onCreateRecord} title="Create skeleton record">
+
+          <button
+            type="button"
+            className="new-record-button"
+            onClick={onCreateGraveyard}
+            title="Create graveyard"
+          >
+            <Plus size={16} /> New
+          </button>
+        </div>
+
+        <label className="record-name-field">
+          Graveyard name
+          <input
+            value={selectedGraveyard?.name ?? ""}
+            maxLength={255}
+            placeholder="Untitled graveyard"
+            onChange={(event) => onRenameGraveyard(event.target.value)}
+          />
+        </label>
+
+        <div className="record-selector-row">
+          <label>
+            Skeleton record
+            <select
+              value={activeRecord.id}
+              onChange={(event) => onSelectRecord(event.target.value)}
+            >
+              {records.map((record) => (
+                <option key={record.id} value={record.id}>
+                  {record.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            className="new-record-button"
+            onClick={onCreateRecord}
+            title="Create skeleton record"
+          >
             <Plus size={16} /> New
           </button>
         </div>
@@ -200,25 +261,17 @@ export function CoordinatePanel({
                         </div>
                         <div className="axis-inputs">
                           {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
-                            <label key={axisLabel}>
-                              <span>{axisLabel}</span>
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                aria-label={`${pointLabel(point)} ${axisLabel}`}
-                                value={coordinate[axis] ?? ""}
-                                onFocus={(event) => focusCoordinate(
-                                  event.currentTarget,
+                              <CoordinateInput
+                                key={`${activeRecord.id}:${point}:${axis}`}
+                                axis={axisLabel}
+                                label={`${pointLabel(point)} ${axisLabel}`}
+                                value={coordinate[axis] ?? null}
+                                onFocus={(input) => focusCoordinate(
+                                  input,
                                   `${group.label} · ${pointLabel(point)} · ${axisLabel}`,
                                 )}
-                                onChange={(event) => {
-                                  const rawValue = event.target.value;
-                                  const value = rawValue === "" ? null : Number(rawValue);
-                                  onCoordinateChange(point, axis as 0 | 1 | 2, Number.isFinite(value) ? value : null);
-                                }}
+                                onChange={(value) => onCoordinateChange(point, axis as 0 | 1 | 2, value)}
                               />
-                            </label>
                           ))}
                         </div>
                       </div>
