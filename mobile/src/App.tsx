@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bone,
   ClipboardList,
@@ -216,7 +216,8 @@ export function App() {
     ?? graveyardRecords[0]
     ?? DEFAULT_RECORD;
 
-  const backendCoordinates = toBackendLandmarks(activeRecord);
+  const backendCoordinates = useMemo(() => toBackendLandmarks(activeRecord),
+    [activeRecord.coordinates, activeRecord.excludedGroups]);
 
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
