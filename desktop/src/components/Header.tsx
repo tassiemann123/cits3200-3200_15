@@ -1,13 +1,17 @@
 import { Upload, Plus } from 'lucide-react';
 
 interface HeaderProps {
-  graveyardName: string;
+  graveyards: { id: string; name: string }[];
+  currentGraveyardId: string;
+  onGraveyardChange: (id: string) => void;
   onNewGraveyard: () => void;
   onExport: () => void;
 }
 
 export default function Header({
-  graveyardName,
+  graveyards,
+  currentGraveyardId,
+  onGraveyardChange,
   onNewGraveyard,
   onExport,
 }: HeaderProps) {
@@ -21,8 +25,16 @@ export default function Header({
       <div className="header-actions">
         <div className="graveyard-selector">
           <span>Graveyard:</span>
-          <select value={graveyardName} disabled>
-            <option>{graveyardName}</option>
+
+          <select
+            value={currentGraveyardId}
+            onChange={event => onGraveyardChange(event.target.value)}
+          >
+            {graveyards.map(graveyard => (
+              <option key={graveyard.id} value={graveyard.id}>
+                {graveyard.name}
+              </option>
+            ))}
           </select>
         </div>
 

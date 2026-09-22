@@ -25,6 +25,7 @@ export interface Individual {
   id: string;
   name: string;
   accession: string;
+  graveyardId?: string;
   color: string;
   visible: boolean;
   notes: string;

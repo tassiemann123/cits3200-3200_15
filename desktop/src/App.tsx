@@ -57,7 +57,13 @@ function download(contents: string, name: string, type: string) {
 export default function App() {
   // Main project and UI state.
   const [initial] = useState(restoreProject);
-  const [project, setProject] = useState(initial.project);
+  const [project, setProject] = useState<Project>({
+    ...initial.project,
+    individuals: initial.project.individuals.map(individual => ({
+      ...individual,
+      graveyardId: individual.graveyardId ?? 'GY-001',
+    })),
+  });
   const [selectedId, setSelectedId] = useState(initial.project.individuals[0]?.id ?? '');
   const [jointId, setJointId] = useState('left_knee');
   const [query, setQuery] = useState('');
@@ -69,24 +75,31 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineReady, setOfflineReady] = useState(false);
   const [offlineError, setOfflineError] = useState('');
+  const [graveyards, setGraveyards] = useState([{ id: 'GY-001', name: 'Graveyard 1' }]);
+  const [currentGraveyardId, setCurrentGraveyardId] = useState('GY-001');
+  const [newGraveyardName, setNewGraveyardName] = useState('');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saving');
   const [storageBlocked, setStorageBlocked] = useState(Boolean(initial.error));
   const [toast, setToast] = useState(initial.error ?? '');
-  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | null>(null);
+  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'graveyard' | null>(null);
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const currentIndividuals = project.individuals.filter(
+    individual => individual.graveyardId === currentGraveyardId,
+  );
+
   const selected =
-    project.individuals.find(individual => individual.id === selectedId) ??
-    project.individuals[0];
+    currentIndividuals.find(individual => individual.id === selectedId) ??
+    currentIndividuals[0];
 
   const joint =
     selected?.joints.find(currentJoint => currentJoint.id === jointId) ??
     selected?.joints[0];
 
-  const visibleCount = project.individuals.filter(individual => individual.visible).length;
+  const visibleCount = currentIndividuals.filter(individual => individual.visible).length;
   const notify = (message: string) => setToast(message);
 
   // Update one property of the currently selected skeleton.
@@ -256,7 +269,7 @@ export default function App() {
     notify('Bone-specific coordinate table exported. Use JSON for a restorable workspace.');
   };
 
-  // Add a new blank skeleton to the current project.
+  // Add a new blank skeleton to the current graveyard.
   const addIndividual = () => {
     if (!newName.trim()) return;
 
@@ -272,7 +285,7 @@ export default function App() {
       ...base,
       id: crypto.randomUUID(),
       name: newName.trim(),
-      accession: '',
+      graveyardId: currentGraveyardId,
       color: paletteColor(project.individuals.length),
       visible: true,
       notes: '',
@@ -305,7 +318,7 @@ export default function App() {
     if (!deleteSkeletonId) return;
 
     const deletedId = deleteSkeletonId;
-    const remaining = project.individuals.filter(individual => individual.id !== deletedId);
+    const remaining = currentIndividuals.filter(individual => individual.id !== deletedId);
 
     setProject(previous => ({
       ...previous,
@@ -327,16 +340,28 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header
-        graveyardName="Graveyard 1"
-        onNewGraveyard={() =>
-          notify('Graveyard creation will be connected once graveyard data is added to the project model.')
-        }
+        graveyards={graveyards}
+        currentGraveyardId={currentGraveyardId}
+        onGraveyardChange={id => {
+          setCurrentGraveyardId(id);
+
+          const first = project.individuals.find(
+            individual => individual.graveyardId === id,
+          );
+
+          setSelectedId(first?.id ?? '');
+          setJointId(first?.joints[0]?.id ?? '');
+        }}
+        onNewGraveyard={() => {
+          setNewGraveyardName('');
+          setModal('graveyard');
+        }}
         onExport={() => setModal('export')}
       />
 
       <main className="app-main">
         <SkeletonSidebar
-          individuals={project.individuals}
+          individuals={currentIndividuals}
           selectedId={selected?.id ?? ''}
           query={query}
           onQueryChange={setQuery}
@@ -355,12 +380,10 @@ export default function App() {
               ),
             }))
           }
-
           onExport={id => {
             // TODO: Implement skeleton-specific export functionality. For now, just notify the user.
             notify('Skeleton export will be implemented in a future update.');
           }}
-
           onDelete={id => {
             setDeleteSkeletonId(id);
             setModal('delete');
@@ -385,7 +408,7 @@ export default function App() {
 
         <section className="viewer-panel" aria-label="Skeleton analysis workspace">
           <SceneControls
-            individuals={project.individuals}
+            individuals={currentIndividuals}
             selectedId={selected?.id ?? ''}
             view={view}
             showGrid={showGrid}
@@ -402,7 +425,7 @@ export default function App() {
 
           <div className="scene-area">
             <SceneViewport
-              individuals={project.individuals}
+              individuals={currentIndividuals}
               selectedId={selected?.id ?? ''}
               selectedJointId={joint?.id ?? ''}
               onSelect={(individualId, selectedJointId) => {
@@ -440,7 +463,7 @@ export default function App() {
             </div>
 
             {(visibleCount === 0 ||
-              !project.individuals.some(
+              !currentIndividuals.some(
                 individual =>
                   individual.visible &&
                   individual.joints.some(joint =>
@@ -509,13 +532,83 @@ export default function App() {
                 ? 'Add a skeleton'
                 : modal === 'delete'
                   ? 'Delete skeleton?'
-                  : 'Open this workspace?'
+                  : modal === 'graveyard'
+                    ? 'Select graveyard'
+                    : 'Open this workspace?'
           }
           onClose={() => {
             setModal(null);
             setDeleteSkeletonId(null);
           }}
         >
+          {modal === 'graveyard' && (
+            <>
+              <p>Select the graveyard you are currently working on.</p>
+
+              <div className="graveyard-list">
+                {graveyards.map(graveyard => (
+                  <button
+                    key={graveyard.id}
+                    className={`graveyard-choice ${
+                      graveyard.id === currentGraveyardId ? 'selected' : ''
+                    }`}
+                    type="button"
+                    onClick={() => {
+                      setCurrentGraveyardId(graveyard.id);
+                      const first = project.individuals.find(
+                        individual => individual.graveyardId === graveyard.id,
+                      );
+                      setSelectedId(first?.id ?? '');
+                      setJointId(first?.joints[0]?.id ?? '');
+                      setModal(null);
+                      notify(`${graveyard.name} selected.`);
+                    }}
+                  >
+                    <span>{graveyard.name}</span>
+                    {graveyard.id === currentGraveyardId && <strong>Current</strong>}
+                  </button>
+                ))}
+              </div>
+
+              <form
+                onSubmit={event => {
+                  event.preventDefault();
+
+                  const name = newGraveyardName.trim();
+                  if (!name) return;
+
+                  const graveyard = {
+                    id: crypto.randomUUID(),
+                    name,
+                  };
+
+                  setGraveyards(previous => [...previous, graveyard]);
+                  setCurrentGraveyardId(graveyard.id);
+                  setSelectedId('');
+                  setJointId('');
+                  setNewGraveyardName('');
+                  setModal(null);
+                  notify(`${name} created.`);
+                }}
+              >
+                <label className="modal-field">
+                  New graveyard
+                  <input
+                    autoFocus
+                    maxLength={80}
+                    placeholder="e.g. LN24 East"
+                    value={newGraveyardName}
+                    onChange={event => setNewGraveyardName(event.target.value)}
+                  />
+                </label>
+
+                <button className="button primary wide" type="submit">
+                  Create graveyard
+                </button>
+              </form>
+            </>
+          )}
+
           {modal === 'export' && (
             <>
               <p>Keep both coordinate sets, bone inventory and notes in a portable backup.</p>
@@ -630,7 +723,14 @@ export default function App() {
                 <button
                   className="button primary"
                   onClick={() => {
-                    setProject(pendingProject);
+                    setProject({
+                      ...pendingProject,
+                      individuals: pendingProject.individuals.map(individual => ({
+                        ...individual,
+                        graveyardId: individual.graveyardId ?? 'GY-001',
+                      })),
+                    });
+                    setCurrentGraveyardId('GY-001');
                     setSelectedId(pendingProject.individuals[0]?.id ?? '');
                     setJointId(pendingProject.individuals[0]?.joints[0]?.id ?? '');
                     setStorageBlocked(false);
