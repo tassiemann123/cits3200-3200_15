@@ -17,26 +17,90 @@ import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
+const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
+const CURRENT_GRAVEYARD_STORAGE_KEY = 'osteo.desktop.currentGraveyard.v1';
 
 // Restore the previous project, falling back to an old project or a blank one.
 function restoreProject(): { project: Project; error: string | null } {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return { project: validateProject(JSON.parse(stored)), error: null };
+
+    if (stored) {
+      const raw = JSON.parse(stored);
+      const validated = validateProject(raw);
+
+      const graveyards =
+        validated.graveyards && validated.graveyards.length > 0
+          ? validated.graveyards
+          : [{ id: 'GY-001', name: 'Graveyard 1' }];
+
+      const validGraveyardIds = new Set(
+        graveyards.map(graveyard => graveyard.id),
+      );
+
+      return {
+        project: {
+          ...validated,
+          graveyards,
+          individuals: validated.individuals.map(individual => ({
+            ...individual,
+            graveyardId:
+              individual.graveyardId &&
+              validGraveyardIds.has(individual.graveyardId)
+                ? individual.graveyardId
+                : graveyards[0].id,
+          })),
+        },
+        error: null,
+      };
+    }
 
     const previous = localStorage.getItem('osteo.desktop.project.v1');
+
     if (previous) {
-      const old = validateProject(JSON.parse(previous));
-      if (JSON.stringify(old.individuals) !== JSON.stringify(createDemoProject().individuals)) {
-        return { project: old, error: null };
+      const raw = JSON.parse(previous);
+      const old = validateProject(raw);
+
+      if (
+        JSON.stringify(old.individuals) !==
+        JSON.stringify(createDemoProject().individuals)
+      ) {
+        const graveyards =
+          old.graveyards && old.graveyards.length > 0
+            ? old.graveyards
+            : [{ id: 'GY-001', name: 'Graveyard 1' }];
+
+        const validGraveyardIds = new Set(
+          graveyards.map(graveyard => graveyard.id),
+        );
+
+        return {
+          project: {
+            ...old,
+            graveyards,
+            individuals: old.individuals.map(individual => ({
+              ...individual,
+              graveyardId:
+                individual.graveyardId &&
+                validGraveyardIds.has(individual.graveyardId)
+                  ? individual.graveyardId
+                  : graveyards[0].id,
+            })),
+          },
+          error: null,
+        };
       }
     }
 
-    return { project: createBlankProject(), error: null };
+    return {
+      project: createBlankProject(),
+      error: null,
+    };
   } catch {
     return {
       project: createBlankProject(),
-      error: 'The saved workspace could not be read. A demo is open; the original saved data has been left untouched. Export it or import a valid backup before continuing.',
+      error:
+        'The saved workspace could not be read. A blank workspace is open; the original saved data has been left untouched. Export it or import a valid backup before continuing.',
     };
   }
 }
@@ -57,12 +121,28 @@ function download(contents: string, name: string, type: string) {
 export default function App() {
   // Main project and UI state.
   const [initial] = useState(restoreProject);
-  const [project, setProject] = useState<Project>({
-    ...initial.project,
-    individuals: initial.project.individuals.map(individual => ({
-      ...individual,
-      graveyardId: individual.graveyardId ?? 'GY-001',
-    })),
+  const [project, setProject] = useState<Project>(() => {
+    const graveyards =
+      initial.project.graveyards && initial.project.graveyards.length > 0
+        ? initial.project.graveyards
+        : [{ id: 'GY-001', name: 'Graveyard 1' }];
+
+    const validGraveyardIds = new Set(
+      graveyards.map(graveyard => graveyard.id),
+    );
+
+    return {
+      ...initial.project,
+      graveyards,
+      individuals: initial.project.individuals.map(individual => ({
+        ...individual,
+        graveyardId:
+          individual.graveyardId &&
+          validGraveyardIds.has(individual.graveyardId)
+            ? individual.graveyardId
+            : graveyards[0].id,
+      })),
+    };
   });
   const [selectedId, setSelectedId] = useState(initial.project.individuals[0]?.id ?? '');
   const [jointId, setJointId] = useState('left_knee');
@@ -75,8 +155,54 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineReady, setOfflineReady] = useState(false);
   const [offlineError, setOfflineError] = useState('');
-  const [graveyards, setGraveyards] = useState([{ id: 'GY-001', name: 'Graveyard 1' }]);
-  const [currentGraveyardId, setCurrentGraveyardId] = useState('GY-001');
+  const [graveyards, setGraveyards] = useState(() => {
+    try {
+      const saved = localStorage.getItem(GRAVEYARD_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : null;
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+
+      const ids = [
+        ...new Set(
+          initial.project.individuals
+            .map(individual => individual.graveyardId)
+            .filter(Boolean),
+        ),
+      ];
+
+      return ids.length > 0
+        ? ids.map((id, index) => ({
+            id,
+            name: index === 0
+              ? 'Graveyard 1'
+              : `Graveyard ${index + 1}`,
+          }))
+        : [{ id: 'GY-001', name: 'Graveyard 1' }];
+    } catch {
+      return [{ id: 'GY-001', name: 'Graveyard 1' }];
+    }
+  });
+  
+  const [currentGraveyardId, setCurrentGraveyardId] = useState(() => {
+    const savedId = localStorage.getItem(
+      CURRENT_GRAVEYARD_STORAGE_KEY,
+    );
+
+    const availableGraveyards =
+      initial.project.graveyards &&
+      initial.project.graveyards.length > 0
+        ? initial.project.graveyards
+        : [{ id: 'GY-001', name: 'Graveyard 1' }];
+
+    return (
+      availableGraveyards.find(
+        graveyard => graveyard.id === savedId,
+      )?.id ?? availableGraveyards[0].id
+    );
+  });
+
   const [newGraveyardName, setNewGraveyardName] = useState('');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saving');
   const [storageBlocked, setStorageBlocked] = useState(Boolean(initial.error));
@@ -132,7 +258,7 @@ export default function App() {
         setSaveState('error');
         notify('Local saving failed. Export your workspace to keep a backup.');
       }
-    }, 250);
+    }, 50);
 
     return () => clearTimeout(timer);
   }, [project, storageBlocked]);
@@ -151,6 +277,39 @@ export default function App() {
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
   }, [project, storageBlocked]);
+
+  // Save graveyard state locally for offline use.
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRAVEYARD_STORAGE_KEY, JSON.stringify(graveyards));
+    } catch {
+      notify('Local graveyard saving failed.');
+    }
+  }, [graveyards]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CURRENT_GRAVEYARD_STORAGE_KEY, currentGraveyardId);
+    } catch {
+      notify('Local graveyard selection could not be saved.');
+    }
+  }, [currentGraveyardId]);
+
+  // Keep the selected graveyard valid after loading saved state.
+  useEffect(() => {
+    if (!graveyards.some(graveyard => graveyard.id === currentGraveyardId)) {
+      const fallback = graveyards[0]?.id ?? 'GY-001';
+      setCurrentGraveyardId(fallback);
+    }
+  }, [graveyards, currentGraveyardId]);
+
+  // Keep the selected skeleton inside the current graveyard.
+  useEffect(() => {
+    if (!currentIndividuals.some(individual => individual.id === selectedId)) {
+      setSelectedId(currentIndividuals[0]?.id ?? '');
+      setJointId(currentIndividuals[0]?.joints[0]?.id ?? '');
+    }
+  }, [currentGraveyardId, project.individuals]);
 
   // Track the connection and register the app for offline use.
   useEffect(() => {
@@ -345,6 +504,12 @@ export default function App() {
         onGraveyardChange={id => {
           setCurrentGraveyardId(id);
 
+          try {
+            localStorage.setItem(CURRENT_GRAVEYARD_STORAGE_KEY, id);
+          } catch {
+            // Visible local state remains active even if storage fails.
+          }
+
           const first = project.individuals.find(
             individual => individual.graveyardId === id,
           );
@@ -498,7 +663,6 @@ export default function App() {
         </section>
       </main>
 
-      {/* Hidden file input used to trigger project imports. */}
       <input
         ref={fileRef}
         type="file"
@@ -512,7 +676,6 @@ export default function App() {
         }}
       />
 
-      {/* Temporary notifications shown to the user. */}
       {toast && (
         <div className={`toast ${saveState === 'error' ? 'error-toast' : ''}`} role="status">
           <span>{toast}</span>
@@ -555,9 +718,20 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setCurrentGraveyardId(graveyard.id);
+
+                      try {
+                        localStorage.setItem(
+                          CURRENT_GRAVEYARD_STORAGE_KEY,
+                          graveyard.id,
+                        );
+                      } catch {
+                        // Visible local state remains active.
+                      }
+
                       const first = project.individuals.find(
                         individual => individual.graveyardId === graveyard.id,
                       );
+
                       setSelectedId(first?.id ?? '');
                       setJointId(first?.joints[0]?.id ?? '');
                       setModal(null);
@@ -582,8 +756,35 @@ export default function App() {
                     name,
                   };
 
-                  setGraveyards(previous => [...previous, graveyard]);
+                  const updatedGraveyards = [...graveyards, graveyard];
+
+                  console.log('SUBMIT FIRED', graveyard, updatedGraveyards);
+
+                  setGraveyards(updatedGraveyards);
+
+                  setProject(previous => ({
+                    ...previous,
+                    updatedAt: new Date().toISOString(),
+                    graveyards: updatedGraveyards,
+                  }));
+
                   setCurrentGraveyardId(graveyard.id);
+
+                  try {
+                    localStorage.setItem(
+                      GRAVEYARD_STORAGE_KEY,
+                      JSON.stringify(updatedGraveyards),
+                    );
+                    localStorage.setItem(
+                      CURRENT_GRAVEYARD_STORAGE_KEY,
+                      graveyard.id,
+                    );
+                    console.log('WRITE SUCCEEDED', localStorage.getItem(GRAVEYARD_STORAGE_KEY));
+                  } catch (err) {
+                    console.log('WRITE FAILED', err);
+                    notify('Graveyard was created, but could not be saved locally.');
+                  }
+
                   setSelectedId('');
                   setJointId('');
                   setNewGraveyardName('');
@@ -730,7 +931,8 @@ export default function App() {
                         graveyardId: individual.graveyardId ?? 'GY-001',
                       })),
                     });
-                    setCurrentGraveyardId('GY-001');
+
+                    setCurrentGraveyardId(pendingProject.individuals[0]?.graveyardId ?? 'GY-001');
                     setSelectedId(pendingProject.individuals[0]?.id ?? '');
                     setJointId(pendingProject.individuals[0]?.joints[0]?.id ?? '');
                     setStorageBlocked(false);

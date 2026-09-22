@@ -37,6 +37,7 @@ export interface Project {
   name: string;
   updatedAt: string;
   individuals: Individual[];
+  graveyards?: { id: string; name: string }[];
 }
 export type Scenario = 'articulated' | 'disarticulated' | 'missing-femur';
 export type RenderableBone = { id: string; label: string; from: Vec3; to: Vec3; status: BoneStatus };
@@ -99,7 +100,7 @@ function makeIndividual(id: string, color: string, offsetX: number): Individual 
 export function createDemoProject(): Project {
   const first = makeIndividual('IND-001', '#6a8d77', -.62);
   const second = makeIndividual('IND-002', '#b6925c', .62);
-  return { version: 1, name: 'Skeletal recording · Demo collection', updatedAt: new Date().toISOString(), individuals: [first, second] };
+  return { version: 1, name: 'Skeletal recording · Demo collection', updatedAt: new Date().toISOString(), individuals: [first, second], graveyards: [{ id: 'GY-001', name: 'Graveyard 1' }] };
 }
 
 /** Empty recording workspace: presence defaults match the mobile recorder. */
@@ -206,6 +207,7 @@ export function validateProject(input: unknown): Project {
   const name = string(root.name, 'Project name');
   const updatedAt = string(root.updatedAt, 'Updated date', 60);
   if (!/^\d{4}-\d{2}-\d{2}T/.test(updatedAt) || !Number.isFinite(Date.parse(updatedAt))) throw new Error('Invalid project update date.');
+  const graveyards = Array.isArray(root.graveyards) ? root.graveyards.filter(value => isObject(value) && typeof value.id === 'string' && typeof value.name === 'string') : [{ id: 'GY-001', name: 'Graveyard 1' }];
   const individuals: Individual[] = array(root.individuals, 'Individuals', 100).map((entry, index) => {
     const person = object(entry, `Individual ${index + 1}`);
     const bones: Bone[] = array(person.bones, 'Bones', 200).map((entry) => {
@@ -254,11 +256,12 @@ export function validateProject(input: unknown): Project {
     if (!['sacral_promontory', 'left_acetabulum', 'right_acetabulum'].every((key) => joints.find((j) => j.id === key)?.endpoints.some((e) => e.boneId === 'pelvis'))) throw new Error('Pelvis must own all three essential landmarks.');
     const color = string(person.color, 'Individual colour', 7);
     if (!/^#[a-fA-F0-9]{6}$/.test(color)) throw new Error('Individual colour must be a six-digit hex colour.');
-    return { id: id(person.id, 'Individual ID'), name: string(person.name, 'Individual name'), accession: string(person.accession, 'Accession'), color,
-      visible: bool(person.visible, 'Individual visibility'), notes: string(person.notes, 'Notes', 10000), joints, bones };
+    const graveyardId = person.graveyardId === undefined ? undefined : id(person.graveyardId, 'Graveyard ID');
+  return { id: id(person.id, 'Individual ID'), name: string(person.name, 'Individual name'), accession: string(person.accession, 'Accession'), color,
+    visible: bool(person.visible, 'Individual visibility'), notes: string(person.notes, 'Notes', 10000), graveyardId, joints, bones };
   });
   unique(individuals.map((person) => person.id), 'Individuals');
-  return { version: 1, name, updatedAt, individuals };
+  return { version: 1, name, updatedAt, individuals, graveyards };
 }
 
 /** Long-form CSV keeps ownership and inventory alongside every endpoint. */
