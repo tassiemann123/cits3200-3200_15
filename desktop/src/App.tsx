@@ -4,9 +4,10 @@ import {
   createBlankProject,
   createDemoProject,
   updateCoordinate,
+  setBoneStatus,
   validateProject,
 } from './model';
-import type { Individual, Project } from './model';
+import type { Individual, Project, BoneStatus } from './model';
 import Header from './components/Header';
 import SkeletonSidebar from './components/SkeletonSidebar';
 import SceneViewport from './components/SceneViewport';
@@ -74,7 +75,6 @@ export default function App() {
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
-  const [newAccession, setNewAccession] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selected =
@@ -257,7 +257,7 @@ export default function App() {
 
   // Add a new blank skeleton to the current project.
   const addIndividual = () => {
-    if (!newName.trim() || !newAccession.trim()) return;
+    if (!newName.trim()) return;
 
     if (project.individuals.length >= 100) {
       notify('This prototype supports up to 100 individuals per workspace.');
@@ -271,7 +271,7 @@ export default function App() {
       ...base,
       id: crypto.randomUUID(),
       name: newName.trim(),
-      accession: newAccession.trim(),
+      accession: '',
       color: ['#355c7d', '#b08e59', '#7189a4', '#9b788c'][project.individuals.length % 4],
       visible: true,
       notes: '',
@@ -296,7 +296,6 @@ export default function App() {
     setJointId('left_knee');
     setModal(null);
     setNewName('');
-    setNewAccession('');
     notify('Blank skeleton added.');
   };
 
@@ -355,6 +354,12 @@ export default function App() {
               ),
             }))
           }
+
+          onExport={id => {
+            // TODO: Implement skeleton-specific export functionality. For now, just notify the user.
+            notify('Skeleton export will be implemented in a future update.');
+          }}
+
           onDelete={id => {
             setDeleteSkeletonId(id);
             setModal('delete');
@@ -371,6 +376,9 @@ export default function App() {
             changeIndividual(individual =>
               updateCoordinate(individual, selectedJointId, endpointIndex, axis, value),
             )
+          }
+          onBoneStatusChange={(boneId, status) =>
+            changeIndividual(individual => setBoneStatus(individual, boneId, status))
           }
         />
 
@@ -549,7 +557,7 @@ export default function App() {
               <p>Start with empty coordinates. Bones are initially marked present.</p>
 
               <label className="modal-field">
-                Body / skeleton ID
+                Skeleton ID
                 <input
                   autoFocus
                   required
@@ -560,19 +568,7 @@ export default function App() {
                 />
               </label>
 
-              <label className="modal-field">
-                Accession number
-                <input
-                  required
-                  maxLength={80}
-                  placeholder="e.g. BP002"
-                  value={newAccession}
-                  onChange={event => setNewAccession(event.target.value)}
-                />
-              </label>
-
               <button className="button primary wide" type="submit">
-                <Plus size={16} />
                 Create skeleton
               </button>
             </form>

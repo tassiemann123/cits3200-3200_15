@@ -56,29 +56,31 @@ function makeIndividual(id: string, color: string, offsetX: number): Individual 
     left_foot: 'Left foot', right_foot: 'Right foot',
   };
   const joint = (jointId: string, label: string, region: string, coordinate: Vec3, owners: string[], optional = false) => {
-    joints.push({ id: jointId, label: optional ? `${label} (optional)` : label, region, linked: owners.length === 2,
+    joints.push({ id: jointId, label, region, linked: owners.length === 2,
       endpoints: owners.map((boneId) => ({ boneId, label: labels[boneId], coordinate: optional ? [null, null, null] : [Number((coordinate[0] + offsetX).toFixed(3)), coordinate[1], coordinate[2]] })) });
   };
-  joint('proximal_skull', 'Proximal skull point', 'Head & torso', [0, 0, 1.73], ['spine']);
-  joint('sacral_promontory', 'Sacral promontory', 'Pelvis', [0, 0, 1.04], ['spine', 'pelvis']);
+  joint('head_proximal', 'Head Proximal', 'Head & torso', [0, 0, 1.73], ['spine']);
+  joint('chin', 'Chin', 'Head & torso', [0, .05, 1.62], ['spine'], true);
+  joint('manubrium', 'Manubrium', 'Head & torso', [0, .02, 1.40], ['spine'], true);
+  joint('sacral_promontory', 'Sacral Promontory', 'Pelvis', [0, 0, 1.04], ['spine', 'pelvis']);
   for (const [side, direction] of [['left', 1], ['right', -1]] as const) {
     const title = side[0].toUpperCase() + side.slice(1);
-    joint(`${side}_shoulder`, `${title} shoulder`, `${title} arm`, [.23 * direction, 0, 1.48], ['shoulder_girdle', `${side}_humerus`]);
-    joint(`${side}_elbow`, `${title} elbow`, `${title} arm`, [.32 * direction, .025, 1.18], [`${side}_humerus`, `${side}_forearm`]);
-    joint(`${side}_wrist`, `${title} wrist`, `${title} arm`, [.39 * direction, .045, .93], [`${side}_forearm`, `${side}_hand`]);
-    joint(`${side}_fingertips`, `${title} fingertips`, `${title} arm`, [.43 * direction, .05, .78], [`${side}_hand`]);
-    joint(`${side}_acetabulum`, `${title} acetabulum`, 'Pelvis', [.12 * direction, 0, .94], ['pelvis', `${side}_femur`]);
-    joint(`${side}_knee`, `${title} knee`, `${title} leg`, [.14 * direction, .025, .51], [`${side}_femur`, `${side}_lower_leg`]);
-    joint(`${side}_ankle`, `${title} ankle`, `${title} leg`, [.15 * direction, 0, .09], [`${side}_lower_leg`, `${side}_foot`]);
-    joint(`${side}_toes`, `${title} toes`, `${title} leg`, [.16 * direction, .18, .04], [`${side}_foot`]);
-    joint(`${side}_ilium_superior`, `${title} superior ilium`, 'Pelvis', [.18 * direction, 0, 1.08], ['pelvis'], true);
-    joint(`${side}_ischium`, `${title} ischium`, 'Pelvis', [.10 * direction, -.02, .85], ['pelvis'], true);
+    joint(`${side}_shoulder`, `${title} Shoulder`, `${title} arm`, [.23 * direction, 0, 1.48], ['shoulder_girdle', `${side}_humerus`]);
+    joint(`${side}_elbow`, `${title} Elbow`, `${title} arm`, [.32 * direction, .025, 1.18], [`${side}_humerus`, `${side}_forearm`]);
+    joint(`${side}_wrist`, `${title} Wrist`, `${title} arm`, [.39 * direction, .045, .93], [`${side}_forearm`, `${side}_hand`]);
+    joint(`${side}_fingertips`, `${title} Fingertips`, `${title} arm`, [.43 * direction, .05, .78], [`${side}_hand`]);
+    joint(`${side}_acetabulum`, `${title} Acetabulum`, 'Pelvis', [.12 * direction, 0, .94], ['pelvis', `${side}_femur`]);
+    joint(`${side}_knee`, `${title} Knee`, `${title} leg`, [.14 * direction, .025, .51], [`${side}_femur`, `${side}_lower_leg`]);
+    joint(`${side}_ankle`, `${title} Ankle`, `${title} leg`, [.15 * direction, 0, .09], [`${side}_lower_leg`, `${side}_foot`]);
+    joint(`${side}_toes`, `${title} Toes`, `${title} leg`, [.16 * direction, .18, .04], [`${side}_foot`]);
+    joint(`${side}_ilium_superior`, `${title} Ilium Superior`, 'Pelvis', [.18 * direction, 0, 1.08], ['pelvis'], true);
+    joint(`${side}_ischium`, `${title} Ischium`, 'Pelvis', [.10 * direction, -.02, .85], ['pelvis'], true);
   }
   const bone = (boneId: string, fromId: string, toId: string) => {
     const ref = (jointId: string) => ({ jointId, endpointIndex: joints.find((j) => j.id === jointId)!.endpoints.findIndex((e) => e.boneId === boneId) });
     bones.push({ id: boneId, label: labels[boneId], status: 'present', from: ref(fromId), to: ref(toId) });
   };
-  bone('spine', 'proximal_skull', 'sacral_promontory');
+  bone('spine', 'head_proximal', 'sacral_promontory');
   bone('shoulder_girdle', 'left_shoulder', 'right_shoulder');
   bone('pelvis', 'left_acetabulum', 'right_acetabulum');
   for (const side of ['left', 'right']) {
@@ -231,7 +233,7 @@ export function validateProject(input: unknown): Project {
       unique(endpoints.map((e) => e.boneId), 'Joint endpoint owners');
       const linked = bool(joint.linked, 'Linked coordinates');
       if (linked && (endpoints.length !== 2 || !endpoints[0].coordinate.every((axis, i) => axis === endpoints[1].coordinate[i]))) throw new Error('Linked endpoints must contain matching coordinates.');
-      if ((jointId === 'proximal_skull' || /_(fingertips|toes)$/.test(jointId)) && endpoints.length !== 1) throw new Error('Terminal landmarks have one endpoint.');
+      if ((jointId === 'head_proximal' || /_(fingertips|toes)$/.test(jointId)) && endpoints.length !== 1) throw new Error('Terminal landmarks have one endpoint.');
       return { id: jointId, label: string(joint.label, 'Joint label'), region: string(joint.region, 'Region'), linked, endpoints };
     });
     unique(joints.map((j) => j.id), 'Joints');
@@ -240,7 +242,7 @@ export function validateProject(input: unknown): Project {
       if (!endpoint || endpoint.boneId !== bone.id) throw new Error(`Invalid bone-owned endpoint reference for ${bone.label}.`);
     }));
     // Scenario controls and the pelvis rule depend on this minimal prototype map.
-    for (const key of ['left_knee', 'proximal_skull', 'sacral_promontory', 'left_acetabulum', 'right_acetabulum']) {
+    for (const key of ['left_knee', 'head_proximal', 'sacral_promontory', 'left_acetabulum', 'right_acetabulum']) {
       if (!joints.some((j) => j.id === key)) throw new Error(`Required prototype landmark is missing: ${key}.`);
     }
     for (const key of ['left_femur', 'left_lower_leg', 'pelvis']) {

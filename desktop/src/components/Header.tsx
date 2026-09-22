@@ -1,4 +1,4 @@
-import { Download, Plus } from 'lucide-react';
+import { Upload, Plus } from 'lucide-react';
 
 interface HeaderProps {
   graveyardName: string;
@@ -31,8 +31,8 @@ export default function Header({
           New
         </button>
 
-        <button className="header-button" onClick={onExport}>
-          <Download size={16} />
+        <button className="button primary" onClick={onExport}>
+          <Upload size={16} />
           Export
         </button>
       </div>
