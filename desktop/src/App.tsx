@@ -14,6 +14,7 @@ import SceneViewport from './components/SceneViewport';
 import SceneControls from './components/SceneControls';
 import PopupModal from './components/PopupModal';
 import { registerOffline } from './offline';
+import { paletteColor } from './lib/colors';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 
@@ -272,7 +273,7 @@ export default function App() {
       id: crypto.randomUUID(),
       name: newName.trim(),
       accession: '',
-      color: ['#355c7d', '#b08e59', '#7189a4', '#9b788c'][project.individuals.length % 4],
+      color: paletteColor(project.individuals.length),
       visible: true,
       notes: '',
       joints: base.joints.map(j => ({

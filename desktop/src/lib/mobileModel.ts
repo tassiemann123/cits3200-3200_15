@@ -233,7 +233,7 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   const spine = bones.get('spine');
   const spineRest = templates.get('SK_Spine')!.rest;
   const bodyScale = spine ? Math.min(2, Math.max(.25, toModel(spine.from).distanceTo(toModel(spine.to)) / spineRest.fromTip.distanceTo(spineRest.toTip))) : 1;
-  const add = (name: string, owner: string, from: THREE.Vector3 | undefined, to: THREE.Vector3 | undefined, stretch: 'rod' | 'uniform' | 'anchor' = 'rod') => {
+  const add = (name: string, owner: string, from: THREE.Vector3 | undefined, to: THREE.Vector3 | undefined, stretch: 'rod' | 'uniform' | 'anchor' = 'rod', twist?: THREE.Vector3) => {
     const template = templates.get(name);
     if (!template || !from || !to) return;
     const piece = template.object.clone(true);
@@ -243,12 +243,13 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
       child.castShadow = false; child.receiveShadow = false;
       const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(source => {
         const material = source.clone() as THREE.MeshStandardMaterial;
-        if (selectedBones.has(owner) && material.emissive) { material.emissive.set('#355c7d'); material.emissiveIntensity = .16; }
+        if (material.color) material.color.set(individual.color);
+        if (selectedBones.has(owner) && material.emissive) { material.emissive.set('#ffffff'); material.emissiveIntensity = .16; }
         return material;
       });
       child.material = Array.isArray(child.material) ? materials : materials[0];
     });
-    poseSkeletonPiece(piece, template.rest, from, to, stretch, undefined, bodyScale);
+    poseSkeletonPiece(piece, template.rest, from, to, stretch, twist, bodyScale);
     if (from.distanceToSquared(to) < 1e-8) {
       piece.scale.setScalar(bodyScale);
       piece.position.copy(from).sub(template.rest.topTip.clone().multiplyScalar(bodyScale));
@@ -256,8 +257,24 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     root.add(piece);
   };
   if (spine) add('SK_Spine', 'spine', toModel(spine.to), toModel(spine.from));
-  const skull = coordinate('proximal_skull', 'spine');
-  add('SK_Head', 'spine', skull, skull, 'anchor');
+  const head = coordinate('head_proximal', 'spine');
+  const chin = coordinate('chin', 'spine');
+  const spineFrom = spine ? toModel(spine.to) : undefined;
+  const spineTo = spine ? toModel(spine.from) : undefined;
+  const bodyUp = spineFrom && spineTo ? spineTo.clone().sub(spineFrom).normalize() : undefined;
+  const spineLength = spineFrom && spineTo ? spineFrom.distanceTo(spineTo) : undefined;
+
+  if (head) {
+    const headDirection = chin
+      ? head.clone().sub(chin).normalize()
+      : bodyUp ?? new THREE.Vector3(0, 1, 0);
+
+    const headLength = spineLength ?? 0.3;
+    const headFrom = head.clone().addScaledVector(headDirection, -0.143 * headLength);
+
+    add('SK_Head', 'spine', headFrom, head, 'anchor', chin);
+  }
+
   const sacrum = coordinate('sacral_promontory', 'pelvis');
   if (bones.has('pelvis')) add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
   const left = coordinate('left_shoulder', 'shoulder_girdle');
