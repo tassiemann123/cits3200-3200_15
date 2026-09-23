@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CoordinateInput } from "./CoordinateInput";
-import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
+import { Ban, Check, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
 import type { SkeletonRecord, WorkspaceGraveyard } from "../types";
@@ -49,7 +49,6 @@ export function CoordinatePanel({
   onImportCsv,
   onExportRecord,
   onSave,
-  onLoadFromBackend,
   backendStatus,
   canExport,
 }: CoordinatePanelProps) {
@@ -155,16 +154,6 @@ export function CoordinatePanel({
     return group ? !activeRecord.excludedGroups.includes(group.id) : true;
   });
   const completedPoints = availablePoints.filter((point) => isComplete(activeRecord, point)).length;
-  const completion = availablePoints.length === 0 ? 0 : Math.round((completedPoints / availablePoints.length) * 100);
-  const backendRecordLabel = activeRecord.backendId
-    ? "Linked to backend"
-    : backendStatus === "online"
-      ? "Backend ready · not synced yet"
-      : backendStatus === "syncing"
-        ? "Syncing backend…"
-        : backendStatus === "checking"
-          ? "Checking backend…"
-          : "Offline · saved locally";
 
   return (
     <aside ref={panelRef} className="panel coordinate-panel" onBlurCapture={handlePanelBlur}>
@@ -282,18 +271,6 @@ export function CoordinatePanel({
             )}
           </div>
         </div>
-        <div className="backend-record-row">
-          <span className={activeRecord.backendId || backendStatus === "online" ? "linked" : "local"}>
-            {backendRecordLabel}
-          </span>
-          <button type="button" onClick={onLoadFromBackend} disabled={backendStatus === "syncing"}>
-            <CloudDownload size={13} /> {backendStatus === "syncing" ? "Syncing…" : "Load backend"}
-          </button>
-        </div>
-        <div className="coordinate-progress" aria-label={`${completion}% complete`}>
-          <span style={{ width: `${completion}%` }} />
-        </div>
-        <p>{completion}% complete · only complete X, Y, Z points are backend-ready</p>
       </div>
 
       <div className="coordinate-focus-banner" role="status" aria-live="polite">

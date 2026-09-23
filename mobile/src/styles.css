@@ -143,15 +143,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .edit-name-button:hover { background: var(--accent-dark); }
 .edit-name-button.confirm { color: #fff; background: var(--accent); }
 .edit-name-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
-.backend-record-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
-.backend-record-row > span { overflow: hidden; font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.backend-record-row > span.linked { color: var(--success); }
-.backend-record-row > span.local { color: #80796d; }
-.backend-record-row > button { flex: 0 0 auto; height: 27px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; color: var(--accent); border: 1px solid rgba(53,92,125,.2); border-radius: 7px; background: var(--accent-dark); font-size: 8px; font-weight: 700; cursor: pointer; }
-.backend-record-row > button:disabled { opacity: .5; cursor: wait; }
-.coordinate-progress { height: 4px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: #deddd8; }
-.coordinate-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--bone), var(--accent)); transition: width .2s ease; }
-.record-card > p { margin: 6px 0 0; color: #7a8085; font-size: 8px; line-height: 1.4; }
 .coordinate-focus-banner { display: none; }
 .coordinate-scroll-area { flex: 1; min-height: 0; margin: 0 -5px; padding: 0 5px 18px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #b8bfc4 transparent; }
 .coordinate-group { margin-bottom: 9px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
