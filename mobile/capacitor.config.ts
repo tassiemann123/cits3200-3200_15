@@ -13,6 +13,15 @@ const config: CapacitorConfig = {
     backgroundColor: "#0c1f24",
     allowMixedContent: true,
   },
+  plugins: {
+    SystemBars: {
+      // Android 15+ is always edge-to-edge. Capacitor exposes the real
+      // status/navigation bar sizes as CSS variables for the web layout.
+      insetsHandling: "css",
+      style: "DEFAULT",
+      hidden: false,
+    },
+  },
 };
 
 export default config;

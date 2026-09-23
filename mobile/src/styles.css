@@ -20,6 +20,10 @@
   --success: #557a63;
   --input: #fcfbf8;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --app-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --app-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --app-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --app-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
 * { box-sizing: border-box; }
@@ -259,7 +263,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 @media (max-width: 820px) {
   html, body, #root { overflow: hidden; }
-  .app-shell { grid-template-rows: minmax(0,1fr) 58px; }
+  .side-panel-tabs { display: none; }
+  .app-shell {
+    grid-template-rows: minmax(0,1fr) calc(58px + var(--app-safe-bottom));
+    padding-top: var(--app-safe-top);
+    padding-right: var(--app-safe-right);
+    padding-left: var(--app-safe-left);
+    background: #07171b;
+  }
   .workspace-grid { position: relative; display: block; }
   .workspace-pane, .viewport-section { position: absolute; inset: 0; display: none; border: 0; }
   .workspace-pane.mobile-active, .viewport-section.mobile-active { display: block; }
@@ -267,7 +278,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .panel { padding: 18px; }
   .layer-list { padding-bottom: 70px; }
   .details-panel { padding-bottom: 80px; }
-  .mobile-nav { position: relative; z-index: 40; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: #fff; padding-bottom: env(safe-area-inset-bottom); }
+  .mobile-nav { position: relative; z-index: 40; display: grid; grid-template-columns: repeat(3, 1fr); padding-bottom: var(--app-safe-bottom); border-top: 1px solid var(--line); background: #fff; }
   .mobile-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #747c82; border: 0; background: transparent; font-size: 9px; cursor: pointer; }
   .mobile-nav button.active { color: var(--accent); background: var(--accent-dark); }
   .touch-hint { display: none; }
@@ -281,7 +292,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .dialog-grid { grid-template-columns: 1fr 1fr 1fr; }
   .dialog-grid .field-label:nth-child(1), .dialog-grid .field-label:nth-child(2) { grid-column: span 3; }
 
-  html.coordinate-keyboard-active .app-shell { grid-template-rows: minmax(0, 1fr); }
+  html.coordinate-keyboard-active .app-shell { grid-template-rows: minmax(0, 1fr); padding-bottom: 0; }
   html.coordinate-keyboard-active .mobile-nav,
   html.coordinate-keyboard-active .side-panel-tabs,
   html.coordinate-keyboard-active .coordinate-heading,
@@ -304,7 +315,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   html.coordinate-keyboard-active .coordinate-focus-banner span { color: var(--muted); font-size: 9px; }
   html.coordinate-keyboard-active .coordinate-focus-banner strong { overflow: hidden; font-size: 11px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
   html.coordinate-keyboard-active .coordinate-scroll-area {
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-bottom: max(24px, var(--app-safe-bottom));
     scroll-padding-block: 54px 24px;
   }
 }
