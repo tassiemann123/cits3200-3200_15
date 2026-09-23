@@ -135,16 +135,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .record-selector-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .record-selector-row + .record-selector-row { margin-top: 9px; }
 .record-action { display: flex; flex-direction: row; align-items: center; gap: 6px; }
-.record-selector-row label, .record-name-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; color: #70777d; font-size: 9px; font-weight: 700; }
-.record-selector-row select, .record-selector-row .inline-name-input, .record-name-field input { min-width: 0; width: 100%; height: 34px; padding: 0 9px; color: var(--text); border: 1px solid var(--line); border-radius: 7px; background: #fff; outline: 0; font-size: 11px; }
-.record-name-field input::placeholder { color: var(--muted); }
+.record-selector-row label { min-width: 0; display: flex; flex-direction: column; gap: 6px; color: #70777d; font-size: 9px; font-weight: 700; }
+.record-selector-row select, .record-selector-row .inline-name-input { min-width: 0; width: 100%; height: 34px; padding: 0 9px; color: var(--text); border: 1px solid var(--line); border-radius: 7px; background: #fff; outline: 0; font-size: 11px; }
 .new-record-button { height: 34px; display: flex; align-items: center; gap: 5px; padding: 0 10px; color: var(--accent); border: 1px solid rgba(53,92,125,.24); border-radius: 7px; background: var(--accent-dark); font-size: 10px; font-weight: 700; cursor: pointer; }
 .new-record-button:hover { background: #dce4ea; }
 .edit-name-button { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; color: var(--accent); border: 1px solid rgba(53,92,125,.24); border-radius: 7px; background: #fff; cursor: pointer; }
 .edit-name-button:hover { background: var(--accent-dark); }
 .edit-name-button.confirm { color: #fff; background: var(--accent); }
 .edit-name-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
-.record-name-field { margin-top: 9px; margin-bottom: 9px; }
 .backend-record-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 9px; }
 .backend-record-row > span { overflow: hidden; font-size: 8px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .backend-record-row > span.linked { color: var(--success); }

@@ -60,6 +60,8 @@ export function CoordinatePanel({
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [isRenamingGraveyard, setIsRenamingGraveyard] = useState(false);
   const [graveyardNameDraft, setGraveyardNameDraft] = useState("");
+  const [isRenamingRecord, setIsRenamingRecord] = useState(false);
+  const [recordNameDraft, setRecordNameDraft] = useState("");
   
   const selectedGraveyard = graveyards.find((graveyard) => graveyard.id === selectedGraveyardId);
 
@@ -78,6 +80,23 @@ export function CoordinatePanel({
     if (!name) return;
     onRenameGraveyard(name);
     setIsRenamingGraveyard(false);
+  };
+
+  const startRenamingRecord = () => {
+    setRecordNameDraft(activeRecord.name);
+    setIsRenamingRecord(true);
+  };
+
+  const cancelRenamingRecord = () => {
+    setRecordNameDraft(activeRecord.name);
+    setIsRenamingRecord(false);
+  };
+
+  const saveRecordName = () => {
+    const name = recordNameDraft.trim();
+    if (!name) return;
+    onRenameRecord(name);
+    setIsRenamingRecord(false);
   };
 
   useEffect(() => {
@@ -214,37 +233,55 @@ export function CoordinatePanel({
         <div className="record-selector-row">
           <label>
             Skeleton record
-            <select
-              value={activeRecord.id}
-              onChange={(event) => onSelectRecord(event.target.value)}
-            >
-              {records.map((record) => (
-                <option key={record.id} value={record.id}>
-                  {record.name}
-                </option>
-              ))}
-            </select>
+            {isRenamingRecord ? (
+              <input
+                className="inline-name-input"
+                value={recordNameDraft}
+                maxLength={80}
+                aria-label="Skeleton record name"
+                autoFocus
+                onChange={(event) => setRecordNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveRecordName();
+                  if (event.key === "Escape") cancelRenamingRecord();
+                }}
+              />
+            ) : (
+              <select
+                value={activeRecord.id}
+                onChange={(event) => onSelectRecord(event.target.value)}
+              >
+                {records.map((record) => (
+                  <option key={record.id} value={record.id}>
+                    {record.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
 
-          <button
-            type="button"
-            className="new-record-button"
-            onClick={onCreateRecord}
-            title="Create skeleton record"
-          >
-            <Plus size={16} /> New
-          </button>
+          <div className="record-action">
+            {isRenamingRecord ? (
+              <>
+                <button type="button" className="edit-name-button confirm" onClick={saveRecordName} disabled={!recordNameDraft.trim()} title="Save skeleton record name" aria-label="Save skeleton record name">
+                  <Check size={16} />
+                </button>
+                <button type="button" className="edit-name-button" onClick={cancelRenamingRecord} title="Cancel renaming" aria-label="Cancel renaming">
+                  <X size={16} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="edit-name-button" onClick={startRenamingRecord} title="Rename skeleton record" aria-label="Rename skeleton record">
+                  <Pencil size={15} />
+                </button>
+                <button type="button" className="new-record-button" onClick={onCreateRecord} title="Create skeleton record">
+                  <Plus size={16} /> New
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <label className="record-name-field">
-          Record name
-          <input
-            value={activeRecord.name}
-            maxLength={80}
-            placeholder="Untitled skeleton"
-            onChange={(event) => onRenameRecord(event.target.value)}
-            onBlur={(event) => onRenameRecord(event.target.value.trim() || "Untitled skeleton")}
-          />
-        </label>
         <div className="backend-record-row">
           <span className={activeRecord.backendId || backendStatus === "online" ? "linked" : "local"}>
             {backendRecordLabel}
