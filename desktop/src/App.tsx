@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, FileJson, Plus, Table2, X } from 'lucide-react';
+import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X } from 'lucide-react';
 import {
   createBlankProject,
   createDemoProject,
@@ -203,12 +203,14 @@ export default function App() {
     );
   });
 
+  const [editGraveyardName, setEditGraveyardName] = useState('');
   const [newGraveyardName, setNewGraveyardName] = useState('');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saving');
   const [storageBlocked, setStorageBlocked] = useState(Boolean(initial.error));
   const [toast, setToast] = useState(initial.error ?? '');
-  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'graveyard' | null>(null);
+  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | null>(null);
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
+  const [deleteGraveyardId, setDeleteGraveyardId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -495,6 +497,42 @@ export default function App() {
     notify('Skeleton deleted.');
   };
 
+  // Delete the current graveyard after the user confirms, unless it still has skeletons.
+  const confirmDeleteGraveyard = () => {
+    if (!deleteGraveyardId) return;
+
+    const hasSkeletons = project.individuals.some(
+      individual => individual.graveyardId === deleteGraveyardId,
+    );
+
+    if (hasSkeletons) {
+      notify('Graveyards containing skeletons cannot be deleted.');
+      setDeleteGraveyardId(null);
+      setModal('edit-graveyard');
+      return;
+    }
+
+    const remainingGraveyards = graveyards.filter(
+      graveyard => graveyard.id !== deleteGraveyardId,
+    );
+
+    setGraveyards(remainingGraveyards);
+
+    setProject(previous => ({
+      ...previous,
+      updatedAt: new Date().toISOString(),
+      graveyards: remainingGraveyards,
+    }));
+
+    if (currentGraveyardId === deleteGraveyardId) {
+      setCurrentGraveyardId(remainingGraveyards[0]?.id ?? 'GY-001');
+    }
+
+    setDeleteGraveyardId(null);
+    setModal(null);
+    notify('Graveyard deleted.');
+  };
+
   // Main page layout: header, skeleton sidebar, and 3D viewer.
   return (
     <div className="app-shell">
@@ -517,9 +555,22 @@ export default function App() {
           setSelectedId(first?.id ?? '');
           setJointId(first?.joints[0]?.id ?? '');
         }}
+        
+        onManageGraveyard={() => {
+          setEditGraveyardName(
+            graveyards.find(graveyard => graveyard.id === currentGraveyardId)?.name ?? '',
+          );
+          setModal('edit-graveyard');
+        }}
+        
         onNewGraveyard={() => {
           setNewGraveyardName('');
-          setModal('graveyard');
+          setModal('new-graveyard');
+        }}
+        
+        onSave={() => {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+          notify('Workspace saved.');
         }}
         onExport={() => setModal('export')}
       />
@@ -695,70 +746,82 @@ export default function App() {
                 ? 'Add a skeleton'
                 : modal === 'delete'
                   ? 'Delete skeleton?'
-                  : modal === 'graveyard'
-                    ? 'Select graveyard'
-                    : 'Open this workspace?'
+                  : modal === 'new-graveyard'
+                    ? 'New graveyard'
+                    : modal === 'edit-graveyard'
+                      ? 'Manage graveyard'
+                      : modal === 'delete-graveyard'
+                        ? 'Delete graveyard?'
+                        : 'Open this workspace?'
           }
           onClose={() => {
             setModal(null);
             setDeleteSkeletonId(null);
           }}
         >
-          {modal === 'graveyard' && (
+          {modal === 'new-graveyard' && (
+            <form
+              onSubmit={event => {
+                event.preventDefault();
+
+                const name = newGraveyardName.trim();
+                if (!name) return;
+
+                const graveyard = {
+                  id: crypto.randomUUID(),
+                  name,
+                };
+
+                const updatedGraveyards = [...graveyards, graveyard];
+
+                setGraveyards(updatedGraveyards);
+
+                setProject(previous => ({
+                  ...previous,
+                  updatedAt: new Date().toISOString(),
+                  graveyards: updatedGraveyards,
+                }));
+
+                setCurrentGraveyardId(graveyard.id);
+                setSelectedId('');
+                setJointId('');
+                setNewGraveyardName('');
+                setModal(null);
+                notify(`${name} created.`);
+              }}
+            >
+              <label className="modal-field">
+                Graveyard name
+                <input
+                  autoFocus
+                  required
+                  maxLength={80}
+                  placeholder="e.g. LN24 East"
+                  value={newGraveyardName}
+                  onChange={event => setNewGraveyardName(event.target.value)}
+                />
+              </label>
+
+              <button className="button primary wide" type="submit">
+                Create graveyard
+              </button>
+            </form>
+          )}
+
+          {modal === 'edit-graveyard' && (
             <>
-              <p>Select the graveyard you are currently working on.</p>
-
-              <div className="graveyard-list">
-                {graveyards.map(graveyard => (
-                  <button
-                    key={graveyard.id}
-                    className={`graveyard-choice ${
-                      graveyard.id === currentGraveyardId ? 'selected' : ''
-                    }`}
-                    type="button"
-                    onClick={() => {
-                      setCurrentGraveyardId(graveyard.id);
-
-                      try {
-                        localStorage.setItem(
-                          CURRENT_GRAVEYARD_STORAGE_KEY,
-                          graveyard.id,
-                        );
-                      } catch {
-                        // Visible local state remains active.
-                      }
-
-                      const first = project.individuals.find(
-                        individual => individual.graveyardId === graveyard.id,
-                      );
-
-                      setSelectedId(first?.id ?? '');
-                      setJointId(first?.joints[0]?.id ?? '');
-                      setModal(null);
-                      notify(`${graveyard.name} selected.`);
-                    }}
-                  >
-                    <span>{graveyard.name}</span>
-                    {graveyard.id === currentGraveyardId && <strong>Current</strong>}
-                  </button>
-                ))}
-              </div>
-
               <form
                 onSubmit={event => {
                   event.preventDefault();
 
-                  const name = newGraveyardName.trim();
+                  const name = editGraveyardName.trim();
                   if (!name) return;
 
-                  const graveyard = {
-                    id: crypto.randomUUID(),
-                    name,
-                  };
-
-                  const updatedGraveyards = [...graveyards, graveyard];
-
-                  console.log('SUBMIT FIRED', graveyard, updatedGraveyards);
+                  const updatedGraveyards = graveyards.map(graveyard =>
+                    graveyard.id === currentGraveyardId
+                      ? { ...graveyard, name }
+                      : graveyard,
+                  );
 
                   setGraveyards(updatedGraveyards);
 
@@ -768,45 +831,76 @@ export default function App() {
                     graveyards: updatedGraveyards,
                   }));
 
-                  setCurrentGraveyardId(graveyard.id);
-
-                  try {
-                    localStorage.setItem(
-                      GRAVEYARD_STORAGE_KEY,
-                      JSON.stringify(updatedGraveyards),
-                    );
-                    localStorage.setItem(
-                      CURRENT_GRAVEYARD_STORAGE_KEY,
-                      graveyard.id,
-                    );
-                    console.log('WRITE SUCCEEDED', localStorage.getItem(GRAVEYARD_STORAGE_KEY));
-                  } catch (err) {
-                    console.log('WRITE FAILED', err);
-                    notify('Graveyard was created, but could not be saved locally.');
-                  }
-
-                  setSelectedId('');
-                  setJointId('');
-                  setNewGraveyardName('');
                   setModal(null);
-                  notify(`${name} created.`);
+                  notify('Graveyard renamed.');
                 }}
               >
                 <label className="modal-field">
-                  New graveyard
+                  Graveyard name
                   <input
                     autoFocus
                     maxLength={80}
-                    placeholder="e.g. LN24 East"
-                    value={newGraveyardName}
-                    onChange={event => setNewGraveyardName(event.target.value)}
+                    value={editGraveyardName}
+                    onChange={event => setEditGraveyardName(event.target.value)}
                   />
                 </label>
 
                 <button className="button primary wide" type="submit">
-                  Create graveyard
+                  Rename graveyard
                 </button>
               </form>
+
+              <button
+                className="button danger wide"
+                type="button"
+                onClick={() => {
+                  setDeleteGraveyardId(currentGraveyardId);
+                  setModal('delete-graveyard');
+                }}
+              >
+                Delete graveyard
+              </button>
+            </>
+          )}
+
+          {modal === 'delete-graveyard' && (
+            <>
+              <div className="delete-confirmation">
+                <p>
+                  Are you sure you want to delete{' '}
+                  <strong>
+                    {graveyards.find(
+                      graveyard => graveyard.id === deleteGraveyardId,
+                    )?.name ?? 'this graveyard'}
+                  </strong>
+                  ?
+                </p>
+
+                <p className="input-hint">
+                  Graveyards containing skeletons cannot be deleted.
+                </p>
+              </div>
+
+              <div className="button-row">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => {
+                    setModal('edit-graveyard');
+                    setDeleteGraveyardId(null);
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  className="button danger"
+                  type="button"
+                  onClick={confirmDeleteGraveyard}
+                >
+                  Delete
+                </button>
+              </div>
             </>
           )}
 
