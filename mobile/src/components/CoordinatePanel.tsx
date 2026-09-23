@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CoordinateInput } from "./CoordinateInput";
-import { Ban, Check, CloudDownload, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
+import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
 import type { SkeletonRecord, WorkspaceGraveyard } from "../types";
@@ -58,8 +58,27 @@ export function CoordinatePanel({
   const fullViewportHeightRef = useRef(0);
   const [focusedCoordinate, setFocusedCoordinate] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [isRenamingGraveyard, setIsRenamingGraveyard] = useState(false);
+  const [graveyardNameDraft, setGraveyardNameDraft] = useState("");
   
   const selectedGraveyard = graveyards.find((graveyard) => graveyard.id === selectedGraveyardId);
+
+  const startRenamingGraveyard = () => {
+    setGraveyardNameDraft(selectedGraveyard?.name ?? "");
+    setIsRenamingGraveyard(true);
+  };
+
+  const cancelRenamingGraveyard = () => {
+    setGraveyardNameDraft(selectedGraveyard?.name ?? "");
+    setIsRenamingGraveyard(false);
+  };
+
+  const saveGraveyardName = () => {
+    const name = graveyardNameDraft.trim();
+    if (!name) return;
+    onRenameGraveyard(name);
+    setIsRenamingGraveyard(false);
+  };
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -142,37 +161,55 @@ export function CoordinatePanel({
         <div className="record-selector-row">
           <label>
             Graveyard
-            <select
-              value={selectedGraveyardId ?? ""}
-              onChange={(event) => onSelectGraveyard(event.target.value)}
-            >
-              {graveyards.map((graveyard) => (
-                <option key={graveyard.id} value={graveyard.id}>
-                  {graveyard.name}
-                </option>
-              ))}
-            </select>
+            {isRenamingGraveyard ? (
+              <input
+                className="inline-name-input"
+                value={graveyardNameDraft}
+                maxLength={255}
+                aria-label="Graveyard name"
+                autoFocus
+                onChange={(event) => setGraveyardNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveGraveyardName();
+                  if (event.key === "Escape") cancelRenamingGraveyard();
+                }}
+              />
+            ) : (
+              <select
+                value={selectedGraveyardId ?? ""}
+                onChange={(event) => onSelectGraveyard(event.target.value)}
+              >
+                {graveyards.map((graveyard) => (
+                  <option key={graveyard.id} value={graveyard.id}>
+                    {graveyard.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
 
-          <button
-            type="button"
-            className="new-record-button"
-            onClick={onCreateGraveyard}
-            title="Create graveyard"
-          >
-            <Plus size={16} /> New
-          </button>
+          <div className="record-action">
+            {isRenamingGraveyard ? (
+              <>
+                <button type="button" className="edit-name-button confirm" onClick={saveGraveyardName} disabled={!graveyardNameDraft.trim()} title="Save graveyard name" aria-label="Save graveyard name">
+                  <Check size={16} />
+                </button>
+                <button type="button" className="edit-name-button" onClick={cancelRenamingGraveyard} title="Cancel renaming" aria-label="Cancel renaming">
+                  <X size={16} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="edit-name-button" onClick={startRenamingGraveyard} disabled={!selectedGraveyard} title="Rename graveyard" aria-label="Rename graveyard">
+                  <Pencil size={15} />
+                </button>
+                <button type="button" className="new-record-button" onClick={onCreateGraveyard} title="Create graveyard">
+                  <Plus size={16} /> New
+                </button>
+              </>
+            )}
+          </div>
         </div>
-
-        <label className="record-name-field">
-          Graveyard name
-          <input
-            value={selectedGraveyard?.name ?? ""}
-            maxLength={255}
-            placeholder="Untitled graveyard"
-            onChange={(event) => onRenameGraveyard(event.target.value)}
-          />
-        </label>
 
         <div className="record-selector-row">
           <label>
