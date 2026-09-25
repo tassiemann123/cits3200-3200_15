@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from pydantic import BaseModel, ConfigDict
 
 
@@ -79,3 +79,24 @@ class CoordinateOut(BaseModel):
 
 class SkeletonWithCoordinates(SkeletonOut):
     coordinates: List[CoordinateOut] = []
+
+
+class DesktopWorkspaceCreate(BaseModel):
+    project: dict[str, Any]
+
+
+class DesktopWorkspaceUpdate(DesktopWorkspaceCreate):
+    expected_revision: int
+
+
+class DesktopWorkspaceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    workspace_id: str
+    name: str
+    revision: int
+    updated_at: datetime
+
+
+class DesktopWorkspaceOut(DesktopWorkspaceSummary):
+    project: dict[str, Any]

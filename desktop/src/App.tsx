@@ -15,10 +15,25 @@ import SceneControls from './components/SceneControls';
 import PopupModal from './components/PopupModal';
 import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
+import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
 const CURRENT_GRAVEYARD_STORAGE_KEY = 'osteo.desktop.currentGraveyard.v1';
+const BACKEND_LINK_KEY = 'osteo.desktop.backendLink.v1';
+type BackendLink = { workspaceId: string; revision: number };
+
+function restoreBackendLink(): BackendLink | null {
+  try {
+    if (!localStorage.getItem(STORAGE_KEY)) return null;
+    const raw = localStorage.getItem(BACKEND_LINK_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<BackendLink>;
+    return typeof value.workspaceId === 'string' && Number.isInteger(value.revision) && value.revision! > 0
+      ? { workspaceId: value.workspaceId, revision: value.revision! }
+      : null;
+  } catch { return null; }
+}
 
 // Restore the previous project, falling back to an old project or a blank one.
 function restoreProject(): { project: Project; error: string | null } {
@@ -206,9 +221,17 @@ export default function App() {
   const [editGraveyardName, setEditGraveyardName] = useState('');
   const [newGraveyardName, setNewGraveyardName] = useState('');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saving');
+  const [backendLink, setBackendLink] = useState<BackendLink | null>(restoreBackendLink);
+  const [backendState, setBackendState] = useState<'local' | 'saving' | 'saved' | 'offline' | 'conflict'>('local');
+  const [remoteWorkspaces, setRemoteWorkspaces] = useState<RemoteWorkspaceSummary[]>([]);
+  const [selectedRemote, setSelectedRemote] = useState<RemoteWorkspaceSummary | null>(null);
+  const savingRemote = useRef(false);
+  const skipNextDirty = useRef(false);
+  const projectRef = useRef(project);
+  projectRef.current = project;
   const [storageBlocked, setStorageBlocked] = useState(Boolean(initial.error));
   const [toast, setToast] = useState(initial.error ?? '');
-  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | null>(null);
+  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | 'remote-list' | 'remote-confirm' | null>(null);
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
   const [deleteGraveyardId, setDeleteGraveyardId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
@@ -229,6 +252,88 @@ export default function App() {
 
   const visibleCount = currentIndividuals.filter(individual => individual.visible).length;
   const notify = (message: string) => setToast(message);
+
+  const updateBackendLink = (link: BackendLink | null) => {
+    setBackendLink(link);
+    try {
+      if (link) localStorage.setItem(BACKEND_LINK_KEY, JSON.stringify(link));
+      else localStorage.removeItem(BACKEND_LINK_KEY);
+    } catch { notify('Backend link could not be saved on this device.'); }
+  };
+
+  const saveWorkspace = async () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+      notify('Local saving failed. Export a workspace backup before closing the app.');
+      return;
+    }
+    if (savingRemote.current) return;
+    if (!navigator.onLine) {
+      setBackendState('offline');
+      notify('Saved on this device. Connect to the backend and press Save again to sync.');
+      return;
+    }
+    savingRemote.current = true;
+    setBackendState('saving');
+    const snapshot = project;
+    try {
+      const remote = await saveRemoteWorkspace(snapshot, backendLink);
+      updateBackendLink({ workspaceId: remote.workspace_id, revision: remote.revision });
+      setBackendState(projectRef.current === snapshot ? 'saved' : 'local');
+      notify('Desktop workspace saved to the backend.');
+    } catch (error) {
+      if (error instanceof BackendApiError && error.status === 404) {
+        updateBackendLink(null);
+        notify('The linked backend workspace was removed. Press Save again to create a new desktop workspace.');
+      } else if (error instanceof BackendApiError && error.status === 409) {
+        setBackendState('conflict');
+        notify('Backend workspace changed elsewhere. Export your local work, then open the backend copy to compare.');
+      } else {
+        setBackendState('offline');
+        notify(`Saved locally; backend sync failed: ${error instanceof Error ? error.message : 'backend unavailable'}`);
+      }
+    } finally {
+      savingRemote.current = false;
+    }
+  };
+
+  const openBackendList = async () => {
+    try {
+      const workspaces = await listRemoteWorkspaces();
+      setRemoteWorkspaces(workspaces);
+      setModal('remote-list');
+    } catch (error) {
+      notify(`Could not reach the backend: ${error instanceof Error ? error.message : 'backend unavailable'}`);
+    }
+  };
+
+  const openRemoteWorkspace = async () => {
+    if (!selectedRemote) return;
+    try {
+      const remote = await loadRemoteWorkspace(selectedRemote.workspace_id);
+      const next = remote.project;
+      const nextGraveyards = next.graveyards?.length ? next.graveyards : [{ id: 'GY-001', name: 'Graveyard 1' }];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      skipNextDirty.current = true;
+      setProject(next);
+      setGraveyards(nextGraveyards);
+      setCurrentGraveyardId(nextGraveyards[0].id);
+      setSelectedId(next.individuals[0]?.id ?? '');
+      setJointId(next.individuals[0]?.joints[0]?.id ?? '');
+      updateBackendLink({ workspaceId: remote.workspace_id, revision: remote.revision });
+      setStorageBlocked(false);
+      setBackendState('saved');
+      setSelectedRemote(null);
+      setModal(null);
+      setFrameKey(value => value + 1);
+      notify('Desktop workspace loaded from the backend and saved locally.');
+    } catch (error) {
+      notify(`Could not open workspace: ${error instanceof Error ? error.message : 'backend unavailable'}`);
+    }
+  };
 
   // Update one property of the currently selected skeleton.
   const changeIndividual = (fn: (individual: Individual) => Individual) => {
@@ -264,6 +369,14 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [project, storageBlocked]);
+
+  useEffect(() => {
+    if (skipNextDirty.current) {
+      skipNextDirty.current = false;
+      return;
+    }
+    setBackendState(previous => previous === 'conflict' ? previous : 'local');
+  }, [project]);
 
   useEffect(() => {
     const flush = () => {
@@ -568,10 +681,9 @@ export default function App() {
           setModal('new-graveyard');
         }}
         
-        onSave={() => {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-          notify('Workspace saved.');
-        }}
+        onSave={() => { void saveWorkspace(); }}
+        onOpenBackend={() => { void openBackendList(); }}
+        backendState={backendState}
         onExport={() => setModal('export')}
       />
 
@@ -742,6 +854,10 @@ export default function App() {
           title={
             modal === 'export'
               ? 'Take your work with you.'
+              : modal === 'remote-list'
+                ? 'Desktop workspaces on the backend'
+                : modal === 'remote-confirm'
+                  ? 'Open backend workspace?'
               : modal === 'add'
                 ? 'Add a skeleton'
                 : modal === 'delete'
@@ -759,6 +875,32 @@ export default function App() {
             setDeleteSkeletonId(null);
           }}
         >
+          {modal === 'remote-list' && (
+            <>
+              <p>Select a desktop workspace. Mobile records are stored separately.</p>
+              <div className="remote-workspace-list">
+                {remoteWorkspaces.length === 0 && <p>No desktop workspaces have been saved yet.</p>}
+                {remoteWorkspaces.map(remote => (
+                  <button className="remote-workspace-choice" key={remote.workspace_id} onClick={() => { setSelectedRemote(remote); setModal('remote-confirm'); }}>
+                    <strong>{remote.name}</strong>
+                    <small>{new Date(remote.updated_at).toLocaleString()}</small>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {modal === 'remote-confirm' && selectedRemote && (
+            <>
+              <p>Opening <strong>{selectedRemote.name}</strong> replaces the workspace saved on this device.</p>
+              <p className="input-hint">Export your local workspace first if you need to keep it.</p>
+              <div className="button-row">
+                <button className="button" onClick={() => setModal('remote-list')}>Cancel</button>
+                <button className="button primary" onClick={() => { void openRemoteWorkspace(); }}>Open workspace</button>
+              </div>
+            </>
+          )}
+
           {modal === 'new-graveyard' && (
             <form
               onSubmit={event => {
@@ -1018,15 +1160,22 @@ export default function App() {
                 <button
                   className="button primary"
                   onClick={() => {
+                    updateBackendLink(null);
+                    setBackendState('local');
+                    const importedGraveyards = pendingProject.graveyards?.length
+                      ? pendingProject.graveyards
+                      : [{ id: 'GY-001', name: 'Graveyard 1' }];
                     setProject({
                       ...pendingProject,
+                      graveyards: importedGraveyards,
                       individuals: pendingProject.individuals.map(individual => ({
                         ...individual,
-                        graveyardId: individual.graveyardId ?? 'GY-001',
+                        graveyardId: individual.graveyardId ?? importedGraveyards[0].id,
                       })),
                     });
 
-                    setCurrentGraveyardId(pendingProject.individuals[0]?.graveyardId ?? 'GY-001');
+                    setGraveyards(importedGraveyards);
+                    setCurrentGraveyardId(pendingProject.individuals[0]?.graveyardId ?? importedGraveyards[0].id);
                     setSelectedId(pendingProject.individuals[0]?.id ?? '');
                     setJointId(pendingProject.individuals[0]?.joints[0]?.id ?? '');
                     setStorageBlocked(false);
