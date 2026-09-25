@@ -10,6 +10,7 @@ import {
   PanelRight,
   RotateCcw,
   ShieldCheck,
+  Skull,
   X,
   ZoomIn,
   ZoomOut,
@@ -462,11 +463,44 @@ export function App() {
     }));
   };
 
-  const setCoordinate = (point: PointName, axis: 0 | 1 | 2, value: number | null) => {
+  /**
+   * boneIndex 0 is the joint's primary coordinate (record.coordinates),
+   * matching the original single-coordinate behaviour exactly. A boneIndex
+   * above 0 addresses an additional contributing bone at a multi-bone
+   * joint (see boneLabelsFor in cfaSchema.ts) and is stored separately in
+   * extraBoneCoordinates, seeded from whatever it currently displays as
+   * (the primary bone's value, until edited) so the first edit "splits"
+   * it off rather than silently overwriting the primary coordinate.
+   */
+  const setCoordinate = (point: PointName, boneIndex: number, axis: 0 | 1 | 2, value: number | null) => {
     patchActiveRecord((record) => {
-      const coordinate: CoordinateDraft = [...(record.coordinates[point] ?? [null, null, null])] as CoordinateDraft;
+      if (boneIndex === 0) {
+        const coordinate: CoordinateDraft = [...(record.coordinates[point] ?? [null, null, null])] as CoordinateDraft;
+        coordinate[axis] = value;
+        return { ...record, coordinates: { ...record.coordinates, [point]: coordinate } };
+      }
+      const existingExtras = record.extraBoneCoordinates?.[point] ?? [];
+      const baseline = existingExtras[boneIndex - 1] ?? record.coordinates[point] ?? [null, null, null];
+      const coordinate: CoordinateDraft = [...baseline] as CoordinateDraft;
       coordinate[axis] = value;
-      return { ...record, coordinates: { ...record.coordinates, [point]: coordinate } };
+      const nextExtras = [...existingExtras];
+      nextExtras[boneIndex - 1] = coordinate;
+      return {
+        ...record,
+        extraBoneCoordinates: { ...record.extraBoneCoordinates, [point]: nextExtras },
+      };
+    });
+  };
+
+  /** Marks one specific contributing bone at a multi-bone joint present/absent, separately from a whole excluded group. */
+  const setBonePresence = (point: PointName, boneIndex: number, present: boolean) => {
+    const key = `${point}:${boneIndex}`;
+    patchActiveRecord((record) => {
+      const current = record.excludedBones ?? [];
+      return {
+        ...record,
+        excludedBones: present ? current.filter((entry) => entry !== key) : [...new Set([...current, key])],
+      };
     });
   };
 
@@ -480,13 +514,16 @@ export function App() {
   };
 
   const resetCoordinates = () => {
-    const hasData = Object.keys(activeRecord.coordinates).length > 0 || activeRecord.excludedGroups.length > 0;
+    const hasData = Object.keys(activeRecord.coordinates).length > 0
+      || activeRecord.excludedGroups.length > 0
+      || Object.keys(activeRecord.extraBoneCoordinates ?? {}).length > 0
+      || (activeRecord.excludedBones?.length ?? 0) > 0;
     if (!hasData) {
       notify("This record is already empty");
       return;
     }
     if (!window.confirm(`Reset all coordinates and presence settings for ${activeRecord.name}?`)) return;
-    patchActiveRecord((record) => ({ ...record, coordinates: {}, excludedGroups: [] }));
+    patchActiveRecord((record) => ({ ...record, coordinates: {}, excludedGroups: [], extraBoneCoordinates: {}, excludedBones: [] }));
     notify(`${activeRecord.name} coordinates reset`);
   };
 
@@ -541,6 +578,8 @@ export function App() {
           id: `skeleton-record-${crypto.randomUUID()}`,
           name: record.name,
           coordinates: record.coordinates,
+          extraBoneCoordinates: record.extraBoneCoordinates,
+          excludedBones: record.excludedBones,
           excludedGroups: [],
           notes: "",
           graveyardId: graveyard.id,
@@ -572,6 +611,31 @@ export function App() {
     } catch (error) {
       console.error("Coordinate import failed", error);
       notify("The coordinate CSV could not be read");
+    }
+  };
+
+  /**
+   * Loads the bundled "lying down" reference dataset as a brand-new
+   * skeleton record, via the same CSV import path a user-supplied file
+   * goes through -- so it gets the same graveyard/record creation,
+   * warnings, and notifications as any other import, rather than a
+   * separate one-off code path. The bundled CSV is just the standing
+   * reference's own coordinates with the Y and Z columns swapped, which
+   * (given cfaLandmarkToWorld's [x, z, y] mapping) turns a vertical,
+   * standing pose into a flat, horizontal one without touching any
+   * rendering code -- the pose is still built purely from the real
+   * coordinate differences between joints either way.
+   */
+  const loadLyingDownDefault = async () => {
+    try {
+      const response = await fetch("/samples/standard-skeleton-lying-coordinates.csv");
+      if (!response.ok) throw new Error(`Fetch failed with status ${response.status}`);
+      const csvText = await response.text();
+      const file = new File([csvText], "standard-skeleton-lying-coordinates.csv", { type: "text/csv" });
+      await importCoordinateCsv(file);
+    } catch (error) {
+      console.error("Loading the lying-down default failed", error);
+      notify("Could not load the default lying-down skeleton");
     }
   };
 
@@ -622,6 +686,7 @@ export function App() {
               <button type="button" className={showLandmarks ? "active" : ""} onClick={() => setShowLandmarks((value) => !value)} title="Landmark markers"><MapPin size={18} /></button>
               <button type="button" onClick={() => viewportRef.current?.focusModel()} title="Focus model"><Focus size={18} /></button>
               <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
+              <button type="button" onClick={() => void loadLyingDownDefault()} title="Load lying-down default skeleton"><Skull size={18} /></button>
             </div>
           </div>
           <button type="button" className="active-record-badge" onClick={() => showPanel("coordinates")}>
@@ -674,6 +739,7 @@ export function App() {
                 onCreateRecord={addRecord}
                 onRenameRecord={(name) => patchActiveRecord((record) => ({ ...record, name }))}
                 onCoordinateChange={setCoordinate}
+                onBonePresenceChange={setBonePresence}
                 onGroupPresenceChange={setGroupPresence}
                 onResetCoordinates={resetCoordinates}
                 onImportCsv={(file) => void importCoordinateCsv(file)}

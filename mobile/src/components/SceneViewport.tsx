@@ -5,9 +5,10 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
+import { pieceLandmarkId } from "../data/cfaSchema";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
-import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
-import { poseSkeletonPiece, type PieceRestInfo } from "../lib/skeletonPose";
+import { landmarksToDisplayPositions, centroid, cfaLandmarkToWorld } from "../lib/coordinates";
+import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
   resetCamera: () => void;
@@ -190,20 +191,32 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
     resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
   }
 
-  function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined): void {
+  function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined, invert = false): void {
     const raw = rawByName.get(nodeName);
     if (!raw || !anchor) return;
     const dMin = raw.tipMin.distanceTo(anchor);
     const dMax = raw.tipMax.distanceTo(anchor);
-    const fromTip = dMin < dMax ? raw.tipMin : raw.tipMax;
-    const toTip = dMin < dMax ? raw.tipMax : raw.tipMin;
+    const nearTip = dMin < dMax ? raw.tipMin : raw.tipMax;
+    const farTip = dMin < dMax ? raw.tipMax : raw.tipMin;
+    const fromTip = invert ? farTip : nearTip;
+    const toTip = invert ? nearTip : farTip;
     resolved.set(nodeName, withOrder(raw, fromTip, toTip));
   }
 
-  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip);
-  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip);
-  resolveAgainst("SK_RArmUp", resolved.get("SK_RClavicle")?.toTip);
-  resolveAgainst("SK_LArmUp", resolved.get("SK_LClavicle")?.toTip);
+  // The clavicle pieces are anchored at the shoulder end now (from:
+  // left/right_shoulder, to: manubrium -- see skeletonPieces.ts), so their
+  // fromTip must be the shoulder-side vertex, not the manubrium-side one.
+  // We still only have the manubrium position (the spine's own resolved
+  // toTip) as a known anchor at this point in the walk, so `invert: true`
+  // flips the near/far assignment: the tip CLOSER to the manubrium becomes
+  // toTip, and the farther one (the shoulder side) becomes fromTip.
+  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip, true);
+  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip, true);
+  // The upper arm's proximal (shoulder) end sits at the same physical
+  // point as the clavicle's own shoulder-side vertex -- now the
+  // clavicle's fromTip (see above), not its toTip.
+  resolveAgainst("SK_RArmUp", resolved.get("SK_RClavicle")?.fromTip);
+  resolveAgainst("SK_LArmUp", resolved.get("SK_LClavicle")?.fromTip);
   resolveAgainst("SK_RArmDown", resolved.get("SK_RArmUp")?.toTip);
   resolveAgainst("SK_LArmDown", resolved.get("SK_LArmUp")?.toTip);
   resolveAgainst("SK_HandR", resolved.get("SK_RArmDown")?.toTip);
@@ -536,29 +549,43 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist, twistForward, rigidWith, offsetFromRatio }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
-      const fromPos = positions.get(from);
-      const toPos = positions.get(to);
+      // A piece naming a specific bone (fromBone/toBone) reads that bone's
+      // own entered position at a shared joint, rather than the joint's
+      // first-listed bone -- see pieceLandmarkId in cfaSchema.ts. This is
+      // what makes two disarticulated bones actually show a gap here,
+      // rather than only being recorded in the exported data.
+      const fromPos = positions.get(pieceLandmarkId(from, fromBone));
+      const toPos = positions.get(pieceLandmarkId(to, toBone));
       if (!fromPos || !toPos) {
         piece.object.visible = false;
         return;
       }
       // The twist landmark is optional even when the piece declares one --
-      // an archaeologist may not have recorded it yet -- and a piece can
-      // declare several landmarks to be averaged together instead of one
-      // (see the SK_Side comment in skeletonPieces.ts for why). Falling
-      // back to no twist correction just means this piece keeps its old
-      // two-point-only behaviour until those coordinates are entered.
+      // an archaeologist may not have recorded it yet, or (for a bilateral
+      // pair like the two ASIS points) marked the whole side "not present"
+      // -- and a piece can declare several landmarks to be averaged
+      // together instead of one (see the SK_Side comment in
+      // skeletonPieces.ts for why). Averaging whichever of those landmarks
+      // are actually available, rather than demanding every one of them,
+      // matters more than it looks: dropping to NO twist correction isn't
+      // a graceful "keeps its old two-point-only behaviour" fallback the
+      // way it sounds -- confirmed by actually toggling a side's pelvis
+      // group off on the live app -- it's the exact pre-fix broken
+      // orientation the twist correction exists to prevent (the ribcage
+      // and both clavicles spin to show their back/underside, since the
+      // bare two-point rotation never guaranteed a correct facing on its
+      // own; see the twistForward comment in skeletonPieces.ts). A single
+      // remaining landmark is a real but imperfect stand-in (biased toward
+      // that one side rather than the true midline), which is still far
+      // closer than a full flip.
       const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
       const twistSamples = twistLandmarks
         .map((point) => positions.get(point))
         .filter((pos): pos is Vec3 => pos !== undefined);
-      const twistPos =
-        twistSamples.length > 0 && twistSamples.length === twistLandmarks.length
-          ? centroid(twistSamples)
-          : undefined;
+      const twistPos = twistSamples.length > 0 ? centroid(twistSamples) : undefined;
 
       const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
       // A piece with no real second landmark of its own (currently just
@@ -570,6 +597,33 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
           ? toVector.clone().addScaledVector(bodyUpDirection, -offsetFromRatio * spineTargetLength)
           : new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]);
 
+      // Independently orients a single-landmark piece (currently just the
+      // pelvis) from three of its own landmarks -- see orientationTriangle
+      // in skeletonPieces.ts. Left undefined (falling back to rigidWith
+      // below) whenever a landmark is missing or the triangle turns out
+      // degenerate, rather than ever silently posing the pelvis unrotated.
+      let orientationOverride: THREE.Quaternion | undefined;
+      if (orientationTriangle) {
+        const leftPos = positions.get(orientationTriangle.left);
+        const rightPos = positions.get(orientationTriangle.right);
+        const anchorPos = positions.get(orientationTriangle.anchor);
+        if (leftPos && rightPos && anchorPos) {
+          // rest*/restAnchor are stored as raw entered CFA coordinates (see
+          // the doc comment in skeletonPieces.ts), not display/world space
+          // -- run them through the same cfaLandmarkToWorld conversion
+          // landmarksToDisplayPositions applies to everything else, so this
+          // stays correct even if that axis convention is ever revisited.
+          orientationOverride = computeTriangleQuaternion(
+            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft)),
+            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight)),
+            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor)),
+            new THREE.Vector3(...leftPos),
+            new THREE.Vector3(...rightPos),
+            new THREE.Vector3(...anchorPos),
+          );
+        }
+      }
+
       poseSkeletonPiece(
         piece.object,
         piece.rest,
@@ -580,6 +634,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         bodyScale,
         twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined,
         rigidWith ? posedTransforms.get(rigidWith) : undefined,
+        orientationOverride,
       );
       posedTransforms.set(nodeName, { quaternion: piece.object.quaternion.clone(), scale: piece.object.scale.clone() });
     });

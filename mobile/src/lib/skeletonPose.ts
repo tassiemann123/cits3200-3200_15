@@ -60,6 +60,63 @@ export interface PieceRestInfo {
 const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
 
 /**
+ * Builds an orthonormal frame from three points: `xAxis` runs right-to-left
+ * (from `right` to `left`), and the frame's other two axes come from
+ * whatever component of the direction toward `anchor` is left over once
+ * the part already along `xAxis` is removed -- i.e. `anchor` just needs to
+ * sit somewhere off the left-right line, not at any particular angle.
+ * Returns undefined if the three points are degenerate for this purpose
+ * (left and right coincide, or anchor sits exactly on their line), since
+ * there's then no reliable frame to build.
+ */
+function frameFromTriangle(left: THREE.Vector3, right: THREE.Vector3, anchor: THREE.Vector3): THREE.Matrix4 | undefined {
+  const xAxis = new THREE.Vector3().subVectors(left, right);
+  if (xAxis.lengthSq() < 1e-10) return undefined;
+  xAxis.normalize();
+
+  const midpoint = new THREE.Vector3().addVectors(left, right).multiplyScalar(0.5);
+  const towardAnchor = new THREE.Vector3().subVectors(anchor, midpoint);
+  const inPlane = towardAnchor.addScaledVector(xAxis, -towardAnchor.dot(xAxis));
+  if (inPlane.lengthSq() < 1e-10) return undefined;
+  inPlane.normalize();
+
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, inPlane).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  return new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+}
+
+/**
+ * Independently orients a single-landmark piece (the pelvis) from three of
+ * its own landmarks, instead of borrowing another piece's rotation -- see
+ * `orientationTriangle` in skeletonPieces.ts for the full rationale. Builds
+ * a frame from the rest (neutral-pose) triangle and another from the
+ * entered (current) triangle, and returns the rotation that takes one to
+ * the other: identity when the entered triangle matches the rest triangle
+ * exactly, and rotating away from identity in proportion to how much the
+ * entered triangle actually differs.
+ *
+ * Returns undefined if either triangle is degenerate (see
+ * frameFromTriangle) -- the caller should fall back to something else
+ * (currently `rigidWith`) rather than silently applying no rotation.
+ */
+export function computeTriangleQuaternion(
+  restLeft: THREE.Vector3,
+  restRight: THREE.Vector3,
+  restAnchor: THREE.Vector3,
+  curLeft: THREE.Vector3,
+  curRight: THREE.Vector3,
+  curAnchor: THREE.Vector3,
+): THREE.Quaternion | undefined {
+  const restFrame = frameFromTriangle(restLeft, restRight, restAnchor);
+  const curFrame = frameFromTriangle(curLeft, curRight, curAnchor);
+  if (!restFrame || !curFrame) return undefined;
+
+  const restQuat = new THREE.Quaternion().setFromRotationMatrix(restFrame);
+  const curQuat = new THREE.Quaternion().setFromRotationMatrix(curFrame);
+  return curQuat.multiply(restQuat.invert());
+}
+
+/**
  * Repositions, rotates, and stretches a single rigid mesh piece so its
  * long axis spans from `fromTarget` to `toTarget`, measured in the same
  * coordinate space as the piece's own untransformed position (i.e. the
@@ -89,6 +146,14 @@ export function poseSkeletonPiece(
   bodyScale?: number,
   twistForward: THREE.Vector3 = NATIVE_FORWARD,
   rigidTransform?: { quaternion: THREE.Quaternion; scale: THREE.Vector3 },
+  /**
+   * Takes precedence over `rigidTransform` for a single-landmark piece's
+   * rotation -- see `orientationTriangle` in skeletonPieces.ts and
+   * computeTriangleQuaternion above. `rigidTransform` still supplies the
+   * fallback rotation when this is undefined (landmarks missing, or the
+   * triangle was degenerate).
+   */
+  orientationOverride?: THREE.Quaternion,
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
@@ -97,8 +162,21 @@ export function poseSkeletonPiece(
     // sockets, ischium) is below the sacral attachment, not centred on it
     // -- so topTip (not the piece's overall centre) is what should land
     // on that landmark.
-    const quaternion = rigidTransform ? rigidTransform.quaternion : new THREE.Quaternion();
-    const scale = rigidTransform ? rigidTransform.scale : new THREE.Vector3(1, 1, 1);
+    // Only the ROTATION is actually borrowed rigidly from the referenced
+    // piece -- its own scale isn't, since a piece stretched with "rod"
+    // (the spine) carries an anisotropic scale (stretched along just its
+    // own long axis) that means nothing applied to a different piece's
+    // own local axes. The coccyx needs to resize with the patient's
+    // stature like any other anchor-style piece, uniformly, via the same
+    // bodyScale every such piece already uses -- not inherit a stretch
+    // factor that was only ever meant for its rigid neighbour's own shape.
+    const quaternion = orientationOverride ?? (rigidTransform ? rigidTransform.quaternion : new THREE.Quaternion());
+    // Scaling with the patient's stature only ever made sense because the
+    // one piece that takes this branch (the pelvis) also always supplied
+    // bodyScale alongside rigidTransform -- decoupled here from *how* its
+    // rotation was determined, since that's a separate concern now that
+    // there are two possible sources for it.
+    const scale = bodyScale !== undefined ? new THREE.Vector3(bodyScale, bodyScale, bodyScale) : new THREE.Vector3(1, 1, 1);
     piece.quaternion.copy(quaternion);
     piece.scale.copy(scale);
     const scaledTopTip = rest.topTip.clone().multiply(scale).applyQuaternion(quaternion);
