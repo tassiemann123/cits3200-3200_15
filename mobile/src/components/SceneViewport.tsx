@@ -1,12 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
-import type { Landmark, ModelLoadState } from "../types";
+import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
+import { ALL_CFA_POINTS } from "../data/cfaSchema";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
-import { landmarksToDisplayPositions } from "../lib/coordinates";
+import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
@@ -20,6 +21,7 @@ interface SceneViewportProps {
   modelUrl: string;
   modelName: string;
   showGrid: boolean;
+  showLandmarks: boolean;
   landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
 }
@@ -36,7 +38,7 @@ const DISPLAY_HEIGHT = 1.7;
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
-    if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments || object instanceof THREE.Points) {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
       object.geometry?.dispose();
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((material) => material?.dispose());
@@ -219,10 +221,12 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { modelUrl, modelName, showGrid, landmarks, onLoadStateChange },
+  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const invalidateRef = useRef<() => void>(() => {});
+  const [modelRevision, setModelRevision] = useState(0);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -380,18 +384,28 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      invalidateRef.current();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(host);
     resize();
 
     let frame = 0;
+    const invalidate = () => {
+      if (!frame && !document.hidden) frame = requestAnimationFrame(render);
+    };
     const render = () => {
-      frame = requestAnimationFrame(render);
+      frame = 0;
+      const { width, height } = host.getBoundingClientRect();
+      if (document.hidden || width === 0 || height === 0) return;
+      // OrbitControls emits change events while damping settles.
       controls.update();
       renderer.render(scene, camera);
     };
-    render();
+    invalidateRef.current = invalidate;
+    controls.addEventListener("change", invalidate);
+    document.addEventListener("visibilitychange", invalidate);
+    invalidate();
 
     rendererRef.current = renderer;
     sceneRef.current = scene;
@@ -403,6 +417,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
     return () => {
       cancelAnimationFrame(frame);
+      invalidateRef.current = () => {};
+      controls.removeEventListener("change", invalidate);
+      document.removeEventListener("visibilitychange", invalidate);
       observer.disconnect();
       controls.dispose();
       disposeObject(scene);
@@ -422,7 +439,19 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
   useEffect(() => {
     if (gridRef.current) gridRef.current.visible = showGrid;
+    invalidateRef.current();
   }, [showGrid]);
+
+  // Lets a researcher hide the entered-coordinate overlay (the yellow
+  // joint markers and their connecting "bone" lines) to see the bare
+  // reference model underneath, without losing or re-entering the
+  // coordinates themselves -- the overlay-building effect below still
+  // runs on every landmark change, this just controls whether its result
+  // is shown.
+  useEffect(() => {
+    if (overlayRef.current) overlayRef.current.visible = showLandmarks;
+    invalidateRef.current();
+  }, [showLandmarks]);
 
   // Draws the entered CFA coordinates as a joint-and-bone stick figure, so a
   // researcher can visually compare it against the skeleton in the grave.
@@ -435,46 +464,57 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     const overlay = overlayRef.current;
     if (!overlay) return;
 
-    overlay.children.slice().forEach((child) => {
-      overlay.remove(child);
-      disposeObject(child);
-    });
-
     // depthTest disabled so entered points stay visible even when they sit
     // "inside" the solid reference mesh (e.g. torso points behind the ribcage) --
     // this is a see-through comparison overlay, not physical geometry.
-    const jointGeometry = new THREE.SphereGeometry(0.025, 12, 12);
-    const jointMaterial = new THREE.MeshStandardMaterial({
-      color: "#F4C542",
-      roughness: 0.4,
-      depthTest: false,
-      depthWrite: false,
-    });
-    const boneMaterial = new THREE.LineBasicMaterial({
-      color: "#F4C542",
-      depthTest: false,
-      depthWrite: false,
-    });
+    // Allocate once, then update positions/visibility without GPU churn.
+    if (overlay.children.length === 0) {
+      const jointGeometry = new THREE.SphereGeometry(0.025, 12, 12);
+      const jointMaterial = new THREE.MeshStandardMaterial({
+        color: "#F4C542",
+        roughness: 0.4,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const boneMaterial = new THREE.LineBasicMaterial({
+        color: "#F4C542",
+        depthTest: false,
+        depthWrite: false,
+      });
 
+      ALL_CFA_POINTS.forEach((id) => {
+        const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+        joint.name = id;
+        overlay.add(joint);
+      });
+      CFA_CONNECTIONS.forEach(([from, to]) => {
+        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geometry, boneMaterial);
+        line.userData.endpoints = [from, to];
+        overlay.add(line);
+      });
+    }
     const positionById = landmarksToDisplayPositions(landmarks);
-
-    landmarks.forEach((landmark) => {
-      const joint = new THREE.Mesh(jointGeometry, jointMaterial);
-      const [px, py, pz] = positionById.get(landmark.id)!;
-      joint.position.set(px, py, pz);
-      overlay.add(joint);
-    });
-
-    CFA_CONNECTIONS.forEach(([fromId, toId]) => {
+    overlay.children.forEach((child) => {
+      if (child instanceof THREE.Mesh) {
+        const position = positionById.get(child.name);
+        child.visible = Boolean(position);
+        if (position) child.position.set(...position);
+        return;
+      }
+      if (!(child instanceof THREE.Line)) return;
+      const [fromId, toId] = child.userData.endpoints as [string, string];
       const from = positionById.get(fromId);
       const to = positionById.get(toId);
+      child.visible = Boolean(from && to);
       if (!from || !to) return;
-      const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(from[0], from[1], from[2]),
-        new THREE.Vector3(to[0], to[1], to[2]),
-      ]);
-      overlay.add(new THREE.Line(geometry, boneMaterial));
+      const positions = child.geometry.getAttribute("position");
+      positions.setXYZ(0, ...from);
+      positions.setXYZ(1, ...to);
+      positions.needsUpdate = true;
+      child.geometry.computeBoundingSphere();
     });
+    invalidateRef.current();
   }, [landmarks]);
 
   // Poses each of the 18 known skeleton pieces directly from the entered
@@ -493,17 +533,39 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     // comment in poseSkeletonPiece for why this is an approximation, not
     // an exact fix.
     let bodyScale: number | undefined;
+    let spineTargetLength: number | undefined;
     const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
     const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
     const spineFromPos = spineSpec ? positions.get(spineSpec.from) : undefined;
     const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
-    if (spinePiece && spineFromPos && spineToPos) {
+    if (spineFromPos && spineToPos) {
+      spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
+    }
+    if (spinePiece && spineTargetLength !== undefined) {
       const restLength = spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip);
-      const targetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
-      if (restLength > 1e-6) bodyScale = targetLength / restLength;
+      if (restLength > 1e-6) bodyScale = spineTargetLength / restLength;
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist }) => {
+    // Tracked so a `rigidWith` piece (see skeletonPieces.ts) can copy the
+    // rotation/scale another, already-posed piece ended up with, instead
+    // of defaulting to an identity rotation that ignores how the body is
+    // actually posed. Relies on that referenced piece appearing earlier in
+    // SKELETON_PIECES, so its transform is already in here by the time a
+    // later piece looks it up.
+    const posedTransforms = new Map<string, { quaternion: THREE.Quaternion; scale: THREE.Vector3 }>();
+
+    // The body's own current "up" direction (sacral_promontory -> head_
+    // proximal), used to synthesise the skull's missing second landmark
+    // (see `offsetFromRatio` in skeletonPieces.ts). Derived from the
+    // entered pose rather than assumed to be world-up, since a body can
+    // be recorded lying down.
+    let bodyUpDirection: THREE.Vector3 | undefined;
+    if (spineFromPos && spineToPos) {
+      const up = new THREE.Vector3(...spineToPos).sub(new THREE.Vector3(...spineFromPos));
+      if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
+    }
+
+    SKELETON_PIECES.forEach(({ nodeName, from, to, stretch, twist, twistForward, rigidWith, offsetFromRatio }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       const fromPos = positions.get(from);
@@ -512,24 +574,48 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         piece.object.visible = false;
         return;
       }
-      // The twist landmark (e.g. chin) is optional even when the piece
-      // declares one -- an archaeologist may not have recorded it yet.
-      // Falling back to no twist correction just means this piece keeps
-      // its old two-point-only behaviour until that coordinate is entered.
-      const twistPos = twist ? positions.get(twist) : undefined;
+      // The twist landmark is optional even when the piece declares one --
+      // an archaeologist may not have recorded it yet -- and a piece can
+      // declare several landmarks to be averaged together instead of one
+      // (see the SK_Side comment in skeletonPieces.ts for why). Falling
+      // back to no twist correction just means this piece keeps its old
+      // two-point-only behaviour until those coordinates are entered.
+      const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
+      const twistSamples = twistLandmarks
+        .map((point) => positions.get(point))
+        .filter((pos): pos is Vec3 => pos !== undefined);
+      const twistPos =
+        twistSamples.length > 0 && twistSamples.length === twistLandmarks.length
+          ? centroid(twistSamples)
+          : undefined;
+
+      const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
+      // A piece with no real second landmark of its own (currently just
+      // the skull, since `centre_of_head` was removed) gets one
+      // synthesised here instead of reusing `from`'s (identical) position
+      // -- see the `offsetFromRatio` comment in skeletonPieces.ts for why.
+      const fromVector =
+        offsetFromRatio !== undefined && bodyUpDirection && spineTargetLength !== undefined
+          ? toVector.clone().addScaledVector(bodyUpDirection, -offsetFromRatio * spineTargetLength)
+          : new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]);
+
       poseSkeletonPiece(
         piece.object,
         piece.rest,
-        new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]),
-        new THREE.Vector3(toPos[0], toPos[1], toPos[2]),
+        fromVector,
+        toVector,
         stretch,
         twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined,
         bodyScale,
+        twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined,
+        rigidWith ? posedTransforms.get(rigidWith) : undefined,
       );
+      posedTransforms.set(nodeName, { quaternion: piece.object.quaternion.clone(), scale: piece.object.scale.clone() });
     });
     const content = contentRef.current;
     if (content) modelBoxRef.current = new THREE.Box3().setFromObject(content);
-  }, [landmarks]);
+    invalidateRef.current();
+  }, [landmarks, modelRevision]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -540,6 +626,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     });
     modelBoxRef.current = null;
     piecesRef.current = new Map();
+    invalidateRef.current();
     onLoadStateChange("loading");
 
     let cancelled = false;
@@ -635,6 +722,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
             contentRef.current!.add(object);
           });
           piecesRef.current = foundPieces;
+          setModelRevision((revision) => revision + 1);
           modelBoxRef.current = new THREE.Box3().setFromObject(contentRef.current);
           onLoadStateChange("ready");
           return;
@@ -675,6 +763,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         contentRef.current.add(pivot);
         pivot.updateMatrixWorld(true);
         modelBoxRef.current = new THREE.Box3().setFromObject(pivot);
+        invalidateRef.current();
         onLoadStateChange("ready");
       },
       undefined,

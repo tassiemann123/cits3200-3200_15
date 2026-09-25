@@ -49,7 +49,7 @@ describe('bone-owned desktop coordinates', () => {
     const relinked = setJointLinked(person, 'left_knee', true);
     expect(knee(relinked).endpoints[1].coordinate).toEqual(knee(person).endpoints[0].coordinate);
     expect(knee(person).linked).toBe(false);
-    expect(setJointLinked(person, 'proximal_skull', true).joints.find((j) => j.id === 'proximal_skull')!.linked).toBe(false);
+    expect(setJointLinked(person, 'head_proximal', true).joints.find((j) => j.id === 'head_proximal')!.linked).toBe(false);
   });
 
   it('does not invent a missing femur when neighbouring pelvic and leg coordinates exist', () => {

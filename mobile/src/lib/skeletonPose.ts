@@ -45,12 +45,17 @@ export interface PieceRestInfo {
 }
 
 /**
- * Every piece in the bundled GLB was modelled facing the same way in its
- * untransformed rest pose -- confirmed directly by isolating the skull
- * mesh and checking which axis its face actually protrudes along -- so
- * this is a fixed constant for the whole model, not something measured
- * per piece. Only pieces that opt in with a `twist` landmark (see
- * SkeletonPieceSpec) use it.
+ * Default facing direction for a piece's twist correction, in that
+ * piece's own untransformed rest-pose local space. Confirmed directly for
+ * the skull by isolating its mesh and checking which axis its face
+ * actually protrudes along, and for SK_Side (the ribcage) by rendering a
+ * posed front and back view and checking the sternum -- not the shoulder
+ * blades -- landed on the front one. An earlier pass got SK_Side's check
+ * backwards and shipped it with a -Z override; this is only a default,
+ * not a guaranteed whole-model constant, so `twistForward` (see
+ * SkeletonPieceSpec) stays available for a future piece whose modelled
+ * front genuinely does run the other way -- just verify it by actually
+ * rendering both sides, not by eyeballing the raw mesh.
  */
 const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
 
@@ -60,8 +65,19 @@ const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
  * coordinate space as the piece's own untransformed position (i.e. the
  * piece must be parented under a group with no transform of its own).
  *
- * If both targets are the same point, the piece is just translated there
- * with no rotation or stretch -- for single-anchor pieces like the pelvis.
+ * If both targets are the same point, the piece is just translated there.
+ * By default that also means no rotation or stretch at all -- fine for a
+ * piece that's genuinely orientation-free, but wrong for one that's
+ * rigidly fused to a neighbouring two-point piece (the coccyx is fused to
+ * the sacrum/ribcage assembly, not free-floating): left at the identity
+ * rotation, it would keep facing however it happened to sit in the rest
+ * pose no matter which way the rest of the body has actually been posed
+ * -- looking fine for a standing skeleton (which is close to the rest
+ * pose already) but visibly hanging off at the wrong angle for any other
+ * orientation, a lying-down pose included. `rigidTransform` lets such a
+ * piece instead copy the rotation and scale another, already-posed piece
+ * ended up with, so the two move as the one rigid unit they anatomically
+ * are.
  */
 export function poseSkeletonPiece(
   piece: THREE.Object3D,
@@ -71,17 +87,22 @@ export function poseSkeletonPiece(
   stretch: "rod" | "uniform" | "anchor" = "rod",
   twistTarget?: THREE.Vector3,
   bodyScale?: number,
+  twistForward: THREE.Vector3 = NATIVE_FORWARD,
+  rigidTransform?: { quaternion: THREE.Quaternion; scale: THREE.Vector3 },
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
-    // attachment point from. The one piece this applies to (the pelvis)
-    // hangs from its single landmark at the *top* -- most of its mass
-    // (hip sockets, ischium) is below the sacral attachment, not centred
-    // on it -- so topTip (not the piece's overall centre) is what should
-    // land on that landmark.
-    piece.quaternion.identity();
-    piece.scale.set(1, 1, 1);
-    piece.position.copy(fromTarget).sub(rest.topTip);
+    // attachment point from. Most such pieces (the pelvis/coccyx) hang
+    // from their single landmark at the *top* -- most of their mass (hip
+    // sockets, ischium) is below the sacral attachment, not centred on it
+    // -- so topTip (not the piece's overall centre) is what should land
+    // on that landmark.
+    const quaternion = rigidTransform ? rigidTransform.quaternion : new THREE.Quaternion();
+    const scale = rigidTransform ? rigidTransform.scale : new THREE.Vector3(1, 1, 1);
+    piece.quaternion.copy(quaternion);
+    piece.scale.copy(scale);
+    const scaledTopTip = rest.topTip.clone().multiply(scale).applyQuaternion(quaternion);
+    piece.position.copy(fromTarget).sub(scaledTopTip);
     piece.visible = true;
     return;
   }
@@ -103,9 +124,9 @@ export function poseSkeletonPiece(
   const restLength = Math.max(localTo.distanceTo(localFrom), 1e-6);
   // For "anchor" pieces, the two assigned landmarks are just reference
   // points on the piece -- not necessarily its two extreme ends the way a
-  // limb's joints are (the gap between "centre_of_head" and
-  // "head_proximal" is a fraction of the skull's actual height, for
-  // instance). Sizing the piece to match *that* gap directly
+  // limb's joints are (the gap between "manubrium" and "left_shoulder"
+  // is nowhere near the clavicle's own real length, for instance).
+  // Sizing the piece to match *that* gap directly
   // would shrink or balloon it to something with no real relationship to
   // its actual size. But leaving it permanently frozen at 1 is its own
   // problem: a skeleton entered at infant proportions would still get an
@@ -159,7 +180,7 @@ export function poseSkeletonPiece(
   // rotation *about* that axis, i.e. exactly the twist correction needed,
   // leaving the primary alignment above untouched.
   if (twistTarget) {
-    const rotatedForward = NATIVE_FORWARD.clone().applyQuaternion(quaternion);
+    const rotatedForward = twistForward.clone().applyQuaternion(quaternion);
     const projRotated = rotatedForward.clone().addScaledVector(targetDir, -rotatedForward.dot(targetDir));
     const targetForwardRaw = new THREE.Vector3().subVectors(twistTarget, fromTarget);
     const projTarget = targetForwardRaw.clone().addScaledVector(targetDir, -targetForwardRaw.dot(targetDir));

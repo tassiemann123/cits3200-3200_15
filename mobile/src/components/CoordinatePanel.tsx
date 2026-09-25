@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Ban, Check, CloudDownload, Download, Plus, RotateCcw, Save, Upload } from "lucide-react";
+import { CoordinateInput } from "./CoordinateInput";
+import { Ban, Check, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
 import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
-import type { SkeletonRecord } from "../types";
+import type { SkeletonRecord, WorkspaceGraveyard } from "../types";
 
 interface CoordinatePanelProps {
   records: SkeletonRecord[];
   activeRecord: SkeletonRecord;
+  graveyards: WorkspaceGraveyard[];
+  selectedGraveyardId?: string;
+  onSelectGraveyard: (graveyardId: string) => void;
+  onCreateGraveyard: () => void;
+  onRenameGraveyard: (name: string) => void;
   onSelectRecord: (recordId: string) => void;
   onCreateRecord: () => void;
   onRenameRecord: (name: string) => void;
@@ -26,9 +32,14 @@ function isComplete(record: SkeletonRecord, point: PointName): boolean {
   return Boolean(coordinate?.every((value) => value !== null && Number.isFinite(value)));
 }
 
-export function CoordinatePanel({
-  records,
-  activeRecord,
+export function CoordinatePanel({ 
+  records, 
+  activeRecord, 
+  graveyards, 
+  selectedGraveyardId,
+  onSelectGraveyard,
+  onCreateGraveyard,
+  onRenameGraveyard,
   onSelectRecord,
   onCreateRecord,
   onRenameRecord,
@@ -38,7 +49,6 @@ export function CoordinatePanel({
   onImportCsv,
   onExportRecord,
   onSave,
-  onLoadFromBackend,
   backendStatus,
   canExport,
 }: CoordinatePanelProps) {
@@ -47,6 +57,46 @@ export function CoordinatePanel({
   const fullViewportHeightRef = useRef(0);
   const [focusedCoordinate, setFocusedCoordinate] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [isRenamingGraveyard, setIsRenamingGraveyard] = useState(false);
+  const [graveyardNameDraft, setGraveyardNameDraft] = useState("");
+  const [isRenamingRecord, setIsRenamingRecord] = useState(false);
+  const [recordNameDraft, setRecordNameDraft] = useState("");
+  
+  const selectedGraveyard = graveyards.find((graveyard) => graveyard.id === selectedGraveyardId);
+
+  const startRenamingGraveyard = () => {
+    setGraveyardNameDraft(selectedGraveyard?.name ?? "");
+    setIsRenamingGraveyard(true);
+  };
+
+  const cancelRenamingGraveyard = () => {
+    setGraveyardNameDraft(selectedGraveyard?.name ?? "");
+    setIsRenamingGraveyard(false);
+  };
+
+  const saveGraveyardName = () => {
+    const name = graveyardNameDraft.trim();
+    if (!name) return;
+    onRenameGraveyard(name);
+    setIsRenamingGraveyard(false);
+  };
+
+  const startRenamingRecord = () => {
+    setRecordNameDraft(activeRecord.name);
+    setIsRenamingRecord(true);
+  };
+
+  const cancelRenamingRecord = () => {
+    setRecordNameDraft(activeRecord.name);
+    setIsRenamingRecord(false);
+  };
+
+  const saveRecordName = () => {
+    const name = recordNameDraft.trim();
+    if (!name) return;
+    onRenameRecord(name);
+    setIsRenamingRecord(false);
+  };
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -104,16 +154,6 @@ export function CoordinatePanel({
     return group ? !activeRecord.excludedGroups.includes(group.id) : true;
   });
   const completedPoints = availablePoints.filter((point) => isComplete(activeRecord, point)).length;
-  const completion = availablePoints.length === 0 ? 0 : Math.round((completedPoints / availablePoints.length) * 100);
-  const backendRecordLabel = activeRecord.backendId
-    ? "Linked to backend"
-    : backendStatus === "online"
-      ? "Backend ready · not synced yet"
-      : backendStatus === "syncing"
-        ? "Syncing backend…"
-        : backendStatus === "checking"
-          ? "Checking backend…"
-          : "Offline · saved locally";
 
   return (
     <aside ref={panelRef} className="panel coordinate-panel" onBlurCapture={handlePanelBlur}>
@@ -128,37 +168,109 @@ export function CoordinatePanel({
       <div className="record-card">
         <div className="record-selector-row">
           <label>
-            Skeleton record
-            <select value={activeRecord.id} onChange={(event) => onSelectRecord(event.target.value)}>
-              {records.map((record) => <option key={record.id} value={record.id}>{record.name}</option>)}
-            </select>
+            Graveyard
+            {isRenamingGraveyard ? (
+              <input
+                className="inline-name-input"
+                value={graveyardNameDraft}
+                maxLength={255}
+                aria-label="Graveyard name"
+                autoFocus
+                onChange={(event) => setGraveyardNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveGraveyardName();
+                  if (event.key === "Escape") cancelRenamingGraveyard();
+                }}
+              />
+            ) : (
+              <select
+                value={selectedGraveyardId ?? ""}
+                onChange={(event) => onSelectGraveyard(event.target.value)}
+              >
+                {graveyards.map((graveyard) => (
+                  <option key={graveyard.id} value={graveyard.id}>
+                    {graveyard.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
-          <button type="button" className="new-record-button" onClick={onCreateRecord} title="Create skeleton record">
-            <Plus size={16} /> New
-          </button>
+
+          <div className="record-action">
+            {isRenamingGraveyard ? (
+              <>
+                <button type="button" className="edit-name-button confirm" onClick={saveGraveyardName} disabled={!graveyardNameDraft.trim()} title="Save graveyard name" aria-label="Save graveyard name">
+                  <Check size={16} />
+                </button>
+                <button type="button" className="edit-name-button" onClick={cancelRenamingGraveyard} title="Cancel renaming" aria-label="Cancel renaming">
+                  <X size={16} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="edit-name-button" onClick={startRenamingGraveyard} disabled={!selectedGraveyard} title="Rename graveyard" aria-label="Rename graveyard">
+                  <Pencil size={15} />
+                </button>
+                <button type="button" className="new-record-button" onClick={onCreateGraveyard} title="Create graveyard">
+                  <Plus size={16} /> New
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <label className="record-name-field">
-          Record name
-          <input
-            value={activeRecord.name}
-            maxLength={80}
-            placeholder="Untitled skeleton"
-            onChange={(event) => onRenameRecord(event.target.value)}
-            onBlur={(event) => onRenameRecord(event.target.value.trim() || "Untitled skeleton")}
-          />
-        </label>
-        <div className="backend-record-row">
-          <span className={activeRecord.backendId || backendStatus === "online" ? "linked" : "local"}>
-            {backendRecordLabel}
-          </span>
-          <button type="button" onClick={onLoadFromBackend} disabled={backendStatus === "syncing"}>
-            <CloudDownload size={13} /> {backendStatus === "syncing" ? "Syncing…" : "Load backend"}
-          </button>
+
+        <div className="record-selector-row">
+          <label>
+            Skeleton record
+            {isRenamingRecord ? (
+              <input
+                className="inline-name-input"
+                value={recordNameDraft}
+                maxLength={80}
+                aria-label="Skeleton record name"
+                autoFocus
+                onChange={(event) => setRecordNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveRecordName();
+                  if (event.key === "Escape") cancelRenamingRecord();
+                }}
+              />
+            ) : (
+              <select
+                value={activeRecord.id}
+                onChange={(event) => onSelectRecord(event.target.value)}
+              >
+                {records.map((record) => (
+                  <option key={record.id} value={record.id}>
+                    {record.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+
+          <div className="record-action">
+            {isRenamingRecord ? (
+              <>
+                <button type="button" className="edit-name-button confirm" onClick={saveRecordName} disabled={!recordNameDraft.trim()} title="Save skeleton record name" aria-label="Save skeleton record name">
+                  <Check size={16} />
+                </button>
+                <button type="button" className="edit-name-button" onClick={cancelRenamingRecord} title="Cancel renaming" aria-label="Cancel renaming">
+                  <X size={16} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="edit-name-button" onClick={startRenamingRecord} title="Rename skeleton record" aria-label="Rename skeleton record">
+                  <Pencil size={15} />
+                </button>
+                <button type="button" className="new-record-button" onClick={onCreateRecord} title="Create skeleton record">
+                  <Plus size={16} /> New
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <div className="coordinate-progress" aria-label={`${completion}% complete`}>
-          <span style={{ width: `${completion}%` }} />
-        </div>
-        <p>{completion}% complete · only complete X, Y, Z points are backend-ready</p>
       </div>
 
       <div className="coordinate-focus-banner" role="status" aria-live="polite">
@@ -200,25 +312,17 @@ export function CoordinatePanel({
                         </div>
                         <div className="axis-inputs">
                           {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
-                            <label key={axisLabel}>
-                              <span>{axisLabel}</span>
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                aria-label={`${pointLabel(point)} ${axisLabel}`}
-                                value={coordinate[axis] ?? ""}
-                                onFocus={(event) => focusCoordinate(
-                                  event.currentTarget,
+                              <CoordinateInput
+                                key={`${activeRecord.id}:${point}:${axis}`}
+                                axis={axisLabel}
+                                label={`${pointLabel(point)} ${axisLabel}`}
+                                value={coordinate[axis] ?? null}
+                                onFocus={(input) => focusCoordinate(
+                                  input,
                                   `${group.label} · ${pointLabel(point)} · ${axisLabel}`,
                                 )}
-                                onChange={(event) => {
-                                  const rawValue = event.target.value;
-                                  const value = rawValue === "" ? null : Number(rawValue);
-                                  onCoordinateChange(point, axis as 0 | 1 | 2, Number.isFinite(value) ? value : null);
-                                }}
+                                onChange={(value) => onCoordinateChange(point, axis as 0 | 1 | 2, value)}
                               />
-                            </label>
                           ))}
                         </div>
                       </div>

@@ -17,6 +17,30 @@ export interface BackendGraveyard {
   created_at: string;
 }
 
+export async function loadGraveyards(): Promise<BackendGraveyard[]> {
+  return await request<BackendGraveyard[]>("/graveyards/");
+}
+
+export async function createGraveyard(name: string): Promise<BackendGraveyard> {
+  return await request<BackendGraveyard>("/graveyards/", {
+    method: "POST",
+    body: JSON.stringify({
+      name: name.trim().slice(0, 255),
+    }),
+  });
+}
+
+export async function renameGraveyard(
+  graveyardId: string,
+  name: string,
+): Promise<BackendGraveyard> {
+  return await request<BackendGraveyard>(`/graveyards/${graveyardId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: name.trim().slice(0, 255),
+    }),
+  });
+}
 export interface BackendCoordinate {
   coordinate_id: string;
   skeleton_id: string;
@@ -246,6 +270,7 @@ export function backendSkeletonToRecord(
     coordinates,
     excludedGroups: existingRecord?.excludedGroups ?? [],
     notes: skeleton.description ?? "",
+    graveyardId: skeleton.graveyard_id,
     backendId: skeleton.skeleton_id,
     lastSyncedAt: new Date().toISOString(),
   };

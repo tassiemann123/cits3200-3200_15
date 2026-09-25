@@ -17,35 +17,47 @@ describe("coordinate CSV transfer", () => {
   it("exports only complete, present coordinates with backend headers", () => {
     const csv = serialiseCoordinateCsv(record({
       coordinates: {
-        centre_of_head: [1.25, 2, -3],
+        head_proximal: [1.25, 2, -3],
         chin: [4, null, 6],
         left_shoulder: [7, 8, 9],
       },
       excludedGroups: ["left_arm"],
-    }));
+    }), "Test Graveyard");
 
     expect(csv).toBe(
-      "skeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",centre_of_head,1.25,2,-3\r\n",
+      "Graveyard Name,Test Graveyard\r\n\r\nskeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",head_proximal,1.25,2,-3\r\n",
     );
   });
 
   it("round-trips exported coordinates", () => {
-    const original = record({ coordinates: { head_proximal: [1, 2, 3], right_toes: [-4, 5.5, 6] } });
-    const result = parseCoordinateCsv(serialiseCoordinateCsv(original));
+    const original = record({
+      coordinates: {
+        head_proximal: [1, 2, 3],
+        right_toes: [-4, 5.5, 6],
+      },
+    });
+
+    const result = parseCoordinateCsv(
+      serialiseCoordinateCsv(original, "Test Graveyard"),
+    );
 
     expect(result.warnings).toEqual([]);
+    expect(result.graveyardName).toBe("Test Graveyard");
     expect(result.records).toEqual([{
       name: "Skeleton, A",
-      coordinates: { head_proximal: [1, 2, 3], right_toes: [-4, 5.5, 6] },
+      coordinates: {
+        head_proximal: [1, 2, 3],
+        right_toes: [-4, 5.5, 6],
+      },
     }]);
   });
 
   it("accepts display labels and reports invalid rows", () => {
     const result = parseCoordinateCsv(
-      "skeleton_id,joint_name,x,y,z\nBP1,Centre Of Head,1,2,3\nBP1,Unknown,4,5,6\nBP1,Chin,,8,9\n",
+      "skeleton_id,joint_name,x,y,z\nBP1, head_proximal ,1,2,3\nBP1,Unknown,4,5,6\nBP1,Chin,,8,9\n",
     );
 
-    expect(result.records[0].coordinates.centre_of_head).toEqual([1, 2, 3]);
+    expect(result.records[0].coordinates.head_proximal).toEqual([1, 2, 3]);
     expect(result.warnings).toHaveLength(2);
   });
 });
