@@ -1,4 +1,4 @@
-import { Upload, Pencil, Plus, Save } from 'lucide-react';
+import { Upload, Pencil, Plus, Save, FolderOpen } from 'lucide-react';
 
 interface HeaderProps {
   graveyards: { id: string; name: string }[];
@@ -7,6 +7,8 @@ interface HeaderProps {
   onManageGraveyard: () => void;
   onNewGraveyard: () => void;
   onSave: () => void;
+  onOpenBackend: () => void;
+  backendState: 'local' | 'saving' | 'saved' | 'offline' | 'conflict';
   onExport: () => void;
 }
 
@@ -17,6 +19,8 @@ export default function Header({
   onManageGraveyard,
   onNewGraveyard,
   onSave,
+  onOpenBackend,
+  backendState,
   onExport,
 }: HeaderProps) {
   return (
@@ -50,7 +54,14 @@ export default function Header({
           <Plus size={16} />
         </button>
 
-        <button className="header-button" onClick={onSave}>
+        <button className="header-button" onClick={onOpenBackend} title="Open a desktop workspace from the backend">
+          <FolderOpen size={16} />
+          Open from backend
+        </button>
+
+        <span className="backend-state" role="status">{backendState === 'saved' ? 'Backend saved' : backendState === 'saving' ? 'Syncing…' : backendState === 'conflict' ? 'Backend conflict' : backendState === 'offline' ? 'Local only' : 'Local changes'}</span>
+
+        <button className="header-button" onClick={onSave} disabled={backendState === 'saving'} title="Save locally and sync this desktop workspace">
           <Save size={16} />
           Save
         </button>
