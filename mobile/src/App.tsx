@@ -31,6 +31,7 @@ import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv"
 import { exportCsv } from "./lib/csvExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
 import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel, WorkspaceGraveyard } from "./types";
+import { useDeviceHeading } from "./lib/useDeviceHeading";
 
 const SceneViewport = lazy(async () => {
   const module = await import("./components/SceneViewport");
@@ -222,6 +223,12 @@ export function App() {
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);
   }, []);
+
+// Added Compass and GPS function caller  
+const deviceHeading = useDeviceHeading();
+useEffect(() => {
+  console.log("device heading state:", deviceHeading);
+}, [deviceHeading]);
 
   // Coordinate entry is field data, so every edit is persisted locally as
   // soon as React commits it. Backend synchronisation remains explicit.
