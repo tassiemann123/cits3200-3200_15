@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { CoordinateInput } from "./CoordinateInput";
-import { Ban, Check, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
-import { ALL_CFA_POINTS, CFA_GROUPS, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
+import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ALL_CFA_POINTS, boneLabelsFor, CFA_GROUPS, groupForBone, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
-import type { SkeletonRecord, WorkspaceGraveyard } from "../types";
+import type { CoordinateDraft, SkeletonRecord, WorkspaceGraveyard } from "../types";
 
 interface CoordinatePanelProps {
   records: SkeletonRecord[];
@@ -16,7 +16,8 @@ interface CoordinatePanelProps {
   onSelectRecord: (recordId: string) => void;
   onCreateRecord: () => void;
   onRenameRecord: (name: string) => void;
-  onCoordinateChange: (point: PointName, axis: 0 | 1 | 2, value: number | null) => void;
+  onCoordinateChange: (point: PointName, boneIndex: number, axis: 0 | 1 | 2, value: number | null) => void;
+  onBonePresenceChange: (point: PointName, boneIndex: number, present: boolean) => void;
   onGroupPresenceChange: (groupId: PointGroupId, present: boolean) => void;
   onResetCoordinates: () => void;
   onImportCsv: (file: File) => void;
@@ -32,6 +33,27 @@ function isComplete(record: SkeletonRecord, point: PointName): boolean {
   return Boolean(coordinate?.every((value) => value !== null && Number.isFinite(value)));
 }
 
+/**
+ * The coordinate for one contributing bone at a joint. Bone 0 is always
+ * record.coordinates[point] -- the same value isComplete() above checks,
+ * unchanged by the multi-bone feature. A bone above 0 mirrors bone 0
+ * until it's been edited independently (auto-duplicate), at which point
+ * it's read from extraBoneCoordinates instead.
+ */
+function boneCoordinate(record: SkeletonRecord, point: PointName, boneIndex: number): CoordinateDraft {
+  if (boneIndex === 0) return record.coordinates[point] ?? [null, null, null];
+  return record.extraBoneCoordinates?.[point]?.[boneIndex - 1] ?? record.coordinates[point] ?? [null, null, null];
+}
+
+function isBonePresent(record: SkeletonRecord, point: PointName, boneIndex: number): boolean {
+  return !(record.excludedBones ?? []).includes(`${point}:${boneIndex}`);
+}
+
+function isBoneComplete(record: SkeletonRecord, point: PointName, boneIndex: number): boolean {
+  if (!isBonePresent(record, point, boneIndex)) return true;
+  return boneCoordinate(record, point, boneIndex).every((value) => value !== null && Number.isFinite(value));
+}
+
 export function CoordinatePanel({ 
   records, 
   activeRecord, 
@@ -44,6 +66,7 @@ export function CoordinatePanel({
   onCreateRecord,
   onRenameRecord,
   onCoordinateChange,
+  onBonePresenceChange,
   onGroupPresenceChange,
   onResetCoordinates,
   onImportCsv,
@@ -147,6 +170,52 @@ export function CoordinatePanel({
         setKeyboardOpen(false);
       }
     });
+  };
+
+  /**
+   * One contributing bone's presence toggle + (if present) its X/Y/Z
+   * inputs. Shared by a multi-bone point's normal render and by the
+   * "escaped" render below, so a bone governed by a different group than
+   * the one it's displayed under (see groupForBone in cfaSchema.ts --
+   * currently just each acetabulum's "Thigh (proximal)" bone) renders
+   * identically either way, just outside its usual group's point list.
+   */
+  const renderBoneRow = (group: { label: string }, point: PointName, boneLabel: string, boneIndex: number) => {
+    const bonePresent = isBonePresent(activeRecord, point, boneIndex);
+    const coordinate = boneCoordinate(activeRecord, point, boneIndex);
+    return (
+      <div className={`coordinate-bone-row ${bonePresent ? "" : "absent"}`} key={`${point}:${boneIndex}`}>
+        <div className="coordinate-bone-heading">
+          <span>{boneLabel}</span>
+          <button
+            type="button"
+            className={bonePresent ? "present" : "absent"}
+            aria-pressed={bonePresent}
+            onClick={() => onBonePresenceChange(point, boneIndex, !bonePresent)}
+          >
+            {bonePresent ? <Check size={11} /> : <Ban size={11} />}
+            {bonePresent ? "Present" : "Not present"}
+          </button>
+        </div>
+        {bonePresent && (
+          <div className="axis-inputs">
+            {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
+                <CoordinateInput
+                  key={`${activeRecord.id}:${point}:${boneIndex}:${axis}`}
+                  axis={axisLabel}
+                  label={`${pointLabel(point)} · ${boneLabel} ${axisLabel}`}
+                  value={coordinate[axis] ?? null}
+                  onFocus={(input) => focusCoordinate(
+                    input,
+                    `${group.label} · ${pointLabel(point)} · ${boneLabel} · ${axisLabel}`,
+                  )}
+                  onChange={(value) => onCoordinateChange(point, boneIndex, axis as 0 | 1 | 2, value)}
+                />
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const availablePoints = ALL_CFA_POINTS.filter((point) => {
@@ -281,6 +350,23 @@ export function CoordinatePanel({
       <div className="coordinate-scroll-area">
         {CFA_GROUPS.map((group) => {
           const present = !activeRecord.excludedGroups.includes(group.id);
+
+          // Bones inside this group's own points that are actually
+          // governed by a DIFFERENT group's presence toggle (see
+          // groupForBone in cfaSchema.ts) -- currently just each
+          // acetabulum's "Thigh (proximal)" bone, filed here under the
+          // pelvis for display but governed by the leg's own presence.
+          // These keep showing, and stay independently editable, even
+          // while this group itself is marked not present -- marking the
+          // pelvis absent is a statement about the hip bone, not the femur.
+          const escapedBones = group.points.flatMap((point) => {
+            const boneLabels = boneLabelsFor(point);
+            if (!boneLabels) return [];
+            return boneLabels
+              .map((boneLabel, boneIndex) => ({ point, boneLabel, boneIndex, ownerGroupId: groupForBone(point, boneIndex) }))
+              .filter((entry) => entry.ownerGroupId !== group.id);
+          });
+
           return (
             <section className={`coordinate-group ${present ? "" : "excluded"}`} key={group.id}>
               <div className="coordinate-group-heading">
@@ -302,35 +388,71 @@ export function CoordinatePanel({
               {present ? (
                 <div className="coordinate-point-list">
                   {group.points.map((point) => {
-                    const coordinate = activeRecord.coordinates[point] ?? [null, null, null];
+                    const boneLabels = boneLabelsFor(point);
                     const complete = isComplete(activeRecord, point);
+
+                    if (!boneLabels) {
+                      const coordinate = activeRecord.coordinates[point] ?? [null, null, null];
+                      return (
+                        <div className={`coordinate-point-row ${complete ? "complete" : ""}`} key={point}>
+                          <div className="coordinate-point-name">
+                            <span>{complete ? <Check size={11} /> : null}</span>
+                            <strong>{pointLabel(point)}</strong>
+                          </div>
+                          <div className="axis-inputs">
+                            {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
+                                <CoordinateInput
+                                  key={`${activeRecord.id}:${point}:${axis}`}
+                                  axis={axisLabel}
+                                  label={`${pointLabel(point)} ${axisLabel}`}
+                                  value={coordinate[axis] ?? null}
+                                  onFocus={(input) => focusCoordinate(
+                                    input,
+                                    `${group.label} · ${pointLabel(point)} · ${axisLabel}`,
+                                  )}
+                                  onChange={(value) => onCoordinateChange(point, 0, axis as 0 | 1 | 2, value)}
+                                />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Multi-bone joint: one X/Y/Z row per contributing bone.
+                    // A bone that hasn't been edited independently mirrors
+                    // bone 0's value (auto-duplicate) until it's changed.
+                    const allBonesComplete = boneLabels.every((_, boneIndex) => isBoneComplete(activeRecord, point, boneIndex));
                     return (
-                      <div className={`coordinate-point-row ${complete ? "complete" : ""}`} key={point}>
+                      <div className={`coordinate-point-row multi-bone ${allBonesComplete ? "complete" : ""}`} key={point}>
                         <div className="coordinate-point-name">
-                          <span>{complete ? <Check size={11} /> : null}</span>
+                          <span>{allBonesComplete ? <Check size={11} /> : null}</span>
                           <strong>{pointLabel(point)}</strong>
+                          <small className="bone-count-pill">{boneLabels.length} bones</small>
                         </div>
-                        <div className="axis-inputs">
-                          {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
-                              <CoordinateInput
-                                key={`${activeRecord.id}:${point}:${axis}`}
-                                axis={axisLabel}
-                                label={`${pointLabel(point)} ${axisLabel}`}
-                                value={coordinate[axis] ?? null}
-                                onFocus={(input) => focusCoordinate(
-                                  input,
-                                  `${group.label} · ${pointLabel(point)} · ${axisLabel}`,
-                                )}
-                                onChange={(value) => onCoordinateChange(point, axis as 0 | 1 | 2, value)}
-                              />
-                          ))}
-                        </div>
+                        {boneLabels.map((boneLabel, boneIndex) => renderBoneRow(group, point, boneLabel, boneIndex))}
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="excluded-group-copy">This anatomical group will be omitted from backend output.</p>
+                <>
+                  <p className="excluded-group-copy">This anatomical group will be omitted from backend output.</p>
+                  {escapedBones.length > 0 && (
+                    <div className="coordinate-point-list">
+                      {escapedBones.map(({ point, boneLabel, boneIndex, ownerGroupId }) => (
+                        <div className="coordinate-point-row multi-bone" key={`${point}:${boneIndex}`}>
+                          <div className="coordinate-point-name">
+                            <strong>{pointLabel(point)}</strong>
+                            <small className="bone-count-pill">
+                              tracks with {CFA_GROUPS.find((candidate) => candidate.id === ownerGroupId)?.label ?? ownerGroupId}
+                            </small>
+                          </div>
+                          {renderBoneRow(group, point, boneLabel, boneIndex)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </section>
           );
