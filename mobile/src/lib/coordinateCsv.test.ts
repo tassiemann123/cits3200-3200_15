@@ -24,8 +24,10 @@ describe("coordinate CSV transfer", () => {
       excludedGroups: ["left_arm"],
     }), "Test Graveyard");
 
-    expect(csv).toBe(
-      "Graveyard Name,Test Graveyard\r\n\r\nskeleton_id,joint_name,x,y,z\r\n\"Skeleton, A\",head_proximal,1.25,2,-3\r\n",
+console.log(JSON.stringify(csv));
+
+      expect(csv).toBe(
+      "Graveyard Name,Test Graveyard\r\n\r\nskeleton_id,joint_name,bone,x,y,z,present\r\n\"Skeleton, A\",head_proximal,,1.25,2,-3,yes\r\n",
     );
   });
 
@@ -49,6 +51,8 @@ describe("coordinate CSV transfer", () => {
         head_proximal: [1, 2, 3],
         right_toes: [-4, 5.5, 6],
       },
+      excludedBones: [],
+      extraBoneCoordinates: {},
     }]);
   });
 

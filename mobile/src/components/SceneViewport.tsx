@@ -1,11 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
-import { pieceLandmarkId } from "../data/cfaSchema";
+import { ALL_CFA_POINTS, pieceLandmarkId } from "../data/cfaSchema";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid, cfaLandmarkToWorld } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
@@ -38,7 +38,7 @@ const DISPLAY_HEIGHT = 1.7;
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
-    if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments || object instanceof THREE.Points) {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
       object.geometry?.dispose();
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((material) => material?.dispose());
@@ -237,6 +237,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const invalidateRef = useRef<() => void>(() => {});
+  const [modelRevision, setModelRevision] = useState(0);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -394,18 +396,28 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      invalidateRef.current();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(host);
     resize();
 
     let frame = 0;
+    const invalidate = () => {
+      if (!frame && !document.hidden) frame = requestAnimationFrame(render);
+    };
     const render = () => {
-      frame = requestAnimationFrame(render);
+      frame = 0;
+      const { width, height } = host.getBoundingClientRect();
+      if (document.hidden || width === 0 || height === 0) return;
+      // OrbitControls emits change events while damping settles.
       controls.update();
       renderer.render(scene, camera);
     };
-    render();
+    invalidateRef.current = invalidate;
+    controls.addEventListener("change", invalidate);
+    document.addEventListener("visibilitychange", invalidate);
+    invalidate();
 
     rendererRef.current = renderer;
     sceneRef.current = scene;
@@ -417,6 +429,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
     return () => {
       cancelAnimationFrame(frame);
+      invalidateRef.current = () => {};
+      controls.removeEventListener("change", invalidate);
+      document.removeEventListener("visibilitychange", invalidate);
       observer.disconnect();
       controls.dispose();
       disposeObject(scene);
@@ -436,6 +451,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
 
   useEffect(() => {
     if (gridRef.current) gridRef.current.visible = showGrid;
+    invalidateRef.current();
   }, [showGrid]);
 
   // Lets a researcher hide the entered-coordinate overlay (the yellow
@@ -446,6 +462,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   // is shown.
   useEffect(() => {
     if (overlayRef.current) overlayRef.current.visible = showLandmarks;
+    invalidateRef.current();
   }, [showLandmarks]);
 
   // Draws the entered CFA coordinates as a joint-and-bone stick figure, so a
@@ -459,46 +476,57 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     const overlay = overlayRef.current;
     if (!overlay) return;
 
-    overlay.children.slice().forEach((child) => {
-      overlay.remove(child);
-      disposeObject(child);
-    });
-
     // depthTest disabled so entered points stay visible even when they sit
     // "inside" the solid reference mesh (e.g. torso points behind the ribcage) --
     // this is a see-through comparison overlay, not physical geometry.
-    const jointGeometry = new THREE.SphereGeometry(0.025, 12, 12);
-    const jointMaterial = new THREE.MeshStandardMaterial({
-      color: "#F4C542",
-      roughness: 0.4,
-      depthTest: false,
-      depthWrite: false,
-    });
-    const boneMaterial = new THREE.LineBasicMaterial({
-      color: "#F4C542",
-      depthTest: false,
-      depthWrite: false,
-    });
+    // Allocate once, then update positions/visibility without GPU churn.
+    if (overlay.children.length === 0) {
+      const jointGeometry = new THREE.SphereGeometry(0.025, 12, 12);
+      const jointMaterial = new THREE.MeshStandardMaterial({
+        color: "#F4C542",
+        roughness: 0.4,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const boneMaterial = new THREE.LineBasicMaterial({
+        color: "#F4C542",
+        depthTest: false,
+        depthWrite: false,
+      });
 
+      ALL_CFA_POINTS.forEach((id) => {
+        const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+        joint.name = id;
+        overlay.add(joint);
+      });
+      CFA_CONNECTIONS.forEach(([from, to]) => {
+        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        const line = new THREE.Line(geometry, boneMaterial);
+        line.userData.endpoints = [from, to];
+        overlay.add(line);
+      });
+    }
     const positionById = landmarksToDisplayPositions(landmarks);
-
-    landmarks.forEach((landmark) => {
-      const joint = new THREE.Mesh(jointGeometry, jointMaterial);
-      const [px, py, pz] = positionById.get(landmark.id)!;
-      joint.position.set(px, py, pz);
-      overlay.add(joint);
-    });
-
-    CFA_CONNECTIONS.forEach(([fromId, toId]) => {
+    overlay.children.forEach((child) => {
+      if (child instanceof THREE.Mesh) {
+        const position = positionById.get(child.name);
+        child.visible = Boolean(position);
+        if (position) child.position.set(...position);
+        return;
+      }
+      if (!(child instanceof THREE.Line)) return;
+      const [fromId, toId] = child.userData.endpoints as [string, string];
       const from = positionById.get(fromId);
       const to = positionById.get(toId);
+      child.visible = Boolean(from && to);
       if (!from || !to) return;
-      const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(from[0], from[1], from[2]),
-        new THREE.Vector3(to[0], to[1], to[2]),
-      ]);
-      overlay.add(new THREE.Line(geometry, boneMaterial));
+      const positions = child.geometry.getAttribute("position");
+      positions.setXYZ(0, ...from);
+      positions.setXYZ(1, ...to);
+      positions.needsUpdate = true;
+      child.geometry.computeBoundingSphere();
     });
+    invalidateRef.current();
   }, [landmarks]);
 
   // Poses each of the 18 known skeleton pieces directly from the entered
@@ -640,7 +668,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     });
     const content = contentRef.current;
     if (content) modelBoxRef.current = new THREE.Box3().setFromObject(content);
-  }, [landmarks]);
+    invalidateRef.current();
+  }, [landmarks, modelRevision]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -651,6 +680,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     });
     modelBoxRef.current = null;
     piecesRef.current = new Map();
+    invalidateRef.current();
     onLoadStateChange("loading");
 
     let cancelled = false;
@@ -746,6 +776,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
             contentRef.current!.add(object);
           });
           piecesRef.current = foundPieces;
+          setModelRevision((revision) => revision + 1);
           modelBoxRef.current = new THREE.Box3().setFromObject(contentRef.current);
           onLoadStateChange("ready");
           return;
@@ -786,6 +817,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         contentRef.current.add(pivot);
         pivot.updateMatrixWorld(true);
         modelBoxRef.current = new THREE.Box3().setFromObject(pivot);
+        invalidateRef.current();
         onLoadStateChange("ready");
       },
       undefined,
