@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { ALL_CFA_POINTS, type PointName } from "../data/cfaSchema";
-import type { SkeletonCoordinates, SkeletonRecord } from "../types";
-import { toBackendLandmarks } from "./backendCoordinates";
+import type { CoordinateDraft, SkeletonCoordinates, SkeletonRecord } from "../types";
+import { parseBackendJointName, toBackendLandmarks } from "./backendCoordinates";
 
 const BACKEND_TIMEOUT_MS = 7_000;
 const WORKSPACE_MARKER = "Created by Skeletal Coordinate App";
@@ -224,7 +224,7 @@ export async function syncSkeletonRecord(
     const desiredCoordinate = desiredByJoint.get(remoteCoordinate.joint_name);
     if (!desiredCoordinate) {
       // Preserve backend landmarks introduced by another client or schema.
-      if (!POINT_NAMES.has(remoteCoordinate.joint_name)) return;
+      if (!POINT_NAMES.has(parseBackendJointName(remoteCoordinate.joint_name).point)) return;
       await request<{ status: string }>(
         `/skeletons/${current.skeleton_id}/coordinates/${remoteCoordinate.coordinate_id}`,
         { method: "DELETE" },
@@ -259,15 +259,30 @@ export function backendSkeletonToRecord(
   existingRecord?: SkeletonRecord,
 ): SkeletonRecord {
   const coordinates: SkeletonCoordinates = {};
+  const extraBoneCoordinates: Partial<Record<PointName, CoordinateDraft[]>> = {};
+
   (skeleton.coordinates ?? []).forEach((coordinate) => {
-    if (!POINT_NAMES.has(coordinate.joint_name)) return;
-    coordinates[coordinate.joint_name as PointName] = [coordinate.x, coordinate.y, coordinate.z];
+    const { point, boneIndex } = parseBackendJointName(coordinate.joint_name);
+    if (!POINT_NAMES.has(point)) return;
+    const value: CoordinateDraft = [coordinate.x, coordinate.y, coordinate.z];
+    if (boneIndex === 0) {
+      coordinates[point as PointName] = value;
+    } else {
+      const extras = extraBoneCoordinates[point as PointName] ?? [];
+      extras[boneIndex - 1] = value;
+      extraBoneCoordinates[point as PointName] = extras;
+    }
   });
 
   return {
     id: existingRecord?.id ?? `skeleton-record-${crypto.randomUUID()}`,
     name: skeleton.name?.trim() || "Untitled skeleton",
     coordinates,
+    extraBoneCoordinates,
+    // The backend has no way to represent "explicitly marked absent" --
+    // a bone with no coordinate there is indistinguishable from one
+    // nobody's entered yet -- so this stays whatever it was locally.
+    excludedBones: existingRecord?.excludedBones ?? [],
     excludedGroups: existingRecord?.excludedGroups ?? [],
     notes: skeleton.description ?? "",
     graveyardId: skeleton.graveyard_id,

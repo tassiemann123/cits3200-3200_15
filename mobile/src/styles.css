@@ -176,6 +176,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .axis-inputs input { min-width: 0; width: 100%; height: 100%; padding: 0 5px; color: var(--text); border: 0; border-left: 1px solid var(--line); background: transparent; outline: 0; font: 500 9px/1 var(--mono); }
 .axis-inputs input::-webkit-inner-spin-button, .axis-inputs input::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .excluded-group-copy { margin: 0; padding: 0 11px 10px; color: #7b8186; font-size: 8px; line-height: 1.45; }
+.bone-count-pill { margin-left: auto; padding: 2px 6px; color: #7d8388; border: 1px solid var(--line); border-radius: 999px; font: 600 7px/1 var(--mono); letter-spacing: .04em; white-space: nowrap; }
+.coordinate-bone-row { padding: 6px 0 2px; }
+.coordinate-bone-row + .coordinate-bone-row { margin-top: 4px; border-top: 1px dashed rgba(53,92,125,.14); padding-top: 8px; }
+.coordinate-bone-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.coordinate-bone-heading > span { color: #7d858b; font-size: 8px; font-weight: 650; }
+.coordinate-bone-heading button { flex: 0 0 auto; height: 20px; display: flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 999px; font-size: 7px; font-weight: 750; cursor: pointer; }
+.coordinate-bone-heading button.present { color: var(--success); border: 1px solid rgba(85,122,99,.24); background: rgba(85,122,99,.08); }
+.coordinate-bone-heading button.absent { color: var(--danger); border: 1px solid rgba(168,92,85,.2); background: rgba(168,92,85,.06); }
+.coordinate-bone-row.absent .coordinate-bone-heading > span { color: var(--danger); opacity: .7; }
+
 .reset-coordinates-button { width: 100%; height: 36px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--danger); border: 1px solid rgba(168,92,85,.18); border-radius: 8px; background: rgba(168,92,85,.045); font-size: 9px; cursor: pointer; }
 .reset-coordinates-button:hover { background: rgba(168,92,85,.09); }
 .coordinate-action-bar { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0 -14px; padding: 10px 14px 12px; border-top: 1px solid var(--line); background: rgba(255,255,255,.98); box-shadow: 0 -12px 30px rgba(32,38,43,.08); }
