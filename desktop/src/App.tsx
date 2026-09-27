@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X } from 'lucide-react';
+import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X, ImageDown } from 'lucide-react';
 import {
   createBlankProject,
   createDemoProject,
@@ -15,6 +15,7 @@ import SceneControls from './components/SceneControls';
 import PopupModal from './components/PopupModal';
 import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
+import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow,} from '../../shared/coordinateCsv';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -214,6 +215,7 @@ export default function App() {
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const graveyardExportRef = useRef<(() => void) | null>(null);
 
   const currentIndividuals = project.individuals.filter(
     individual => individual.graveyardId === currentGraveyardId,
@@ -362,8 +364,148 @@ export default function App() {
   // Import and export project files.
   const importFile = async (file: File) => {
     try {
-      if (file.size > 5 * 1024 * 1024) {
-        throw new Error('Please choose a workspace smaller than 5 MB.');
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        const csv = parseCoordinateCsv(await file.text());
+
+        if (csv.records.length === 0) {
+          throw new Error(
+            csv.warnings[0] ?? 'The CSV does not contain any coordinate rows.',
+          );
+        }
+        
+        const duplicate = csv.records.find(record =>
+          project.individuals.some(
+            individual =>
+              individual.name === record.name &&
+              individual.graveyardId === currentGraveyardId,
+          ),
+        );
+
+        if (duplicate) {
+          throw new Error(
+            `A skeleton named "${duplicate.name}" already exists in this graveyard.`,
+          );
+        }
+
+        const base = createBlankProject().individuals[0];
+
+        if (!base) {
+          throw new Error('Could not create a skeleton template.');
+        }
+
+        const importedIndividuals: Individual[] = csv.records.map(
+          (record, index) => {
+            const person: Individual = {
+              ...base,
+              id: crypto.randomUUID(),
+              name: record.name,
+              accession: '',
+              graveyardId: currentGraveyardId,
+              color: paletteColor(project.individuals.length + index),
+              visible: true,
+              notes: '',
+              joints: base.joints.map(currentJoint => ({
+                ...currentJoint,
+                linked: false,
+                endpoints: currentJoint.endpoints.map(endpoint => ({
+                  ...endpoint,
+                  coordinate: [null, null, null],
+                })),
+              })),
+              bones: base.bones.map(bone => ({
+                ...bone,
+                status: 'unrecorded',
+              })),
+            };
+
+            for (const row of record.rows) {
+              const currentJoint = person.joints.find(
+                item =>
+                  item.id === row.jointName ||
+                  item.label.toLowerCase() === row.jointName.toLowerCase(),
+              );
+
+              if (!currentJoint) continue;
+
+              let endpointIndex = 0;
+
+              if (row.bone) {
+                const matchingEndpoint = currentJoint.endpoints.findIndex(
+                  endpoint => {
+                    const bone = person.bones.find(
+                      item => item.id === endpoint.boneId,
+                    );
+
+                    return bone?.label.toLowerCase() === row.bone.toLowerCase();
+                  },
+                );
+
+                if (matchingEndpoint >= 0) {
+                  endpointIndex = matchingEndpoint;
+                }
+              }
+
+              const endpoint = currentJoint.endpoints[endpointIndex];
+
+              if (!endpoint) continue;
+
+              endpoint.coordinate = [row.x, row.y, row.z];
+
+              const bone = person.bones.find(
+                item => item.id === endpoint.boneId,
+              );
+
+              if (bone) {
+                bone.status = row.present ? 'present' : 'absent';
+              }
+            }
+
+            for (const currentJoint of person.joints) {
+              currentJoint.linked =
+                currentJoint.endpoints.length > 0 &&
+                currentJoint.endpoints.every(endpoint =>
+                  endpoint.coordinate.every(value => value !== null),
+                );
+            }
+
+            return person;
+          },
+        );
+
+        setProject(previous => ({
+          ...previous,
+          updatedAt: new Date().toISOString(),
+          individuals: [...previous.individuals, ...importedIndividuals],
+        }));
+
+        const first = importedIndividuals[0];
+
+        if (first) {
+          setSelectedId(first.id);
+          setJointId(first.joints[0]?.id ?? '');
+        }
+
+        setStorageBlocked(false);
+        setFrameKey(value => value + 1);
+
+        if (csv.warnings.length > 0) {
+          notify(
+            `CSV imported with ${csv.warnings.length} warning${
+              csv.warnings.length === 1 ? '' : 's'
+            }. Some data may be missing or invalid.`,
+          );
+        } else {
+          notify(
+            `CSV imported: ${importedIndividuals.length} skeleton${
+              importedIndividuals.length === 1 ? '' : 's'
+            } and ${csv.records.reduce(
+              (total, record) => total + record.rows.length,
+              0,
+            )} coordinate rows.`,
+          );
+        }
+
+        return;
       }
 
       const next = validateProject(JSON.parse(await file.text()));
@@ -372,7 +514,7 @@ export default function App() {
     } catch (error) {
       notify(
         `Import failed: ${
-          error instanceof Error ? error.message : 'Invalid workspace file.'
+          error instanceof Error ? error.message : 'Invalid file.'
         }`,
       );
     }
@@ -390,44 +532,90 @@ export default function App() {
   };
 
   const exportCsv = () => {
-    const cell = (value: unknown) => {
-      let valueString = String(value ?? '');
+    const records = project.individuals.map(person => ({
+      name: person.name,
+      rows: person.joints.flatMap(joint =>
+        joint.endpoints.map(endpoint => {
+          const bone = person.bones.find(
+            bone => bone.id === endpoint.boneId,
+          );
 
-      if (typeof value === 'string' && /^[=+@\-*\t\r]/.test(valueString)) {
-        valueString = `'${valueString}`;
-      }
+          return {
+            skeletonId: person.name,
+            jointName: joint.id,
+            bone: bone?.label ?? '',
+            x: endpoint.coordinate[0],
+            y: endpoint.coordinate[1],
+            z: endpoint.coordinate[2],
+            present: bone?.status === 'present',
+          };
+        }),
+      ),
+    }));
 
-      return `"${valueString.replace(/"/g, '""')}"`;
-    };
+    const graveyard =
+      graveyards.find(
+        graveyard => graveyard.id === currentGraveyardId,
+      )?.name ?? 'Graveyard 1';
 
-    const rows: unknown[][] = [
-      ['Accession', 'Individual', 'Joint', 'Bone', 'Status', 'X', 'Y', 'Z', 'Coordinates linked'],
-    ];
-
-    for (const person of project.individuals) {
-      for (const point of person.joints) {
-        for (const endpoint of point.endpoints) {
-          rows.push([
-            person.accession,
-            person.name,
-            point.label,
-            endpoint.label,
-            person.bones.find(bone => bone.id === endpoint.boneId)?.status ?? 'unrecorded',
-            ...endpoint.coordinate,
-            point.linked ? 'yes' : 'no',
-          ]);
-        }
-      }
-    }
+    const csv = serialiseCoordinateCsv(graveyard, records);
 
     download(
-      rows.map(row => row.map(cell).join(',')).join('\r\n'),
+      csv,
       'osteo-bone-coordinates.csv',
       'text/csv;charset=utf-8',
     );
 
     setModal(null);
-    notify('Bone-specific coordinate table exported. Use JSON for a restorable workspace.');
+    notify('Coordinate CSV exported.');
+  };
+
+  const exportSkeletonCsv = (individualId: string) => {
+    const individual = project.individuals.find(
+      item => item.id === individualId,
+    );
+
+    if (!individual) return;
+
+    const rows: CoordinateCsvRow[] = [];
+
+    for (const joint of individual.joints) {
+      for (const endpoint of joint.endpoints) {
+        const bone = individual.bones.find(
+          bone => bone.id === endpoint.boneId,
+        );
+
+        rows.push({
+          skeletonId: individual.name,
+          jointName: joint.id,
+          bone: bone?.label ?? '',
+          x: endpoint.coordinate[0],
+          y: endpoint.coordinate[1],
+          z: endpoint.coordinate[2],
+          present: bone?.status === 'present',
+        });
+      }
+    }
+
+  const graveyard =
+    graveyards.find(
+      graveyard => graveyard.id === individual.graveyardId,
+    )?.name ?? 'Graveyard 1';
+
+  const csv = serialiseCoordinateCsv(graveyard, [
+    {
+      name: individual.name,
+      rows,
+    },
+  ]);
+
+  download(
+    csv,
+    `${graveyard}_${individual.name}.csv`,
+    'text/csv;charset=utf-8',
+  );
+
+  notify(`${individual.name} exported as CSV.`);
   };
 
   // Add a new blank skeleton to the current graveyard.
@@ -597,8 +785,7 @@ export default function App() {
             }))
           }
           onExport={id => {
-            // TODO: Implement skeleton-specific export functionality. For now, just notify the user.
-            notify('Skeleton export will be implemented in a future update.');
+            exportSkeletonCsv(id);
           }}
           onDelete={id => {
             setDeleteSkeletonId(id);
@@ -653,6 +840,9 @@ export default function App() {
               view={view}
               frameKey={frameKey}
               zoom={zoom * 100}
+              onExportReady={exportImage => {
+                graveyardExportRef.current = exportImage;
+              }}
             />
 
             <div className="scene-corner-label">
@@ -717,9 +907,9 @@ export default function App() {
       <input
         ref={fileRef}
         type="file"
-        accept=".json,application/json"
+        accept=".json,.csv,application/json,text/csv"
         className="sr-only"
-        aria-label="Import JSON workspace"
+        aria-label="Import JSON or CSV file"
         onChange={event => {
           const file = event.target.files?.[0];
           if (file) void importFile(file);
@@ -906,33 +1096,24 @@ export default function App() {
 
           {modal === 'export' && (
             <>
-              <p>Keep both coordinate sets, bone inventory and notes in a portable backup.</p>
+              <p>Choose what you want to export.</p>
 
-              <button className="export-choice" onClick={exportJson}>
-                <FileJson size={26} />
+              <button
+                className="export-choice"
+                onClick={() => {
+                  graveyardExportRef.current?.();
+                  setModal(null);
+                }}
+              >
+                <ImageDown size={26} />
 
                 <div>
-                  <strong>Workspace file <span>RECOMMENDED</span></strong>
-                  <p>JSON · reopen and continue editing in OSTEO</p>
+                  <strong>Current view</strong>
+                  <p>PNG · Snapshot of the current graveyard view</p>
                 </div>
 
                 <ArrowDownToLine size={18} />
               </button>
-
-              <button className="export-choice" onClick={exportCsv}>
-                <Table2 size={26} />
-
-                <div>
-                  <strong>Coordinate table</strong>
-                  <p>CSV · one row per bone-owned endpoint</p>
-                </div>
-
-                <ArrowDownToLine size={18} />
-              </button>
-
-              <p className="input-hint">
-                CSV is for analysis and sharing. Use the workspace file to restore your full project.
-              </p>
             </>
           )}
 
