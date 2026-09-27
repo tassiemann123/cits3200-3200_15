@@ -9,6 +9,7 @@ export interface SceneViewportProps {
   selectedId: string;
   selectedJointId: string;
   onSelect: (individualId: string, jointId: string) => void;
+  onExportReady: (exportImage: () => void) => void;
   showGrid: boolean;
   showMarkers: boolean;
   view: 'perspective' | 'front' | 'top';
@@ -66,7 +67,7 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
 
 /** Anatomical bone pieces and their recorded endpoints in the shared coordinate space. */
 export default function SceneViewport(props: SceneViewportProps) {
-  const { individuals, selectedId, selectedJointId, showGrid, showMarkers, view, frameKey, zoom } = props;
+  const { individuals, selectedId, selectedJointId, onExportReady, showGrid, showMarkers, view, frameKey, zoom } = props;
   const canvasHost = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
   const propsRef = useRef(props);
@@ -181,6 +182,39 @@ export default function SceneViewport(props: SceneViewportProps) {
     controls.addEventListener('start', startDrag);
     controls.addEventListener('end', stopDrag);
     let animation = 0;
+    const exportImage = async () => {
+      renderer.render(scene, camera);
+
+      const blob: Blob | null = await new Promise((resolve) =>
+        renderer.domElement.toBlob(resolve, 'image/png'),
+      );
+      if (!blob) return;
+
+      if ('showSaveFilePicker' in window) {
+        try {
+          // @ts-expect-error - not in all lib.dom.d.ts versions yet
+          const handle = await window.showSaveFilePicker({
+            suggestedName: 'graveyard.png',
+            types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return;
+        } catch (err) {
+          if ((err as DOMException).name === 'AbortError') return;
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = 'graveyard.png';
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    propsRef.current.onExportReady(exportImage);
     const animate = () => {
       animation = requestAnimationFrame(animate);
       controls.update();

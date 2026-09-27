@@ -69,13 +69,19 @@ export interface SkeletonPieceSpec {
   /**
    * Which direction, in this piece's own untransformed rest-pose local
    * space, actually counts as "facing forward" for the twist correction
-   * above. Defaults to +Z, which holds for every piece checked so far
-   * (the skull, and now SK_Side too -- see the fix that corrected its
-   * earlier, wrong -Z override, confirmed this time by actually rendering
-   * a posed front and back view and checking the sternum landed on the
-   * front one, not the shoulder blades). Kept as an override, not removed
-   * outright, in case a future piece's own rest-pose front genuinely does
-   * run the other way. Only meaningful alongside `twist`.
+   * above. Defaults to +Z, which holds for the skull and for SK_Side (the
+   * ribcage) -- confirmed for the latter by actually rendering a posed
+   * front and back view and checking the sternum landed on the front one,
+   * not the shoulder blades. The clavicle/scapula piece is the opposite:
+   * its own rest-pose "front" (the scapula's flat face) runs along -Z, so
+   * it overrides this to [0, 0, -1] -- without that override the scapula
+   * twists to face the camera face-on instead of lying flush against the
+   * ribcage's back, which is what was actually happening (see the fix
+   * that added this override, confirmed the same way: rendering a posed
+   * front and back view and checking the scapula all but disappears from
+   * the front and shows properly from the back). Only meaningful
+   * alongside `twist`; always verify a new value by actually rendering
+   * both sides, not by eyeballing the raw mesh.
    */
   twistForward?: [number, number, number];
   /**
@@ -87,11 +93,68 @@ export interface SkeletonPieceSpec {
    * (standing) but visibly wrong once the body is posed very differently
    * (lying down): the piece would keep facing its rest-pose direction
    * while everything physically attached to it has rotated. The coccyx is
-   * fused to the sacrum end of SK_Side, not free-floating, so it should
-   * rotate along with it rather than staying fixed. The referenced piece
-   * must appear earlier in SKELETON_PIECES so it's already been posed.
+   * the terminal segment of the vertebral column itself (fused to the
+   * sacrum, not to the ribcage), so it borrows SK_Spine's rotation rather
+   * than SK_Side's -- rigging it to SK_Side instead left a visible kink
+   * where the two met, since the ribcage's own from/to axis (sacral to
+   * manubrium) doesn't point the same way as the spine's (sacral to
+   * head_proximal), most noticeably once the two axes diverge a lot (a
+   * lying-down pose). The referenced piece must appear earlier in
+   * SKELETON_PIECES so it's already been posed.
    */
+  /**
+   * Which of a multi-bone joint's contributing bones this piece's `from`
+   * (or `to`) endpoint actually represents, by label (matching
+   * boneLabelsFor in cfaSchema.ts) -- e.g. the forearm piece's `from` at
+   * the elbow is genuinely the forearm's own end, not the upper arm's,
+   * even though they're both called "left_elbow". Without this, every
+   * piece touching a shared joint would collapse onto that joint's first
+   * entry, so two bones recorded as disarticulated (or one marked
+   * missing) would never actually show as separated in the 3D view, only
+   * in the exported data. Omitted for an ordinary single-bone landmark,
+   * where there's only one entry to read anyway.
+   */
+  fromBone?: string;
+  toBone?: string;
   rigidWith?: string;
+  /**
+   * Independently orients a single-landmark piece (from === to) using
+   * three of its own landmarks instead of borrowing another piece's
+   * rotation via `rigidWith` -- currently only the pelvis, so it can
+   * rotate on its own rather than cloning the spine's entire rotation
+   * (both its lean *and* its twist), which previously meant even
+   * something as unrelated as moving head_proximal dragged the pelvis
+   * along with it.
+   *
+   * `left`/`right`/`anchor` name three real landmarks that, together,
+   * pin down a full 3D orientation the same way the ISB's standard
+   * pelvis coordinate system does in biomechanics: a line between the
+   * two ASIS points (`left`/`right`) plus one more point off that line
+   * (the sacral promontory, as `anchor`) is enough to build a complete,
+   * unambiguous frame -- no mesh geometry required.
+   *
+   * `restLeft`/`restRight`/`restAnchor` are what those same three
+   * landmarks read as in the bundled neutral standing reference
+   * (public/samples/standard-skeleton-coordinates.csv), which is also
+   * the pose the bundled GLB mesh itself was modelled to match. The
+   * computed rotation is the identity exactly when the entered
+   * coordinates equal these, and rotates away from identity by however
+   * much the entered triangle differs from this rest triangle -- see
+   * computeTriangleQuaternion in skeletonPose.ts.
+   *
+   * Falls back to `rigidWith` (if given) whenever any of the three
+   * landmarks is missing, or the triangle is degenerate (the anchor
+   * landmark entered exactly on the left-right line), rather than
+   * silently defaulting to an unrotated pelvis.
+   */
+  orientationTriangle?: {
+    left: PointName;
+    right: PointName;
+    anchor: PointName;
+    restLeft: [number, number, number];
+    restRight: [number, number, number];
+    restAnchor: [number, number, number];
+  };
   /**
    * For a piece with no second landmark of its own, but that ISN'T
    * rigidly fused to anything either (currently just the skull) --
@@ -119,25 +182,38 @@ export interface SkeletonPieceSpec {
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
-  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal" },
-  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", stretch: "uniform", twist: ["left_ilium_superior", "right_ilium_superior"] },
-  { nodeName: "SK_Coccyx", from: "sacral_promontory", to: "sacral_promontory", rigidWith: "SK_Side" },
+  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", twist: ["left_shoulder", "right_shoulder"] },
+  {
+    nodeName: "SK_Coccyx",
+    from: "sacral_promontory",
+    to: "sacral_promontory",
+    rigidWith: "SK_Spine",
+    orientationTriangle: {
+      left: "left_ilium_superior",
+      right: "right_ilium_superior",
+      anchor: "sacral_promontory",
+      restLeft: [0.19, 0.03, 0.041],
+      restRight: [-0.19, 0.03, 0.041],
+      restAnchor: [0, 0, 0],
+    },
+  },
 
-  { nodeName: "SK_RClavicle", from: "manubrium", to: "right_shoulder", stretch: "anchor" },
-  { nodeName: "SK_RArmUp", from: "right_shoulder", to: "right_elbow" },
-  { nodeName: "SK_RArmDown", from: "right_elbow", to: "right_wrist" },
-  { nodeName: "SK_HandR", from: "right_wrist", to: "right_fingertips", stretch: "anchor" },
+  { nodeName: "SK_RClavicle", from: "right_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Right clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
+  { nodeName: "SK_RArmUp", from: "right_shoulder", fromBone: "Upper arm (proximal)", to: "right_elbow", toBone: "Upper arm (distal)" },
+  { nodeName: "SK_RArmDown", from: "right_elbow", fromBone: "Forearm (proximal)", to: "right_wrist", toBone: "Forearm (distal)" },
+  { nodeName: "SK_HandR", from: "right_wrist", fromBone: "Hand", to: "right_fingertips", stretch: "anchor" },
 
-  { nodeName: "SK_LClavicle", from: "manubrium", to: "left_shoulder", stretch: "anchor" },
-  { nodeName: "SK_LArmUp", from: "left_shoulder", to: "left_elbow" },
-  { nodeName: "SK_LArmDown", from: "left_elbow", to: "left_wrist" },
-  { nodeName: "SK_HandL", from: "left_wrist", to: "left_fingertips", stretch: "anchor" },
+  { nodeName: "SK_LClavicle", from: "left_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Left clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
+  { nodeName: "SK_LArmUp", from: "left_shoulder", fromBone: "Upper arm (proximal)", to: "left_elbow", toBone: "Upper arm (distal)" },
+  { nodeName: "SK_LArmDown", from: "left_elbow", fromBone: "Forearm (proximal)", to: "left_wrist", toBone: "Forearm (distal)" },
+  { nodeName: "SK_HandL", from: "left_wrist", fromBone: "Hand", to: "left_fingertips", stretch: "anchor" },
 
-  { nodeName: "SK_RLegUp", from: "right_acetabulum", to: "right_knee" },
-  { nodeName: "SK_RLegDown", from: "right_knee", to: "right_ankle" },
-  { nodeName: "SK_RFoot", from: "right_ankle", to: "right_toes", stretch: "anchor" },
+  { nodeName: "SK_RLegUp", from: "right_acetabulum", fromBone: "Thigh (proximal)", to: "right_knee", toBone: "Thigh (distal)" },
+  { nodeName: "SK_RLegDown", from: "right_knee", fromBone: "Shin (proximal)", to: "right_ankle", toBone: "Shin (distal)" },
+  { nodeName: "SK_RFoot", from: "right_ankle", fromBone: "Foot", to: "right_toes", stretch: "anchor" },
 
-  { nodeName: "SK_LLegUp", from: "left_acetabulum", to: "left_knee" },
-  { nodeName: "SK_LLegDown", from: "left_knee", to: "left_ankle" },
-  { nodeName: "SK_LFoot", from: "left_ankle", to: "left_toes", stretch: "anchor" },
+  { nodeName: "SK_LLegUp", from: "left_acetabulum", fromBone: "Thigh (proximal)", to: "left_knee", toBone: "Thigh (distal)" },
+  { nodeName: "SK_LLegDown", from: "left_knee", fromBone: "Shin (proximal)", to: "left_ankle", toBone: "Shin (distal)" },
+  { nodeName: "SK_LFoot", from: "left_ankle", fromBone: "Foot", to: "left_toes", stretch: "anchor" },
 ];

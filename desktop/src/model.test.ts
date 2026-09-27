@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyScenario, createBlankProject, createDemoProject, getRenderableBones, setBoneStatus,
-  setJointLinked, toCoordinateCsv, updateCoordinate, validateProject,
+  linkMatchingImportedEndpoints, setJointLinked, toCoordinateCsv, updateCoordinate, validateProject,
 } from './model';
 
 const first = () => createDemoProject().individuals[0];
@@ -105,6 +105,17 @@ describe('project import and export', () => {
     expect(validated).toEqual(project);
     validated.individuals[0].joints[0].endpoints[0].coordinate[0] = 99;
     expect(project.individuals[0].joints[0].endpoints[0].coordinate[0]).not.toBe(99);
+  });
+
+  it('keeps imported split joints independent and terminal points unlinked', () => {
+    const project = createDemoProject();
+    const person = project.individuals[0];
+    knee(person).endpoints[1].coordinate = [4, 5, 6];
+    const imported = linkMatchingImportedEndpoints(person);
+    expect(knee(imported).linked).toBe(false);
+    expect(imported.joints.find(joint => joint.id === 'head_proximal')!.linked).toBe(false);
+    project.individuals[0] = imported;
+    expect(validateProject(project)).toEqual(project);
   });
 
   it('rejects unknown inventory status, nonfinite coordinates and mismatched linked values', () => {
