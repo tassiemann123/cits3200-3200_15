@@ -53,6 +53,12 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .header-button:hover{background:var(--pale);border-color:#c7d0d6}
 .header-button:last-child{background:var(--blue);border-color:var(--blue);color:#fff}
 .header-button:last-child:hover{background:#294a66}
+.backend-state{font-size:10px;color:var(--muted);white-space:nowrap}
+.remote-workspace-list{display:flex;flex-direction:column;gap:8px;margin:12px 0;max-height:250px;overflow:auto}
+.remote-workspace-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;text-align:left}
+.remote-workspace-choice:hover{background:var(--panel-2);border-color:var(--line-strong)}
+.remote-workspace-choice strong{font-size:12px}
+.remote-workspace-choice small{font-size:10px;color:var(--muted)}
 
 .app-main{display:grid;grid-template-columns:370px minmax(0,1fr);flex:1;min-height:0}
 
@@ -219,4 +225,3 @@ button:active:not(:disabled){transform:translateY(.5px)}
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;scroll-behavior:auto!important}
 }
-

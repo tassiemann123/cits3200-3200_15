@@ -1,6 +1,6 @@
 # OSTEO desktop prototype
 
-A Windows-focused desktop PWA prototype for CITS3200 Team 15 and Dr Ambika Flavel. It demonstrates a multi-individual workspace, bone-specific joint coordinates, explicit bone inventory, and local recording. All new desktop work lives in this directory.
+A Windows-focused desktop PWA prototype for CITS3200 Team 15 and Dr Ambika Flavel. It demonstrates a multi-individual workspace, bone-specific joint coordinates, explicit bone inventory, offline local recording, and sync to the project's FastAPI backend. All new desktop work lives in this directory.
 
 ## Run
 
@@ -12,6 +12,8 @@ npm run dev
 ```
 
 Open the local address printed by Vite (normally `http://127.0.0.1:5174`). The development server is for UI work; its resources are intentionally **not** installed for offline use.
+
+Start the existing backend using [`backend/README.md`](../backend/README.md). The desktop app uses `http://127.0.0.1:8000` by default. To use another server, copy `.env.example` to `.env.local` and set `VITE_API_URL`. This is the same API server used by mobile, with separate desktop data storage.
 
 For the installable, cached production build:
 
@@ -43,17 +45,17 @@ Use the articulated, disarticulated, and missing-femur examples for discussion. 
 - Recorded joint markers are an optional inspection layer. It is off initially, includes only complete coordinates for present bones, deduplicates linked endpoints, and preserves both markers when a joint is split.
 - The proximal skull point replaces the skull-centre measurement.
 - Pelvic rendering requires the sacral promontory and acetabular points. Optional ilium/ischium measurements do not determine bone presence.
-- Data remains in the browser profile on this device; local export provides a transferable backup. There is no backend or account dependency.
+- Data is saved locally while recording. Press **Save** while online to sync the complete workspace to the backend; **Open from backend** lists saved desktop workspaces. A JSON export provides an independent backup. Mobile records are not displayed in desktop.
 
 ## React reuse decision
 
-The prototype retains the project's React, TypeScript, Vite, and Three.js stack. The desktop workspace and endpoint data model are separate from the mobile app so the existing mobile workflow can continue unchanged. The current mobile `SkeletonCoordinates` records one coordinate set per landmark and uses excluded anatomical groups; directly reusing that model would lose the bone-specific endpoint distinction. Its renderer and parsing approaches remain useful references, but sharing production components or migrating mobile data needs an agreed endpoint schema first.
+The prototype retains the project's React, TypeScript, Vite, and Three.js stack. The desktop workspace and endpoint data model are separate from the mobile app so the existing mobile workflow can continue unchanged. The backend uses a dedicated `desktop_workspace` table for the full desktop project; Ivy's original mobile API routes and tables remain unchanged. The current mobile `SkeletonCoordinates` records one coordinate set per landmark and uses excluded anatomical groups, so its coordinate rows cannot represent desktop bone-specific endpoints.
 
 ## Offline and installation boundaries
 
 The service worker is registered only for production. The interface reports readiness only after the controlling worker is active and confirms every expected shell resource exists in its cache. Cache names are isolated to this app and its deployment scope. Updates wait for existing app windows to close; they do not replace an active recording session's shell. Application caching and saved coordinate data are separate stores.
 
-A first visit requires the app's server to be reachable. Once cached, the shell can load without that server. Browser/site data removal also removes the offline installation and local records; export a backup before clearing data or changing browser/profile/origin. This prototype uses browser storage, not a filesystem database or cloud backup. Storage failures must be addressed before treating local edits as saved.
+A first visit requires the app's server to be reachable. Once cached, the shell can load without that server. Coordinate edits are saved in the browser profile even when the API is offline. Press **Save** again after reconnecting to sync; an offline Save remains local and says so. A backend revision conflict stops the upload and asks you to export local work before opening the backend copy. Browser/site data removal also removes the offline installation and any edits not yet synced; export a backup before clearing data or changing browser/profile/origin. Storage failures must be addressed before treating local edits as saved.
 
 Windows Edge installation is the target, but Windows installation/relaunch must be verified on an actual UWA laptop before declaring the requirement complete. The install prompt may be unavailable under institutional browser policy. When offered, use the app's install action or Edge's installation control. An installed web app does not require Node.js on the user's laptop when served from a hosted HTTPS site; this repository's npm commands are for building and local demonstration.
 
@@ -72,7 +74,7 @@ The viewer reuses the mobile anatomical GLB asset and its rest-tip/bone position
 
 Multi-skeleton layout is a team exploration rather than a requirement explicitly confirmed in the supplied emails. Confirm shared spatial comparison versus independent side-by-side views. Also agree on whether bone status or bone-specific coordinates are the authoritative inventory source, and how relinking previously separated endpoints should be confirmed.
 
-This is a local interaction prototype, not a clinically validated reconstruction or the final production offline application. No login, cloud synchronization, collaboration, installer package, or mobile-data migration is included.
+This is an interaction prototype, not a clinically validated reconstruction or the final production offline application. Desktop backend sync is explicit through Save and Open; there is no login, automatic background sync, collaboration, installer package, or mobile-data migration. The current backend has no authentication, so restrict its network exposure before using real field records.
 
 Implementation references: [MDN service-worker installation lifecycle](https://developer.mozilla.org/en-US/docs/Web/API/ExtendableEvent/waitUntil), [Microsoft Edge PWA setup and offline caching](https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/how-to/), and [Windows PWA icons](https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/how-to/icon-theme-color).
 

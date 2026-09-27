@@ -1,8 +1,10 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db_init import init_db
-from .routes import graveyards, skeletons
+from .routes import graveyards, skeletons, desktop_workspaces
 
 app = FastAPI(title="Skeleton Visualisation API")
 
@@ -11,6 +13,9 @@ ALLOWED_ORIGINS = [
     "http://localhost",
     "https://localhost",
 ]
+ALLOWED_ORIGINS.extend(
+    origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,3 +32,4 @@ def on_startup():
 
 app.include_router(graveyards.router)
 app.include_router(skeletons.router)
+app.include_router(desktop_workspaces.router)

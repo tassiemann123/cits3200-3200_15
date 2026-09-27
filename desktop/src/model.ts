@@ -134,6 +134,19 @@ export function setJointLinked(individual: Individual, jointId: string, linked: 
   return next;
 }
 
+/** CSV has coordinates rather than a link flag; only identical paired endpoints can be linked. */
+export function linkMatchingImportedEndpoints(individual: Individual): Individual {
+  return {
+    ...individual,
+    joints: individual.joints.map(joint => ({
+      ...joint,
+      linked: joint.endpoints.length === 2 &&
+        joint.endpoints.every(endpoint => endpoint.coordinate.every(value => value !== null)) &&
+        joint.endpoints[0].coordinate.every((value, axis) => value === joint.endpoints[1].coordinate[axis]),
+    })),
+  };
+}
+
 /** Inventory changes preserve the recorded coordinates, including absent bones. */
 export function setBoneStatus(individual: Individual, boneId: string, status: BoneStatus): Individual {
   if (!['present', 'absent', 'unrecorded'].includes(status)) throw new Error('Unknown bone status.');

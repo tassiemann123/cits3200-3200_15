@@ -213,7 +213,7 @@ export default function SceneViewport(props: SceneViewportProps) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
-    
+
     propsRef.current.onExportReady(exportImage);
     const animate = () => {
       animation = requestAnimationFrame(animate);
