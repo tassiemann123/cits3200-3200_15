@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X } from 'lucide-react';
+import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X, ImageDown } from 'lucide-react';
 import {
   createBlankProject,
   createDemoProject,
@@ -215,6 +215,7 @@ export default function App() {
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const graveyardExportRef = useRef<(() => void) | null>(null);
 
   const currentIndividuals = project.individuals.filter(
     individual => individual.graveyardId === currentGraveyardId,
@@ -839,6 +840,9 @@ export default function App() {
               view={view}
               frameKey={frameKey}
               zoom={zoom * 100}
+              onExportReady={exportImage => {
+                graveyardExportRef.current = exportImage;
+              }}
             />
 
             <div className="scene-corner-label">
@@ -1092,33 +1096,24 @@ export default function App() {
 
           {modal === 'export' && (
             <>
-              <p>Keep both coordinate sets, bone inventory and notes in a portable backup.</p>
+              <p>Choose what you want to export.</p>
 
-              <button className="export-choice" onClick={exportJson}>
-                <FileJson size={26} />
+              <button
+                className="export-choice"
+                onClick={() => {
+                  graveyardExportRef.current?.();
+                  setModal(null);
+                }}
+              >
+                <ImageDown size={26} />
 
                 <div>
-                  <strong>Workspace file <span>RECOMMENDED</span></strong>
-                  <p>JSON · reopen and continue editing in OSTEO</p>
+                  <strong>Current view</strong>
+                  <p>PNG · Snapshot of the current graveyard view</p>
                 </div>
 
                 <ArrowDownToLine size={18} />
               </button>
-
-              <button className="export-choice" onClick={exportCsv}>
-                <Table2 size={26} />
-
-                <div>
-                  <strong>Coordinate table</strong>
-                  <p>CSV · one row per bone-owned endpoint</p>
-                </div>
-
-                <ArrowDownToLine size={18} />
-              </button>
-
-              <p className="input-hint">
-                CSV is for analysis and sharing. Use the workspace file to restore your full project.
-              </p>
             </>
           )}
 
