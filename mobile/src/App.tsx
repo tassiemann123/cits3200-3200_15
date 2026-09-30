@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { CoordinatePanel } from "./components/CoordinatePanel";
 import { DetailsPanel } from "./components/DetailsPanel";
+import { CompassIndicator } from "./components/CompassIndicator";
 import type { SceneViewportHandle } from "./components/SceneViewport";
 import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema";
 import {
@@ -704,6 +705,7 @@ useEffect(() => {
               <small>{backendCoordinates.length} BACKEND-READY POINTS</small>
             </span>
           </button>
+          <CompassIndicator />
           <div className="viewport-zoom-tools" aria-label="Model zoom controls">
             <button type="button" onClick={() => viewportRef.current?.zoomBy(0.82)} title="Zoom in"><ZoomIn size={18} /></button>
             <button type="button" onClick={() => viewportRef.current?.zoomBy(1.22)} title="Zoom out"><ZoomOut size={18} /></button>

@@ -89,7 +89,7 @@ export function useDeviceHeading(): DeviceHeadingState {
             // If we find an error beyond hardware availability we should pass it up and out for display
             } catch (err) {
                 if (!cancelled) {
-                    setState((prev) => ({ ...prev, errorMessage:'Compass error: ${String(err)}' }));
+                    setState((prev) => ({ ...prev, errorMessage:`Compass error: ${String(err)}` }));
                 }
             }
         }
@@ -118,7 +118,7 @@ export function useDeviceHeading(): DeviceHeadingState {
                     (position: Position | null, err) => {
                         if (cancelled) return;
                         if (err) {
-                            setState((prev) => ({ ...prev, errorMessage:'GPS error: ${String(err)}' }));
+                            setState((prev) => ({ ...prev, errorMessage:`GPS error: ${String(err)}` }));
                             return;
                         }
                         if (position) {
