@@ -11,7 +11,7 @@ import { landmarksToDisplayPositions, centroid, cfaLandmarkToWorld } from "../li
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
-  resetCamera: () => void;
+  resetView: () => void;
   focusModel: () => void;
   zoomBy: (factor: number) => void;
   capturePng: () => Promise<Blob | null>;
@@ -239,6 +239,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const hostRef = useRef<HTMLDivElement>(null);
   const invalidateRef = useRef<() => void>(() => {});
   const [modelRevision, setModelRevision] = useState(0);
+  const [visualizationRevision, setVisualizationRevision] = useState(0);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -259,6 +260,13 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     camera.far = 100;
     camera.updateProjectionMatrix();
     controls.update();
+    invalidateRef.current();
+  };
+
+  const resetView = () => {
+    resetCamera();
+    // Re-run coordinate-driven effects even when the landmark array has not changed.
+    setVisualizationRevision((revision) => revision + 1);
   };
 
   const focusModel = () => {
@@ -293,7 +301,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   };
 
   useImperativeHandle(ref, () => ({
-    resetCamera,
+    resetView,
     focusModel,
     zoomBy,
     capturePng: () => new Promise((resolve) => {
@@ -527,7 +535,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       child.geometry.computeBoundingSphere();
     });
     invalidateRef.current();
-  }, [landmarks]);
+  }, [landmarks, visualizationRevision]);
 
   // Poses each of the 18 known skeleton pieces directly from the entered
   // coordinates, once they've been loaded and matched by name (see the
@@ -669,7 +677,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     const content = contentRef.current;
     if (content) modelBoxRef.current = new THREE.Box3().setFromObject(content);
     invalidateRef.current();
-  }, [landmarks, modelRevision]);
+  }, [landmarks, modelRevision, visualizationRevision]);
 
   useEffect(() => {
     const content = contentRef.current;
