@@ -641,13 +641,31 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
           // -- run them through the same cfaLandmarkToWorld conversion
           // landmarksToDisplayPositions applies to everything else, so this
           // stays correct even if that axis convention is ever revisited.
+          //
+          // HANDEDNESS FIX: cfaLandmarkToWorld negates Z (depth) but not Y
+          // (elevation) -- correct for every piece that's just placed at a
+          // coordinate, but computeTriangleQuaternion derives a *rotation*
+          // by comparing two sets of points, and a rotation derived that
+          // way is sensitive to the handedness (reflection vs. proper
+          // rotation) of whatever coordinate system it's fed. Negating
+          // only one axis out of three makes cfaLandmarkToWorld a mirror
+          // reflection relative to the frame this pelvis math was
+          // originally built and validated against, which flips the
+          // *sense* of the computed rotation -- the pelvis swings in
+          // toward the ribcage instead of out to the hips, at the correct
+          // angle but the wrong direction. Negating the elevation (Y) of
+          // all six points here, right before building the two frames,
+          // exactly cancels that reflection back out for this one
+          // calculation, without changing cfaLandmarkToWorld's output (or
+          // anything else that reads it) at all.
+          const uncorrectHandedness = (v: THREE.Vector3) => new THREE.Vector3(v.x, -v.y, v.z);
           orientationOverride = computeTriangleQuaternion(
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft)),
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight)),
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor)),
-            new THREE.Vector3(...leftPos),
-            new THREE.Vector3(...rightPos),
-            new THREE.Vector3(...anchorPos),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft))),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight))),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor))),
+            uncorrectHandedness(new THREE.Vector3(...leftPos)),
+            uncorrectHandedness(new THREE.Vector3(...rightPos)),
+            uncorrectHandedness(new THREE.Vector3(...anchorPos)),
           );
         }
       }
