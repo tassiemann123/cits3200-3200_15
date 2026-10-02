@@ -694,7 +694,7 @@ useEffect(() => {
               <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
               <button type="button" className={showLandmarks ? "active" : ""} onClick={() => setShowLandmarks((value) => !value)} title="Landmark markers"><MapPin size={18} /></button>
               <button type="button" onClick={() => viewportRef.current?.focusModel()} title="Focus model"><Focus size={18} /></button>
-              <button type="button" onClick={() => viewportRef.current?.resetCamera()} title="Reset camera"><RotateCcw size={18} /></button>
+              <button type="button" onClick={() => viewportRef.current?.resetView()} title="Reset position and refresh visualisation"><RotateCcw size={18} /></button>
               <button type="button" onClick={() => void loadLyingDownDefault()} title="Load lying-down default skeleton"><Skull size={18} /></button>
             </div>
           </div>
