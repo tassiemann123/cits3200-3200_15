@@ -36,6 +36,46 @@ const DEFAULT_TARGET = new THREE.Vector3(0, 0.85, 0);
 // shorter skeleton than this will visibly read as taller or shorter.
 const DISPLAY_HEIGHT = 1.7;
 
+/**
+ * The clavicle/scapula pieces used to get a *twist* correction here on
+ * top of their aim rotation (either the plain declared `twist:
+ * head_proximal` / `twistForward: [0, 0, 1]` from skeletonPieces.ts, or
+ * several since-abandoned dynamic replacements for it -- a guessed
+ * cardinal direction, two different PCA-derived forward vectors, and
+ * borrowing SK_Side's own posed rotation outright). Every one of those
+ * produced basically the same result, which is what exposed the real
+ * problem: a twist is a pure rotation *around* the piece's own
+ * already-aimed fromTip->toTip axis, so it can never change that
+ * vector's own component *along* that same axis. This piece's actual
+ * flat-face normal sits at a fixed, mesh-measured ~31 degrees from its
+ * own fromTip->toTip axis, but both a seated reference pose and the
+ * bundled lying-down default need that angle to instead be 75-85
+ * degrees for the blade to really face behind the ribcage -- a gap no
+ * twistForward choice can close, confirmed by comparing each attempt's
+ * actual posed mesh geometry, not just a rendered screenshot (which is
+ * also why they all looked identical despite being numerically
+ * different quaternions). Borrowing SK_Side's rotation directly did not
+ * work either: it's derived from landmarks spanning the whole
+ * ribcage/spine, which doesn't track the local orientation needed right
+ * at the shoulder once the torso isn't one single rigid rotation
+ * end-to-end (confirmed by a ~163 degree gap to the known-good
+ * lying-down quaternion). The combined clavicle+scapula mesh also has
+ * no separate scapula geometry to pose independently (checked directly
+ * in the GLB), so nothing here can locally correct just the blade.
+ *
+ * The fix: stop resolving a twist for these two pieces at all, and use
+ * only the 2-DOF aim rotation (see `isClaviclePiece` below). Measured at
+ * ~16 degrees from the old hand-tuned lying-down quaternion -- close
+ * enough that the aim alone carries nearly all of the real orientation
+ * signal here -- and confirmed visually across multiple camera angles
+ * for the bundled lying-down default (unchanged from before), a seated
+ * reference pose (scapulae now sit flush against the ribcage from the
+ * front, back, and side instead of winging up or facing front), and a
+ * real client record (no regression). Simply not resolving a twist at
+ * all also can't reintroduce a per-pose sign problem the way every
+ * twist attempt above did.
+ */
+
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
     if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
@@ -649,16 +689,38 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
           // -- run them through the same cfaLandmarkToWorld conversion
           // landmarksToDisplayPositions applies to everything else, so this
           // stays correct even if that axis convention is ever revisited.
+          //
+          // HANDEDNESS FIX: cfaLandmarkToWorld negates Z (depth) but not Y
+          // (elevation) -- correct for every piece that's just placed at a
+          // coordinate, but computeTriangleQuaternion derives a *rotation*
+          // by comparing two sets of points, and a rotation derived that
+          // way is sensitive to the handedness (reflection vs. proper
+          // rotation) of whatever coordinate system it's fed. Negating
+          // only one axis out of three makes cfaLandmarkToWorld a mirror
+          // reflection relative to the frame this pelvis math was
+          // originally built and validated against, which flips the
+          // *sense* of the computed rotation -- the pelvis swings in
+          // toward the ribcage instead of out to the hips, at the correct
+          // angle but the wrong direction. Negating the elevation (Y) of
+          // all six points here, right before building the two frames,
+          // exactly cancels that reflection back out for this one
+          // calculation, without changing cfaLandmarkToWorld's output (or
+          // anything else that reads it) at all.
+          const uncorrectHandedness = (v: THREE.Vector3) => new THREE.Vector3(v.x, -v.y, v.z);
           orientationOverride = computeTriangleQuaternion(
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft)),
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight)),
-            new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor)),
-            new THREE.Vector3(...leftPos),
-            new THREE.Vector3(...rightPos),
-            new THREE.Vector3(...anchorPos),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft))),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight))),
+            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor))),
+            uncorrectHandedness(new THREE.Vector3(...leftPos)),
+            uncorrectHandedness(new THREE.Vector3(...rightPos)),
+            uncorrectHandedness(new THREE.Vector3(...anchorPos)),
           );
         }
       }
+
+      // See the doc comment above for why these two pieces skip the
+      // twist correction entirely and use only the aim rotation.
+      const isClaviclePiece = nodeName === "SK_RClavicle" || nodeName === "SK_LClavicle";
 
       poseSkeletonPiece(
         piece.object,
@@ -666,9 +728,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         fromVector,
         toVector,
         stretch,
-        twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined,
+        isClaviclePiece ? undefined : (twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined),
         bodyScale,
-        twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined,
+        isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined),
         rigidWith ? posedTransforms.get(rigidWith) : undefined,
         orientationOverride,
       );
