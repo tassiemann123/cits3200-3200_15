@@ -916,8 +916,6 @@ export default function App() {
 
         <section className="viewer-panel" aria-label="Skeleton analysis workspace">
           <SceneControls
-            individuals={currentIndividuals}
-            selectedId={selected?.id ?? ''}
             view={view}
             showGrid={showGrid}
             showMarkers={showMarkers}
@@ -928,7 +926,6 @@ export default function App() {
               setFrameKey(value => value + 1);
               setZoom(1);
             }}
-            onSelect={id => setSelectedId(id)}
           />
 
           <div className="scene-area">
@@ -950,11 +947,6 @@ export default function App() {
                 graveyardExportRef.current = exportImage;
               }}
             />
-
-            <div className="scene-corner-label">
-              <span className="status-dot" />
-              SHARED COORDINATE SPACE
-            </div>
 
             <div className="zoom-control">
               <button
