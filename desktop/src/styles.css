@@ -49,7 +49,7 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .graveyard-choice strong{font-size:9px;font-weight:600;color:#355c7d}
 .graveyard-selector{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}
 .graveyard-selector select{height:32px;border:1px solid var(--line);border-radius:6px;background:#fff;padding:0 26px 0 9px;font-size:11px;color:var(--ink)}
-.header-button{height:32px;padding:0 11px;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink)}
+.header-button{height:32px;padding:0 11px;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink);white-space:nowrap;flex-shrink:0}
 .header-button:hover{background:var(--pale);border-color:#c7d0d6}
 .header-button:last-child{background:var(--blue);border-color:var(--blue);color:#fff}
 .header-button:last-child:hover{background:#294a66}
@@ -201,6 +201,10 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .export-choice p{font-size:9px;color:#8c99a3;margin-top:4px}
 .input-hint{font-size:9px;line-height:1.7;color:#8c969d;margin-top:10px}
 
+@media(max-width:1200px){
+  .header-button{padding:0 8px;gap:4px}
+  .header-actions{gap:6px}
+}
 
 @media(max-width:900px){
   .app-header{padding:0 14px}
