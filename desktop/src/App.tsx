@@ -17,7 +17,7 @@ import PopupModal from './components/PopupModal';
 import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
 import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
-import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from '../../shared/coordinateCsv';
+import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from './lib/coordinateCsv';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -934,6 +934,7 @@ export default function App() {
           <div className="scene-area">
             <SceneViewport
               individuals={currentIndividuals}
+              graveyardName={graveyards.find(graveyard => graveyard.id === currentGraveyardId)?.name?? 'Unknown Graveyard'}
               selectedId={selected?.id ?? ''}
               selectedJointId={joint?.id ?? ''}
               onSelect={(individualId, selectedJointId) => {
