@@ -256,10 +256,12 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
       if (!(isMesh(child))) return;
       child.userData.sharedGeometry = true;
       child.castShadow = false; child.receiveShadow = false;
-      const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(source => {
-        const material = source.clone() as THREE.MeshStandardMaterial;
-        if (material.color) material.color.set(individual.color);
-        if (selectedBones.has(owner) && material.emissive) { material.emissive.set('#ffffff'); material.emissiveIntensity = .16; }
+      const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(() => {
+        const material = new THREE.MeshStandardMaterial({
+          color: individual.color,
+          roughness: 0.6,
+          metalness: 0,
+        });
         return material;
       });
       child.material = Array.isArray(child.material) ? materials : materials[0];
