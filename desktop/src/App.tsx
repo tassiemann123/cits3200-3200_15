@@ -948,11 +948,6 @@ export default function App() {
               }}
             />
 
-            <div className="scene-corner-label">
-              <span className="status-dot" />
-              SHARED COORDINATE SPACE
-            </div>
-
             <div className="zoom-control">
               <button
                 aria-label="Zoom out"

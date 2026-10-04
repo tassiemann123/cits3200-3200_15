@@ -337,8 +337,5 @@ export default function SceneViewport(props: SceneViewportProps) {
     <div aria-hidden="true" style={{ position: 'absolute', bottom: 57, left: 20, width: 50, height: 50, pointerEvents: 'none' }}>
       <svg width="52" height="52" viewBox="0 0 52 52"><path d="M18 33V8" stroke="#738e69" strokeWidth="1.5"/><path d="M18 33L43 39" stroke="#ae9475" strokeWidth="1.5"/><path d="M18 33L4 43" stroke="#8e9c9b" strokeWidth="1.5"/><circle cx="18" cy="33" r="2.5" fill="#6e7f60"/><text x="15" y="7" fontSize="8" fill="#738e69">Z</text><text x="46" y="42" fontSize="8" fill="#ae9475">X</text><text x="0" y="51" fontSize="8" fill="#8e9c9b">Y</text></svg>
     </div>
-    <div style={{ position: 'absolute', top: 24, right: 18, maxWidth: 170, color: '#7c8674', textAlign: 'right', pointerEvents: 'none', font: '9px/1.6 Inter, system-ui, sans-serif' }}>
-      <div style={{ letterSpacing: '.03em', fontSize: 9 }}>{!fallback && templates ? 'Anatomical reference' : ''}</div>
-    </div>
   </div>;
 }
