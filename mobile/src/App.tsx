@@ -220,7 +220,16 @@ export function App() {
     ?? DEFAULT_RECORD;
 
   const backendCoordinates = useMemo(() => toBackendLandmarks(activeRecord),
-    [activeRecord.coordinates, activeRecord.excludedGroups]);
+    // extraBoneCoordinates and excludedBones are needed here too -- without
+    // them, editing a multi-bone joint's non-primary bone (e.g. "Thigh
+    // (proximal)" at the hip, or any other joint's second-listed bone)
+    // doesn't trigger a recompute, so the 3D view keeps showing the old
+    // position until some unrelated edit that *is* in this list (any
+    // primary-bone coordinate, or a group toggle) happens to fire next.
+    // Reported as: changing one bone's coordinate shows no visual change
+    // unless another coordinate is also touched afterwards, even to the
+    // same value.
+    [activeRecord.coordinates, activeRecord.excludedGroups, activeRecord.extraBoneCoordinates, activeRecord.excludedBones]);
 
   useEffect(() => () => {
     if (importedObjectUrlRef.current) URL.revokeObjectURL(importedObjectUrlRef.current);

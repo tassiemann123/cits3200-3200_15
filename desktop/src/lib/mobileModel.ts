@@ -232,7 +232,22 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   const selectedBones = new Set(individual.joints.find(j => j.id === selectedJointId)?.endpoints.map(e => e.boneId));
   const spine = bones.get('spine');
   const spineRest = templates.get('SK_Spine')!.rest;
-  const bodyScale = spine ? Math.min(2, Math.max(.25, toModel(spine.from).distanceTo(toModel(spine.to)) / spineRest.fromTip.distanceTo(spineRest.toTip))) : 1;
+  // bodyScale describes this skeleton's size relative to the template, not
+  // whether the torso is currently shown — so it must come from the raw
+  // recorded coordinates, not from `bones` (which drops the spine entirely
+  // when Head & Torso is set to "Not present"). Using `bones.get('spine')`
+  // here caused the scale to snap to the hardcoded fallback of 1 whenever
+  // the torso was hidden, throwing every other bone's position off.
+  const spineBoneRaw = individual.bones.find(b => b.id === 'spine');
+  const spineRawFrom = spineBoneRaw
+    ? individual.joints.find(j => j.id === spineBoneRaw.from.jointId)?.endpoints[spineBoneRaw.from.endpointIndex]?.coordinate
+    : undefined;
+  const spineRawTo = spineBoneRaw
+    ? individual.joints.find(j => j.id === spineBoneRaw.to.jointId)?.endpoints[spineBoneRaw.to.endpointIndex]?.coordinate
+    : undefined;
+  const bodyScale = complete(spineRawFrom) && complete(spineRawTo)
+    ? Math.min(2, Math.max(.25, toModel(spineRawFrom).distanceTo(toModel(spineRawTo)) / spineRest.fromTip.distanceTo(spineRest.toTip)))
+    : 1;
   const add = (name: string, owner: string, from: THREE.Vector3 | undefined, to: THREE.Vector3 | undefined, stretch: 'rod' | 'uniform' | 'anchor' = 'rod', twist?: THREE.Vector3) => {
     const template = templates.get(name);
     if (!template || !from || !to) return;

@@ -16,18 +16,24 @@ export function centroid(points: Vec3[]): Vec3 {
  * Converts an entered CFA landmark coordinate (from the mobile app's manual
  * X/Y/Z entry form) into Three.js world space.
  *
- * ASSUMPTION, NOT YET CONFIRMED BY THE TEAM: this treats the form's Z
- * column as elevation (height off the ground) -- the ordinary "Z is up"
- * convention, and the more likely reading of "the x axis is parallel to
- * the wall" (implying X and Y are both horizontal). The site's separate
- * total-station survey exports actually use a *different* convention
- * (elevation in the middle/Y column -- see surveyToWorld above), so this
- * may need to change once someone confirms which column the CFA paper
- * form actually uses for height. If it turns out to be Y instead of Z,
- * change the return below to `[x, y, z]`.
+ * CONFIRMED WITH THE TEAM/CLIENT: the form's Z column is depth, recorded
+ * as distance *down* from a fixed reference point -- not height off the
+ * ground. So a larger Z means the point sits lower, and the sign has to
+ * flip when it becomes the Three.js Y (up) coordinate. Without the
+ * negation, the Z column was read as plain elevation, which inverted the
+ * whole pose along its length (e.g. BP157 rendered with the pelvis as the
+ * highest point and the head/feet low, instead of the pelvis being the
+ * lowest point with the head and feet higher).
+ *
+ * X and Y keep behaving exactly as before -- only Z's sign changes. (An
+ * earlier version of this fix also negated Y, to keep this mapping's
+ * determinant the same as the original's. That turned out to be the
+ * wrong place to fix that problem -- see the handedness-correction
+ * comment in SceneViewport.tsx, next to the pelvis's orientationTriangle
+ * calculation, for where it actually got fixed instead and why.)
  */
 export function cfaLandmarkToWorld([x, y, z]: Vec3): Vec3 {
-  return [x, z, y];
+  return [x, -z, y];
 }
 
 
