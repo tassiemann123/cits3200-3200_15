@@ -934,6 +934,7 @@ export default function App() {
           <div className="scene-area">
             <SceneViewport
               individuals={currentIndividuals}
+              graveyardName={graveyards.find(graveyard => graveyard.id === currentGraveyardId)?.name?? 'Unknown Graveyard'}
               selectedId={selected?.id ?? ''}
               selectedJointId={joint?.id ?? ''}
               onSelect={(individualId, selectedJointId) => {
