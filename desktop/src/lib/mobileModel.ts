@@ -217,7 +217,26 @@ export async function loadMobileModel(): Promise<ModelPieces> {
 }
 
 const complete = (p: (number | null)[] | undefined): p is number[] => !!p && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n));
-const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], p[2], -p[1]);
+const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
+
+// Direction the template skull's face points, in the template's own space.
+// If the face ends up reversed (180 deg), change to (0, 0, -1);
+// if it ends up 90 deg off, try (1, 0, 0) / (-1, 0, 0).
+const HEAD_REST_FACE = new THREE.Vector3(0, 0, 1);
+
+/** Spin `piece` around the axis `up` (through `pivot`) so its face points along `desiredFace`. */
+function alignFacing(piece: THREE.Object3D, pivot: THREE.Vector3, up: THREE.Vector3, desiredFace: THREE.Vector3) {
+  const axis = up.clone().normalize();
+  const flatten = (v: THREE.Vector3) => v.clone().addScaledVector(axis, -v.dot(axis));
+  const current = flatten(HEAD_REST_FACE.clone().applyQuaternion(piece.quaternion));
+  const target = flatten(desiredFace);
+  if (current.lengthSq() < 1e-8 || target.lengthSq() < 1e-8) return;
+  current.normalize(); target.normalize();
+  const angle = Math.atan2(axis.dot(new THREE.Vector3().crossVectors(current, target)), current.dot(target));
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+  piece.quaternion.premultiply(q);
+  piece.position.sub(pivot).applyQuaternion(q).add(pivot);
+}
 
 /** Pose the actual mobile meshes from each contributing bone's own coordinates. */
 export function createAnatomicalSkeleton(individual: Individual, templates: ModelPieces, selectedJointId?: string): THREE.Group {
@@ -275,7 +294,6 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   };
 
   const head = torsoPresent ? headRaw : undefined;
-  const chin = torsoPresent ? landmark('chin') : undefined;
   const sacrum = sacrumRaw;
 
   // Spine: sacral promontory up to the top of the head.
@@ -285,19 +303,79 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   const spineLength = torsoPresent && head && sacrum ? sacrum.distanceTo(head) : undefined;
 
   if (head) {
-    const headDirection = chin
-      ? head.clone().sub(chin).normalize()
-      : bodyUp ?? new THREE.Vector3(0, 1, 0);
-
+    const headDirection = bodyUp ?? new THREE.Vector3(0, 1, 0);
     const headLength = spineLength ?? 0.3;
     const headFrom = head.clone().addScaledVector(headDirection, -0.143 * headLength);
 
-    add('SK_Head', 'sternum', headFrom, head, 'anchor', chin);
+    const beforeHead = root.children.length;
+    add('SK_Head', 'sternum', headFrom, head, 'anchor');
+
+    // Orient the face using the recorded chin landmark.
+    const chin = landmark('chin');
+    if (chin && root.children.length > beforeHead) {
+      alignFacing(root.children[root.children.length - 1], headFrom, headDirection, chin.clone().sub(head));
+    }
   }
 
   // Pelvis: needs both acetabula and the sacral promontory (see getRenderableBones).
-  if (bones.has('pelvis')) add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
+  if (bones.has('pelvis')) {
+    const before = root.children.length;
+    add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
+    const pelvis = root.children[root.children.length - 1];
+    if (root.children.length > before && sacrum && headRaw) {
+      const basis = new THREE.Matrix4();
+      // Orthonormal frame: X = left, Y = up, Z = X x Y.
+      const frameQuat = (leftV: THREE.Vector3, upV: THREE.Vector3) => {
+        const y = upV.clone().normalize();
+        const x = leftV.clone().addScaledVector(y, -leftV.dot(y)).normalize();
+        const z = new THREE.Vector3().crossVectors(x, y).normalize();
+        return new THREE.Quaternion().setFromRotationMatrix(basis.makeBasis(x, y, z));
+      };
+      const centerOf = (n: string) => new THREE.Box3().setFromObject(templates.get(n)!.object).getCenter(new THREE.Vector3());
 
+      // Rest "up" = template pelvis centre -> template head centre (independent of spine tip order).
+      const restUp = centerOf('SK_Head').sub(centerOf('SK_Coccyx')).normalize();
+      const restLeft = centerOf('SK_LLegUp').sub(centerOf('SK_RLegUp'));
+      const up = headRaw.clone().sub(sacrum);
+      const hipL = bones.get('left_femur') ? toModel(bones.get('left_femur')!.from) : undefined;
+      const hipR = bones.get('right_femur') ? toModel(bones.get('right_femur')!.from) : undefined;
+      const R = hipL && hipR
+        ? frameQuat(hipL.clone().sub(hipR), up).multiply(frameQuat(restLeft, restUp).invert())
+        : new THREE.Quaternion().setFromUnitVectors(restUp, up.clone().normalize());
+
+      // Sacral attachment point on the template pelvis: centroid of its vertices
+      // nearest the top (along rest up), so it is a real point on the mesh.
+      const probe = new THREE.Vector3();
+      let hi = -Infinity, lo = Infinity;
+      templates.get('SK_Coccyx')!.object.traverse(child => {
+        if (!isMesh(child)) return;
+        const pos = child.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i += 1) {
+          const d = probe.fromBufferAttribute(pos, i).dot(restUp);
+          if (d > hi) hi = d;
+          if (d < lo) lo = d;
+        }
+      });
+      const band = (hi - lo) * 0.1;
+      const sacralPoint = new THREE.Vector3();
+      let n = 0;
+      templates.get('SK_Coccyx')!.object.traverse(child => {
+        if (!isMesh(child)) return;
+        const pos = child.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i += 1) {
+          probe.fromBufferAttribute(pos, i);
+          if (probe.dot(restUp) >= hi - band) { sacralPoint.add(probe); n += 1; }
+        }
+      });
+      if (n > 0) sacralPoint.divideScalar(n);
+
+      pelvis.quaternion.copy(R);
+      pelvis.scale.setScalar(bodyScale);
+      pelvis.position.copy(sacrum).sub(sacralPoint.multiplyScalar(bodyScale).applyQuaternion(R));
+      // pelvis.position.add(new THREE.Vector3(0, 0, 0)); // optional tiny nudge
+    }
+  }
+  
   // Ribcage: sacrum up to the shoulder midpoint, or the manubrium if a shoulder is missing.
   const leftShoulder = landmark('left_shoulder');
   const rightShoulder = landmark('right_shoulder');

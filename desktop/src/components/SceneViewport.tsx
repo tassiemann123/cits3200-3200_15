@@ -29,11 +29,12 @@ type SceneState = {
   targets: THREE.Object3D[];
   rings: THREE.Object3D[];
   bounds: THREE.Box3;
+  framedBounds: THREE.Box3;
   framed: boolean;
   baseDistance: number;
 };
 
-const point = (p: readonly number[]) => new THREE.Vector3(p[0], p[1], p[2]);
+const point = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
 const isCoordinate = (p: readonly (number | null)[]): p is number[] =>
   p.length === 3 && p.every((n) => typeof n === 'number' && Number.isFinite(n));
 
@@ -64,6 +65,7 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
   state.camera.lookAt(center);
   state.controls.update();
   state.framed = true;
+  state.framedBounds = state.bounds.clone();
 }
 
 /** Anatomical bone pieces and their recorded endpoints in the shared coordinate space. */
@@ -141,7 +143,7 @@ export default function SceneViewport(props: SceneViewportProps) {
     const content = new THREE.Group();
     const floor = new THREE.Group();
     scene.add(content, floor);
-    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], bounds: new THREE.Box3(), framed: false, baseDistance: 4 };
+    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], bounds: new THREE.Box3(), framedBounds: new THREE.Box3(), framed: false, baseDistance: 4 };
     stateRef.current = state;
     const resize = new ResizeObserver(() => {
       const { width, height } = host.getBoundingClientRect();
@@ -251,8 +253,7 @@ export default function SceneViewport(props: SceneViewportProps) {
         individualGroup.add(model);
         if (model.children.length) individualBounds.union(new THREE.Box3().setFromObject(model));
       }
-      renderable.forEach(bone => individualBounds.expandByPoint(point(bone.from)).expandByPoint(point(bone.to)));
-
+      
       if (showMarkers) individual.joints.forEach((joint) => {
         const unique = new Set<string>();
         joint.endpoints.forEach((endpoint) => {
@@ -310,7 +311,12 @@ export default function SceneViewport(props: SceneViewportProps) {
       materials.forEach((m) => { m.transparent = true; m.opacity = 0.4; });
       state.floor.add(grid);
     }
-    if (!state.framed || (templates && !state.content.userData.modelFramed)) {
+    // Re-center whenever the combined bounds actually change (a skeleton
+    // added, moved, or newly complete) -- not on every render, which would
+    // fight the user's manual orbit/pan whenever they just select a joint
+    // or toggle markers without anything actually moving.
+    const boundsChanged = !state.bounds.equals(state.framedBounds);
+    if (!state.framed || (templates && !state.content.userData.modelFramed) || boundsChanged) {
       state.content.userData.modelFramed = Boolean(templates);
       frameScene(state, propsRef.current.view, propsRef.current.zoom);
     }
