@@ -625,7 +625,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -636,6 +636,12 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       const fromPos = positions.get(pieceLandmarkId(from, fromBone));
       const toPos = positions.get(pieceLandmarkId(to, toBone));
       if (!fromPos || !toPos) {
+        piece.object.visible = false;
+        return;
+      }
+      // A piece that depends on a whole group of landmarks (the pelvis) is
+      // hidden once none of them remain -- see requiresAnyOf in skeletonPieces.ts.
+      if (requiresAnyOf && !requiresAnyOf.some((point) => positions.has(point))) {
         piece.object.visible = false;
         return;
       }

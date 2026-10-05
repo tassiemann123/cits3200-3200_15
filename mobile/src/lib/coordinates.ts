@@ -46,10 +46,35 @@ export function cfaLandmarkToWorld([x, y, z]: Vec3): Vec3 {
  * reference mesh so both always agree on where a given landmark actually
  * is.
  */
+/** Pelvis landmarks tried, in order of preference, as a stand-in origin when sacral_promontory is absent. */
+const PELVIS_REFERENCE_IDS = [
+  "left_acetabulum", "right_acetabulum",
+  "left_ilium_superior", "right_ilium_superior",
+  "left_ischium", "right_ischium",
+];
+
+/**
+ * The point each skeleton is recentred on. Normally the sacral promontory.
+ * If that landmark is missing (e.g. the whole "Head & torso" group is marked
+ * not present), the skeleton used to be left at its raw entered coordinates,
+ * so a record entered far from the origin (the usual survey-style values)
+ * ended up off-screen or below the floor and the whole skeleton appeared to
+ * vanish. Falling back to the centre of whichever pelvis landmarks exist
+ * (or, failing that, the centre of everything entered) keeps the remaining
+ * bones in view in exactly the same place relative to each other.
+ */
+function referenceWorldPosition(landmarks: Landmark[]): Vec3 | null {
+  const sacral = landmarks.find((landmark) => landmark.id === "sacral_promontory")?.position;
+  if (sacral) return cfaLandmarkToWorld(sacral);
+  const pelvis = landmarks.filter((landmark) => PELVIS_REFERENCE_IDS.includes(landmark.id));
+  const pool = pelvis.length > 0 ? pelvis : landmarks;
+  if (pool.length === 0) return null;
+  return centroid(pool.map((landmark) => cfaLandmarkToWorld(landmark.position)));
+}
+
 export function landmarksToDisplayPositions(landmarks: Landmark[]): Map<string, Vec3> {
   const PELVIS_HEIGHT = 0.95; // approx metres off the ground for an adult hip
-  const reference = landmarks.find((landmark) => landmark.id === "sacral_promontory")?.position;
-  const referenceWorld = reference ? cfaLandmarkToWorld(reference) : null;
+  const referenceWorld = referenceWorldPosition(landmarks);
 
   const result = new Map<string, Vec3>();
   landmarks.forEach((landmark) => {
