@@ -205,6 +205,7 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
       left: "left_ilium_superior",
       right: "right_ilium_superior",
       anchor: "sacral_promontory",
+      // [x = left, front, up] in the pelvis mesh's own frame (not raw CFA depth axes)
       restLeft: [0.19, 0.03, 0.041],
       restRight: [-0.19, 0.03, 0.041],
       restAnchor: [0, 0, 0],
