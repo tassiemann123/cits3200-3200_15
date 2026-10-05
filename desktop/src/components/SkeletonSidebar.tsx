@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Plus, Search, Trash2, Check, X , Download, Upload} from 'lucide-react';
-import type { Individual, BoneStatus } from '../model';
+import { Eye, EyeOff, Plus, Search, Trash2, Check, X, Download, Upload } from 'lucide-react';
+import type { Individual, BoneStatus, Endpoint } from '../model';
 import { CFA_GROUPS } from '../data/cfaSchema';
 
 interface SkeletonSidebarProps {
@@ -28,9 +28,9 @@ interface SkeletonSidebarProps {
 // Bones each group controls. Joints are shared between bones (e.g. the acetabulum
 // belongs to both the pelvis and the femur), so the ownership is listed explicitly.
 const GROUP_BONES: Record<string, string[]> = {
-  head_torso: ['spine'],
-  left_arm: ['left_humerus', 'left_forearm', 'left_hand'],
-  right_arm: ['right_humerus', 'right_forearm', 'right_hand'],
+  head_torso: ['sternum'],
+  left_arm: ['left_clavicle', 'left_humerus', 'left_forearm', 'left_hand'],
+  right_arm: ['right_clavicle', 'right_humerus', 'right_forearm', 'right_hand'],
   left_pelvis: ['pelvis'],
   right_pelvis: ['pelvis'],
   left_leg: ['left_femur', 'left_lower_leg', 'left_foot'],
@@ -48,6 +48,7 @@ function getGroupStatus(individual: Individual, boneIds: string[]): BoneStatus {
   if (statuses.some(s => s === 'absent')) return 'absent';
   return 'unrecorded';
 }
+
 export default function SkeletonSidebar({
   individuals,
   selectedId,
@@ -75,6 +76,36 @@ export default function SkeletonSidebar({
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
+
+  // X / Y / Z inputs for one endpoint of one joint.
+  const renderInputs = (
+    jointId: string,
+    endpoint: Endpoint,
+    endpointIndex: number,
+  ) =>
+    [0, 1, 2].map(axis => (
+      <label className="coordinate-field" key={axis}>
+        <span>{['X:', 'Y:', 'Z:'][axis]}</span>
+
+        <input
+          className="coordinate-input"
+          type="number"
+          step="any"
+          value={endpoint.coordinate[axis] ?? ''}
+          placeholder="—"
+          onChange={event => {
+            const value = event.target.value.trim();
+
+            onCoordinateChange(
+              jointId,
+              endpointIndex,
+              axis as 0 | 1 | 2,
+              value === '' ? null : Number(value),
+            );
+          }}
+        />
+      </label>
+    ));
 
   return (
     <aside className="skeleton-sidebar">
@@ -231,6 +262,12 @@ export default function SkeletonSidebar({
                 boneIds.forEach(boneId =>
                   onBoneStatusChange(boneId, nextStatus),
                 );
+
+                setCollapsedGroups(groups =>
+                  nextStatus === 'absent'
+                    ? groups.includes(group.id) ? groups : [...groups, group.id]
+                    : groups.filter(id => id !== group.id),
+                );
               };
 
               const collapsed = collapsedGroups.includes(group.id);
@@ -272,46 +309,70 @@ export default function SkeletonSidebar({
                   {!collapsed && (
                     <div className="coordinate-rows">
                       {groupJoints.map(joint => {
-                        const endpoint = joint.endpoints[0];
-
                         const pointName = joint.label
                           .replace(/^Left /, '')
                           .replace(/^Right /, '');
 
+                        // Landmarks and single-bone joints: one bold row.
+                        if (joint.endpoints.length === 1) {
+                          return (
+                            <div className="coordinate-row" key={joint.id}>
+                              <span className="coordinate-point strong">
+                                {pointName}
+                              </span>
+
+                              {renderInputs(joint.id, joint.endpoints[0], 0)}
+                            </div>
+                          );
+                        }
+
+                        // Joints shared by several bones: a bold joint title, then
+                        // one row per bone with a checkbox in front of its name.
                         return (
-                          <div className="coordinate-row" key={joint.id}>
-                            <span className="coordinate-point">
-                              {pointName}
-                            </span>
+                          <div key={joint.id}>
+                            <div className="coordinate-row joint-title">
+                              <span className="coordinate-point strong">
+                                {pointName}
+                              </span>
+                            </div>
 
-                            {[0, 1, 2].map(axis => (
-                              <label
-                                className="coordinate-field"
-                                key={axis}
-                              >
-                                <span>{['X:', 'Y:', 'Z:'][axis]}</span>
+                            {joint.endpoints.map((endpoint, endpointIndex) => {
+                              const bone = selected.bones.find(
+                                item => item.id === endpoint.boneId,
+                              );
 
-                                <input
-                                  className="coordinate-input"
-                                  type="number"
-                                  step="1"
-                                  value={endpoint.coordinate[axis] ?? ''}
-                                  placeholder="—"
-                                  onChange={event => {
-                                    const value = event.target.value.trim();
+                              return (
+                                <div
+                                  className="coordinate-row"
+                                  key={`${joint.id}-${endpointIndex}`}
+                                >
+                                  <label className="coordinate-point bone-check">
+                                    {bone && (
+                                      <input
+                                        type="checkbox"
+                                        checked={bone.status === 'present'}
+                                        title="Present"
+                                        onChange={event =>
+                                          onBoneStatusChange(
+                                            bone.id,
+                                            event.target.checked
+                                              ? 'present'
+                                              : 'absent',
+                                          )
+                                        }
+                                      />
+                                    )}
+                                    <span>{endpoint.label}</span>
+                                  </label>
 
-                                    onCoordinateChange(
-                                      joint.id,
-                                      0,
-                                      axis as 0 | 1 | 2,
-                                      value === ''
-                                        ? null
-                                        : Number(value),
-                                    );
-                                  }}
-                                />
-                              </label>
-                            ))}
+                                  {renderInputs(
+                                    joint.id,
+                                    endpoint,
+                                    endpointIndex,
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         );
                       })}
