@@ -29,6 +29,7 @@ type SceneState = {
   targets: THREE.Object3D[];
   rings: THREE.Object3D[];
   bounds: THREE.Box3;
+  framedBounds: THREE.Box3;
   framed: boolean;
   baseDistance: number;
 };
@@ -64,6 +65,7 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
   state.camera.lookAt(center);
   state.controls.update();
   state.framed = true;
+  state.framedBounds = state.bounds.clone();
 }
 
 /** Anatomical bone pieces and their recorded endpoints in the shared coordinate space. */
@@ -141,7 +143,7 @@ export default function SceneViewport(props: SceneViewportProps) {
     const content = new THREE.Group();
     const floor = new THREE.Group();
     scene.add(content, floor);
-    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], bounds: new THREE.Box3(), framed: false, baseDistance: 4 };
+    const state: SceneState = { renderer, scene, camera, controls, content, floor, targets: [], rings: [], bounds: new THREE.Box3(), framedBounds: new THREE.Box3(), framed: false, baseDistance: 4 };
     stateRef.current = state;
     const resize = new ResizeObserver(() => {
       const { width, height } = host.getBoundingClientRect();
@@ -310,7 +312,12 @@ export default function SceneViewport(props: SceneViewportProps) {
       materials.forEach((m) => { m.transparent = true; m.opacity = 0.4; });
       state.floor.add(grid);
     }
-    if (!state.framed || (templates && !state.content.userData.modelFramed)) {
+    // Re-center whenever the combined bounds actually change (a skeleton
+    // added, moved, or newly complete) -- not on every render, which would
+    // fight the user's manual orbit/pan whenever they just select a joint
+    // or toggle markers without anything actually moving.
+    const boundsChanged = !state.bounds.equals(state.framedBounds);
+    if (!state.framed || (templates && !state.content.userData.modelFramed) || boundsChanged) {
       state.content.userData.modelFramed = Boolean(templates);
       frameScene(state, propsRef.current.view, propsRef.current.zoom);
     }
