@@ -544,33 +544,26 @@ export default function App() {
               let endpointIndex = 0;
 
               if (row.bone) {
-                const matchingEndpoint = currentJoint.endpoints.findIndex(
-                  endpoint => {
-                    const bone = person.bones.find(
-                      item => item.id === endpoint.boneId,
-                    );
-
-                    return bone?.label.toLowerCase() === row.bone.toLowerCase();
-                  },
+                const wanted = row.bone.toLowerCase();
+                const match = currentJoint.endpoints.findIndex(endpoint =>
+                  endpoint.label.toLowerCase() === wanted ||
+                  person.bones.find(item => item.id === endpoint.boneId)?.label.toLowerCase() === wanted,
                 );
-
-                if (matchingEndpoint >= 0) {
-                  endpointIndex = matchingEndpoint;
-                }
+                if (match >= 0) endpointIndex = match;
               }
 
               const endpoint = currentJoint.endpoints[endpointIndex];
-
               if (!endpoint) continue;
 
               endpoint.coordinate = [row.x, row.y, row.z];
 
-              const bone = person.bones.find(
-                item => item.id === endpoint.boneId,
-              );
+              const bone = endpoint.boneId
+                ? person.bones.find(item => item.id === endpoint.boneId)
+                : undefined;
 
               if (bone) {
-                bone.status = row.present ? 'present' : 'absent';
+                if (!row.present) bone.status = 'absent';
+                else if (bone.status !== 'absent') bone.status = 'present';
               }
             }
 
@@ -649,11 +642,11 @@ export default function App() {
           return {
             skeletonId: person.name,
             jointName: joint.id,
-            bone: bone?.label ?? '',
+            bone: endpoint.label,
             x: endpoint.coordinate[0],
             y: endpoint.coordinate[1],
             z: endpoint.coordinate[2],
-            present: bone?.status === 'present',
+            present: endpoint.boneId ? bone?.status === 'present' : true,
           };
         }),
       ),
@@ -694,11 +687,11 @@ export default function App() {
         rows.push({
           skeletonId: individual.name,
           jointName: joint.id,
-          bone: bone?.label ?? '',
+          bone: endpoint.label,
           x: endpoint.coordinate[0],
           y: endpoint.coordinate[1],
           z: endpoint.coordinate[2],
-          present: bone?.status === 'present',
+          present: endpoint.boneId ? bone?.status === 'present' : true,
         });
       }
     }

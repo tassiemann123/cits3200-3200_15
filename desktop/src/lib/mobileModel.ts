@@ -224,30 +224,30 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   const root = new THREE.Group();
   root.rotation.x = Math.PI / 2; // Mobile meshes are Y-up; desktop retains a shared survey Z-up frame.
   const bones = new Map(getRenderableBones(individual).map(b => [b.id, b]));
-  const coordinate = (jointId: string, owner: string) => {
-    if (individual.bones.find(b => b.id === owner)?.status !== 'present') return undefined;
-    const value = individual.joints.find(j => j.id === jointId)?.endpoints.find(e => e.boneId === owner)?.coordinate;
+
+  // Landmarks (head, chin, sacral promontory, shoulders...) are read from the
+  // joint's first endpoint, regardless of bone inventory.
+  const landmark = (jointId: string) => {
+    const value = individual.joints.find(j => j.id === jointId)?.endpoints[0]?.coordinate;
     return complete(value) ? toModel(value) : undefined;
   };
+
+  // Head, spine and ribcage used to hang off the old "spine" bone.
+  // The sternum bone ("Head & torso" group) now controls them.
+  const torsoPresent = individual.bones.find(b => b.id === 'sternum')?.status === 'present';
+
   const selectedBones = new Set(individual.joints.find(j => j.id === selectedJointId)?.endpoints.map(e => e.boneId));
-  const spine = bones.get('spine');
   const spineRest = templates.get('SK_Spine')!.rest;
-  // bodyScale describes this skeleton's size relative to the template, not
-  // whether the torso is currently shown — so it must come from the raw
-  // recorded coordinates, not from `bones` (which drops the spine entirely
-  // when Head & Torso is set to "Not present"). Using `bones.get('spine')`
-  // here caused the scale to snap to the hardcoded fallback of 1 whenever
-  // the torso was hidden, throwing every other bone's position off.
-  const spineBoneRaw = individual.bones.find(b => b.id === 'spine');
-  const spineRawFrom = spineBoneRaw
-    ? individual.joints.find(j => j.id === spineBoneRaw.from.jointId)?.endpoints[spineBoneRaw.from.endpointIndex]?.coordinate
-    : undefined;
-  const spineRawTo = spineBoneRaw
-    ? individual.joints.find(j => j.id === spineBoneRaw.to.jointId)?.endpoints[spineBoneRaw.to.endpointIndex]?.coordinate
-    : undefined;
-  const bodyScale = complete(spineRawFrom) && complete(spineRawTo)
-    ? Math.min(2, Math.max(.25, toModel(spineRawFrom).distanceTo(toModel(spineRawTo)) / spineRest.fromTip.distanceTo(spineRest.toTip)))
+
+  // bodyScale is this skeleton's size relative to the template. It comes from the
+  // raw recorded head and sacral coordinates, so it does not change when the
+  // torso is hidden.
+  const headRaw = landmark('head_proximal');
+  const sacrumRaw = landmark('sacral_promontory');
+  const bodyScale = headRaw && sacrumRaw
+    ? Math.min(2, Math.max(.25, headRaw.distanceTo(sacrumRaw) / spineRest.fromTip.distanceTo(spineRest.toTip)))
     : 1;
+
   const add = (name: string, owner: string, from: THREE.Vector3 | undefined, to: THREE.Vector3 | undefined, stretch: 'rod' | 'uniform' | 'anchor' = 'rod', twist?: THREE.Vector3) => {
     const template = templates.get(name);
     if (!template || !from || !to) return;
@@ -273,13 +273,16 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     }
     root.add(piece);
   };
-  if (spine) add('SK_Spine', 'spine', toModel(spine.to), toModel(spine.from));
-  const head = coordinate('head_proximal', 'spine');
-  const chin = coordinate('chin', 'spine');
-  const spineFrom = spine ? toModel(spine.to) : undefined;
-  const spineTo = spine ? toModel(spine.from) : undefined;
-  const bodyUp = spineFrom && spineTo ? spineTo.clone().sub(spineFrom).normalize() : undefined;
-  const spineLength = spineFrom && spineTo ? spineFrom.distanceTo(spineTo) : undefined;
+
+  const head = torsoPresent ? headRaw : undefined;
+  const chin = torsoPresent ? landmark('chin') : undefined;
+  const sacrum = sacrumRaw;
+
+  // Spine: sacral promontory up to the top of the head.
+  if (torsoPresent && head && sacrum) add('SK_Spine', 'sternum', sacrum, head);
+
+  const bodyUp = torsoPresent && head && sacrum ? head.clone().sub(sacrum).normalize() : undefined;
+  const spineLength = torsoPresent && head && sacrum ? sacrum.distanceTo(head) : undefined;
 
   if (head) {
     const headDirection = chin
@@ -289,28 +292,30 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     const headLength = spineLength ?? 0.3;
     const headFrom = head.clone().addScaledVector(headDirection, -0.143 * headLength);
 
-    add('SK_Head', 'spine', headFrom, head, 'anchor', chin);
+    add('SK_Head', 'sternum', headFrom, head, 'anchor', chin);
   }
 
-  const sacrum = coordinate('sacral_promontory', 'pelvis');
+  // Pelvis: needs both acetabula and the sacral promontory (see getRenderableBones).
   if (bones.has('pelvis')) add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
-  const left = coordinate('left_shoulder', 'shoulder_girdle');
-  const right = coordinate('right_shoulder', 'shoulder_girdle');
-  const shoulderMidpoint = left && right ? left.clone().lerp(right, .5) : undefined;
-  if (bones.has('shoulder_girdle')) {
-    add('SK_LClavicle', 'shoulder_girdle', shoulderMidpoint, left, 'anchor');
-    add('SK_RClavicle', 'shoulder_girdle', shoulderMidpoint, right, 'anchor');
-  }
-  // The existing grouped torso uses the shoulder midpoint as its display anchor;
-  // this is not stored as a surveyed manubrium measurement.
-  if (spine) add('SK_Side', 'spine', coordinate('sacral_promontory', 'spine'), shoulderMidpoint, 'uniform');
+
+  // Ribcage: sacrum up to the shoulder midpoint, or the manubrium if a shoulder is missing.
+  const leftShoulder = landmark('left_shoulder');
+  const rightShoulder = landmark('right_shoulder');
+  const ribTop = leftShoulder && rightShoulder
+    ? leftShoulder.clone().lerp(rightShoulder, .5)
+    : landmark('manubrium');
+  if (torsoPresent && sacrum && ribTop) add('SK_Side', 'sternum', sacrum, ribTop, 'uniform');
+
+  // Clavicles now run from the manubrium to each shoulder, as recorded.
   for (const [side, prefix] of [['left', 'L'], ['right', 'R']]) {
     const pairs: [string, string, 'rod' | 'anchor'][] = [
+      [`${side}_clavicle`, `SK_${prefix}Clavicle`, 'anchor'],
       [`${side}_humerus`, `SK_${prefix}ArmUp`, 'rod'], [`${side}_forearm`, `SK_${prefix}ArmDown`, 'rod'],
       [`${side}_hand`, `SK_Hand${prefix}`, 'anchor'], [`${side}_femur`, `SK_${prefix}LegUp`, 'rod'],
       [`${side}_lower_leg`, `SK_${prefix}LegDown`, 'rod'], [`${side}_foot`, `SK_${prefix}Foot`, 'anchor'],
     ];
-    for (const [owner, name, stretch] of pairs) { const bone = bones.get(owner); if (bone) add(name, owner, toModel(bone.from), toModel(bone.to), stretch); }
+    for (const [owner, name, stretch] of pairs) { const bone = bones.get(owner); if (bone && bone.to !== undefined) add(name, owner, toModel(bone.from), toModel(bone.to), stretch); }
   }
+  void selectedBones;
   return root;
 }

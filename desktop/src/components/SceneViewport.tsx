@@ -256,7 +256,7 @@ export default function SceneViewport(props: SceneViewportProps) {
       if (showMarkers) individual.joints.forEach((joint) => {
         const unique = new Set<string>();
         joint.endpoints.forEach((endpoint) => {
-          if (!isCoordinate(endpoint.coordinate) || !boneIds.has(endpoint.boneId)) return;
+          if (!isCoordinate(endpoint.coordinate) || (endpoint.boneId && !boneIds.has(endpoint.boneId))) return;
           const key = endpoint.coordinate.join(',');
           if (unique.has(key)) return;
           unique.add(key);
