@@ -59,11 +59,15 @@ export default function Header({
           Open from backend
         </button>
 
-        <span className="backend-state" role="status">{backendState === 'saved' ? 'Backend saved' : backendState === 'saving' ? 'Syncing…' : backendState === 'conflict' ? 'Backend conflict' : backendState === 'offline' ? 'Local only' : 'Local changes'}</span>
+        {backendState !== 'local' && (
+          <span className="backend-state" role="status">
+            {backendState === 'saved' ? 'Backend saved' : backendState === 'saving' ? 'Syncing…' : backendState === 'conflict' ? 'Backend conflict' : 'Local only'}
+          </span>
+        )}
 
         <button className="header-button" onClick={onSave} disabled={backendState === 'saving'} title="Save locally and sync this desktop workspace">
           <Save size={16} />
-          Save
+          Save workspace
         </button>
 
         <button className="button primary" onClick={onExport}>
