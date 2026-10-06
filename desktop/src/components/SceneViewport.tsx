@@ -34,7 +34,7 @@ type SceneState = {
   baseDistance: number;
 };
 
-const point = (p: readonly number[]) => new THREE.Vector3(p[0], p[1], p[2]);
+const point = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
 const isCoordinate = (p: readonly (number | null)[]): p is number[] =>
   p.length === 3 && p.every((n) => typeof n === 'number' && Number.isFinite(n));
 
@@ -253,8 +253,7 @@ export default function SceneViewport(props: SceneViewportProps) {
         individualGroup.add(model);
         if (model.children.length) individualBounds.union(new THREE.Box3().setFromObject(model));
       }
-      renderable.forEach(bone => individualBounds.expandByPoint(point(bone.from)).expandByPoint(point(bone.to)));
-
+      
       if (showMarkers) individual.joints.forEach((joint) => {
         const unique = new Set<string>();
         joint.endpoints.forEach((endpoint) => {

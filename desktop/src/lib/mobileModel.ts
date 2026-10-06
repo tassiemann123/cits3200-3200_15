@@ -217,7 +217,48 @@ export async function loadMobileModel(): Promise<ModelPieces> {
 }
 
 const complete = (p: (number | null)[] | undefined): p is number[] => !!p && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n));
-const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], p[2], -p[1]);
+const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
+
+// Same value as `offsetFromRatio` for SK_Head in the mobile skeletonPieces.ts.
+const HEAD_OFFSET_RATIO = 0.143;
+
+// --- Pelvis orientation from the two ASIS points + sacral promontory (same idea as mobile's orientationTriangle) ---
+// Rest triangle, authored as [x = left, front, up] in the pelvis mesh's own frame.
+// Copy these from `orientationTriangle` in the mobile skeletonPieces.ts if they change there.
+const PELVIS_REST_TRIANGLE = {
+  left: [0.19, 0.03, 0.041],
+  right: [-0.19, 0.03, 0.041],
+  anchor: [0, 0, 0],
+} as const;
+const pelvisRestToModel = (r: readonly number[]) => new THREE.Vector3(r[0], r[2], r[1]);
+
+/** Orthonormal frame from three points: x = right->left, y/z from the anchor's offset off that line. */
+function frameFromTriangle(left: THREE.Vector3, right: THREE.Vector3, anchor: THREE.Vector3): THREE.Matrix4 | undefined {
+  const xAxis = new THREE.Vector3().subVectors(left, right);
+  if (xAxis.lengthSq() < 1e-10) return undefined;
+  xAxis.normalize();
+  const midpoint = new THREE.Vector3().addVectors(left, right).multiplyScalar(0.5);
+  const towardAnchor = new THREE.Vector3().subVectors(anchor, midpoint);
+  const inPlane = towardAnchor.addScaledVector(xAxis, -towardAnchor.dot(xAxis));
+  if (inPlane.lengthSq() < 1e-10) return undefined;
+  inPlane.normalize();
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, inPlane).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  return new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+}
+
+/** Rotation taking the rest triangle's frame to the entered triangle's frame. */
+function computeTriangleQuaternion(
+  restLeft: THREE.Vector3, restRight: THREE.Vector3, restAnchor: THREE.Vector3,
+  curLeft: THREE.Vector3, curRight: THREE.Vector3, curAnchor: THREE.Vector3,
+): THREE.Quaternion | undefined {
+  const restFrame = frameFromTriangle(restLeft, restRight, restAnchor);
+  const curFrame = frameFromTriangle(curLeft, curRight, curAnchor);
+  if (!restFrame || !curFrame) return undefined;
+  const restQuat = new THREE.Quaternion().setFromRotationMatrix(restFrame);
+  const curQuat = new THREE.Quaternion().setFromRotationMatrix(curFrame);
+  return curQuat.multiply(restQuat.invert());
+}
 
 /** Pose the actual mobile meshes from each contributing bone's own coordinates. */
 export function createAnatomicalSkeleton(individual: Individual, templates: ModelPieces, selectedJointId?: string): THREE.Group {
@@ -275,36 +316,67 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   };
 
   const head = torsoPresent ? headRaw : undefined;
-  const chin = torsoPresent ? landmark('chin') : undefined;
   const sacrum = sacrumRaw;
 
-  // Spine: sacral promontory up to the top of the head.
-  if (torsoPresent && head && sacrum) add('SK_Spine', 'sternum', sacrum, head);
+  // Shoulder midpoint: twist target for both the spine and the ribcage (as in mobile).
+  const leftShoulder = landmark('left_shoulder');
+  const rightShoulder = landmark('right_shoulder');
+  const shoulderMid = leftShoulder && rightShoulder
+    ? leftShoulder.clone().lerp(rightShoulder, .5)
+    : leftShoulder ?? rightShoulder;
+
+  // Spine: sacral promontory up to the top of the head, twisted toward the shoulders (as in mobile).
+  const beforeSpine = root.children.length;
+  if (torsoPresent && head && sacrum) add('SK_Spine', 'sternum', sacrum, head, 'rod', shoulderMid);
+  const spinePiece = root.children.length > beforeSpine ? root.children[root.children.length - 1] : undefined;
 
   const bodyUp = torsoPresent && head && sacrum ? head.clone().sub(sacrum).normalize() : undefined;
   const spineLength = torsoPresent && head && sacrum ? sacrum.distanceTo(head) : undefined;
 
+  // Head: same as mobile's SK_Head spec (stretch "anchor", offsetFromRatio 0.143, twist "chin").
+  // The base sits HEAD_OFFSET_RATIO of the spine length below head_proximal along body-up,
+  // and the chin is passed as the twist target so poseSkeletonPiece turns the face toward it.
+  // With no spine direction it is placed at head_proximal unrotated (mobile's single-landmark branch).
   if (head) {
-    const headDirection = chin
-      ? head.clone().sub(chin).normalize()
-      : bodyUp ?? new THREE.Vector3(0, 1, 0);
-
-    const headLength = spineLength ?? 0.3;
-    const headFrom = head.clone().addScaledVector(headDirection, -0.143 * headLength);
-
-    add('SK_Head', 'sternum', headFrom, head, 'anchor', chin);
+    const headFrom = bodyUp && spineLength !== undefined
+      ? head.clone().addScaledVector(bodyUp, -HEAD_OFFSET_RATIO * spineLength)
+      : head;
+    add('SK_Head', 'sternum', headFrom, head, 'anchor', landmark('chin'));
   }
 
   // Pelvis: needs both acetabula and the sacral promontory (see getRenderableBones).
-  if (bones.has('pelvis')) add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
+  // Oriented from the two ASIS points + sacral promontory, falling back to the spine's rotation.
+  if (bones.has('pelvis')) {
+    const before = root.children.length;
+    add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
+    if (root.children.length > before && sacrum) {
+      const pelvis = root.children[root.children.length - 1];
+      const leftAsis = landmark('left_ilium_superior');
+      const rightAsis = landmark('right_ilium_superior');
+      const triangleQuat = leftAsis && rightAsis
+        ? computeTriangleQuaternion(
+            pelvisRestToModel(PELVIS_REST_TRIANGLE.left),
+            pelvisRestToModel(PELVIS_REST_TRIANGLE.right),
+            pelvisRestToModel(PELVIS_REST_TRIANGLE.anchor),
+            rightAsis, leftAsis, sacrum, // swap if the pelvis comes out back-to-front
+          )
+        : undefined;
+      const q = triangleQuat ?? (spinePiece ? spinePiece.quaternion.clone() : new THREE.Quaternion());
+      pelvis.quaternion.copy(q);
+      pelvis.scale.setScalar(bodyScale);
+      pelvis.position.copy(sacrum).sub(
+        templates.get('SK_Coccyx')!.rest.topTip.clone().multiplyScalar(bodyScale).applyQuaternion(q),
+      );
+    }
+  }
 
-  // Ribcage: sacrum up to the shoulder midpoint, or the manubrium if a shoulder is missing.
-  const leftShoulder = landmark('left_shoulder');
-  const rightShoulder = landmark('right_shoulder');
-  const ribTop = leftShoulder && rightShoulder
-    ? leftShoulder.clone().lerp(rightShoulder, .5)
-    : landmark('manubrium');
-  if (torsoPresent && sacrum && ribTop) add('SK_Side', 'sternum', sacrum, ribTop, 'uniform');
+  // Ribcage: sacrum -> manubrium, twisted toward the shoulder midpoint (as in mobile).
+  // Without a manubrium it aims at the shoulder midpoint with no twist.
+  const manubrium = landmark('manubrium');
+  const ribTop = manubrium ?? shoulderMid;
+  if (torsoPresent && sacrum && ribTop) {
+    add('SK_Side', 'sternum', sacrum, ribTop, 'uniform', manubrium ? shoulderMid : undefined);
+  }
 
   // Clavicles now run from the manubrium to each shoulder, as recorded.
   for (const [side, prefix] of [['left', 'L'], ['right', 'R']]) {
