@@ -1,10 +1,11 @@
 import type { Individual } from '../model';
 
 interface SceneControlsProps {
-  view: 'perspective' | 'front' | 'top';
+  view: 'perspective' | 'front' | 'top' | 'bottom';
   showGrid: boolean;
   showMarkers: boolean;
-  onViewChange: (view: 'perspective' | 'front' | 'top') => void;
+  onViewChange: (view: 'perspective' | 'front' | 'top' | 'bottom') => void;
+  onRotate: () => void;
   onToggleGrid: () => void;
   onToggleMarkers: () => void;
   onFit: () => void;
@@ -15,6 +16,7 @@ export default function SceneControls({
   showGrid,
   showMarkers,
   onViewChange,
+  onRotate,
   onToggleGrid,
   onToggleMarkers,
   onFit,
@@ -22,7 +24,7 @@ export default function SceneControls({
   return (
     <div className="scene-toolbar">
       <div className="view-toggle">
-        {(['perspective', 'front', 'top'] as const).map(option => (
+          {(['perspective', 'front', 'top', 'bottom'] as const).map(option => (
           <button
             key={option}
             className={view === option ? 'active' : ''}
@@ -33,7 +35,10 @@ export default function SceneControls({
         ))}
       </div>
 
-      <div className="scene-options">
+        <div className="scene-options">
+          <button aria-label="Rotate view 90 degrees" title="Rotate view 90°" onClick={onRotate}>
+            Rotate 90°
+          </button>
         <button
           className={showGrid ? 'active' : ''}
           aria-label="Toggle grid"

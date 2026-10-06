@@ -75,11 +75,14 @@ describe('bone-owned desktop coordinates', () => {
 
   it('keeps pelvis rendered without optional ilium/ischium measurements', () => {
     let person = first();
+    for (const joint of person.joints.filter((j) => /ilium|ischium/.test(j.id))) {
+      for (let axis = 0; axis < 3; axis += 1) person = updateCoordinate(person, joint.id, 0, axis, null);
+    }
     expect(person.joints.filter((j) => /ilium|ischium/.test(j.id)).every((j) => j.endpoints[0].coordinate.every((v) => v === null))).toBe(true);
     expect(getRenderableBones(person).some((b) => b.id === 'pelvis')).toBe(true);
     person = updateCoordinate(person, 'left_ilium_superior', 0, 0, 4);
     expect(getRenderableBones(person).some((b) => b.id === 'pelvis')).toBe(true);
-    person = updateCoordinate(person, 'sacral_promontory', 1, 0, null);
+    person = updateCoordinate(person, 'sacral_promontory', 0, 0, null);
     expect(getRenderableBones(person).some((b) => b.id === 'pelvis')).toBe(false);
     expect(person.bones.find((b) => b.id === 'pelvis')!.status).toBe('present');
   });
@@ -155,8 +158,9 @@ describe('project import and export', () => {
     project.individuals[1] = applyScenario(project.individuals[1], 'missing-femur');
     const csv = toCoordinateCsv(project);
     expect(csv.split('\r\n')).toHaveLength(1 + project.individuals.reduce((n, p) => n + p.joints.reduce((m, j) => m + j.endpoints.length, 0), 0));
-    expect(csv).toContain('"left_femur","absent"');
-    expect(csv).toContain('"pelvis","present","","",""');
+    expect(csv).toContain('"left_acetabulum","Thigh (proximal)","absent"');
+    expect(csv).toContain('"left_acetabulum","Pelvis","present"');
+    expect(toCoordinateCsv(createBlankProject())).toContain('"left_knee","Thigh (distal)","present","","",""');
     project.individuals[0].accession = '=1+1';
     expect(toCoordinateCsv(project)).toContain('"\'=1+1"');
   });

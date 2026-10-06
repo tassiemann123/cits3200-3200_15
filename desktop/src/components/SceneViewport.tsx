@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getRenderableBones, type Individual } from '../model';
-import { loadMobileModel, createAnatomicalSkeleton, disposeModel, type ModelPieces } from '../lib/mobileModel';
+import { loadMobileModel, createAnatomicalSkeleton, disposeModel, surveyPointToScene, type ModelPieces } from '../lib/mobileModel';
 
 export interface SceneViewportProps {
   individuals: Individual[];
@@ -13,8 +13,9 @@ export interface SceneViewportProps {
   onExportReady: (exportImage: () => void) => void;
   showGrid: boolean;
   showMarkers: boolean;
-  view: 'perspective' | 'front' | 'top';
+  view: 'perspective' | 'front' | 'top' | 'bottom';
   frameKey: number;
+  rotateKey: number;
   zoom: number;
 }
 
@@ -34,7 +35,7 @@ type SceneState = {
   baseDistance: number;
 };
 
-const point = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
+const point = surveyPointToScene;
 const isCoordinate = (p: readonly (number | null)[]): p is number[] =>
   p.length === 3 && p.every((n) => typeof n === 'number' && Number.isFinite(n));
 
@@ -58,6 +59,8 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
     ? new THREE.Vector3(0, -1, 0.035)
     : view === 'top'
       ? new THREE.Vector3(0, -0.015, 1)
+      : view === 'bottom'
+        ? new THREE.Vector3(0, -0.015, -1)
       : new THREE.Vector3(0.34, -1, 0.30);
   state.controls.target.copy(center);
   state.camera.position.copy(center).add(direction.normalize().multiplyScalar(state.baseDistance / (zoom / 100)));
@@ -70,9 +73,10 @@ function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: n
 
 /** Anatomical bone pieces and their recorded endpoints in the shared coordinate space. */
 export default function SceneViewport(props: SceneViewportProps) {
-  const { individuals, graveyardName, selectedId,selectedJointId, onExportReady, showGrid, showMarkers, view, frameKey, zoom } = props;
+  const { individuals, graveyardName, selectedId, selectedJointId, onExportReady, showGrid, showMarkers, view, frameKey, rotateKey, zoom } = props;
   const canvasHost = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
+  const lastRotateKey = useRef(rotateKey);
   const propsRef = useRef(props);
   propsRef.current = props;
   const [fallback, setFallback] = useState(false);
@@ -326,6 +330,18 @@ export default function SceneViewport(props: SceneViewportProps) {
     const state = stateRef.current;
     if (state) frameScene(state, view, propsRef.current.zoom);
   }, [view, frameKey]);
+
+  useEffect(() => {
+    if (rotateKey === lastRotateKey.current) return;
+    lastRotateKey.current = rotateKey;
+    const state = stateRef.current;
+    if (!state) return;
+    const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+    state.camera.position.sub(state.controls.target).applyQuaternion(turn).add(state.controls.target);
+    state.camera.up.applyQuaternion(turn);
+    state.camera.lookAt(state.controls.target);
+    state.controls.update();
+  }, [rotateKey]);
 
   useEffect(() => {
     const state = stateRef.current;

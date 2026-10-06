@@ -164,10 +164,11 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(initial.project.individuals[0]?.id ?? '');
   const [jointId, setJointId] = useState('left_knee');
   const [query, setQuery] = useState('');
-  const [view, setView] = useState<'perspective' | 'front' | 'top'>('perspective');
+  const [view, setView] = useState<'perspective' | 'front' | 'top' | 'bottom'>('perspective');
   const [showGrid, setShowGrid] = useState(true);
   const [showMarkers, setShowMarkers] = useState(false);
   const [frameKey, setFrameKey] = useState(0);
+  const [rotateKey, setRotateKey] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineReady, setOfflineReady] = useState(false);
@@ -913,6 +914,7 @@ export default function App() {
             showGrid={showGrid}
             showMarkers={showMarkers}
             onViewChange={setView}
+            onRotate={() => setRotateKey(value => value + 1)}
             onToggleGrid={() => setShowGrid(value => !value)}
             onToggleMarkers={() => setShowMarkers(value => !value)}
             onFit={() => {
@@ -935,6 +937,7 @@ export default function App() {
               showMarkers={showMarkers}
               view={view}
               frameKey={frameKey}
+              rotateKey={rotateKey}
               zoom={zoom * 100}
               onExportReady={exportImage => {
                 graveyardExportRef.current = exportImage;

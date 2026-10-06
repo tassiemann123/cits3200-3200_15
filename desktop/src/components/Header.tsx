@@ -25,11 +25,6 @@ export default function Header({
 }: HeaderProps) {
   return (
     <header className="app-header">
-      <div className="app-title">
-        <img className="app-title-icon" src="/icon.svg" alt="" />
-        <span>OsteoPlot</span>
-      </div>
-
       <div className="header-actions">
         <div className="graveyard-selector">
           <span>Graveyard:</span>
@@ -46,24 +41,28 @@ export default function Header({
           </select>
         </div>
 
-        <button className="header-button" onClick={onManageGraveyard}>
+        <button className="header-button" aria-label="Manage graveyards" onClick={onManageGraveyard}>
           <Pencil size={16} />
         </button>
 
-        <button className="header-button" onClick={onNewGraveyard}>
+        <button className="header-button" aria-label="New graveyard" onClick={onNewGraveyard}>
           <Plus size={16} />
         </button>
 
-        <button className="header-button" onClick={onOpenBackend} title="Open a desktop workspace from the backend">
+        <button className="header-button backend-open-button" onClick={onOpenBackend} title="Open a desktop workspace from the backend">
           <FolderOpen size={16} />
           Open from backend
         </button>
 
-        <span className="backend-state" role="status">{backendState === 'saved' ? 'Backend saved' : backendState === 'saving' ? 'Syncing…' : backendState === 'conflict' ? 'Backend conflict' : backendState === 'offline' ? 'Local only' : 'Local changes'}</span>
+        {backendState !== 'local' && (
+          <span className="backend-state" role="status">
+            {backendState === 'saved' ? 'Backend saved' : backendState === 'saving' ? 'Syncing…' : backendState === 'conflict' ? 'Backend conflict' : 'Local only'}
+          </span>
+        )}
 
         <button className="header-button" onClick={onSave} disabled={backendState === 'saving'} title="Save locally and sync this desktop workspace">
           <Save size={16} />
-          Save
+          Save workspace
         </button>
 
         <button className="button primary" onClick={onExport}>

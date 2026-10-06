@@ -39,15 +39,15 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .app-shell{height:100vh;display:flex;flex-direction:column;background:var(--pale)}
 
 .app-header{height:58px;min-height:58px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:20px}
-.app-title{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;letter-spacing:.4px;color:var(--ink)}
-.app-title-icon{width:28px;height:28px;display:block}
-.header-actions{margin-left:auto;display:flex;align-items:center;gap:9px}
+.header-actions{width:100%;display:flex;align-items:center;gap:9px}
+.backend-open-button{margin-left:auto}
 .graveyard-list{display:flex;flex-direction:column;gap:7px;margin-top:12px}
 .graveyard-choice{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font-size:11px;text-align:left;cursor:pointer}
 .graveyard-choice:hover{background:#f5f7f8}
 .graveyard-choice.selected{border-color:#9eafb9;background:#f3f1ec}
 .graveyard-choice strong{font-size:9px;font-weight:600;color:#355c7d}
 .graveyard-selector{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}
+.graveyard-selector>span{font-size:13px;font-weight:700;color:#000}
 .graveyard-selector select{height:32px;border:1px solid var(--line);border-radius:6px;background:#fff;padding:0 26px 0 9px;font-size:11px;color:var(--ink)}
 .header-button{height:32px;padding:0 11px;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink);white-space:nowrap;flex-shrink:0}
 .header-button:hover{background:var(--pale);border-color:#c7d0d6}
@@ -214,7 +214,7 @@ button:active:not(:disabled){transform:translateY(.5px)}
 
 @media(max-width:900px){
   .app-header{padding:0 14px}
-  .graveyard-selector>span{display:none}
+  .header-actions{flex-wrap:wrap}
   .app-main{grid-template-columns:245px minmax(0,1fr)}
   .scene-footer span:last-child{display:none}
 }
@@ -222,14 +222,18 @@ button:active:not(:disabled){transform:translateY(.5px)}
   body{overflow:auto}
   .app-shell{height:auto;min-height:100vh}
   .app-header{height:auto;min-height:56px;padding:10px 12px}
-  .app-title{font-size:14px}
   .header-actions{gap:5px}
-  .graveyard-selector{display:none}
+  .graveyard-selector select{max-width:150px}
   .header-button{padding:0 8px}
   .app-main{grid-template-columns:1fr;min-height:calc(100vh - 56px)}
   .skeleton-sidebar{border-right:0;border-bottom:1px solid var(--line);max-height:520px}
   .selected-skeleton{max-height:350px}
   .viewer-panel{height:600px;min-height:600px}
+}
+
+@media(max-width:560px){
+  .header-actions{flex-wrap:wrap}
+  .backend-open-button{margin-left:0}
 }
 
 @media(prefers-reduced-motion:reduce){

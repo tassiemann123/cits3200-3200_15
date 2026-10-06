@@ -218,6 +218,11 @@ export async function loadMobileModel(): Promise<ModelPieces> {
 
 const complete = (p: (number | null)[] | undefined): p is number[] => !!p && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n));
 const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
+const MODEL_TO_SCENE_ROTATION = Math.PI / 2;
+
+/** Convert survey coordinates into the same Z-up scene frame as the anatomical mesh. */
+export const surveyPointToScene = (p: readonly number[]) =>
+  toModel(p).applyAxisAngle(new THREE.Vector3(1, 0, 0), MODEL_TO_SCENE_ROTATION);
 
 // Same value as `offsetFromRatio` for SK_Head in the mobile skeletonPieces.ts.
 const HEAD_OFFSET_RATIO = 0.143;
@@ -263,7 +268,7 @@ function computeTriangleQuaternion(
 /** Pose the actual mobile meshes from each contributing bone's own coordinates. */
 export function createAnatomicalSkeleton(individual: Individual, templates: ModelPieces, selectedJointId?: string): THREE.Group {
   const root = new THREE.Group();
-  root.rotation.x = Math.PI / 2; // Mobile meshes are Y-up; desktop retains a shared survey Z-up frame.
+  root.rotation.x = MODEL_TO_SCENE_ROTATION; // Mobile meshes are Y-up; the desktop scene is Z-up.
   const bones = new Map(getRenderableBones(individual).map(b => [b.id, b]));
 
   // Landmarks (head, chin, sacral promontory, shoulders...) are read from the
