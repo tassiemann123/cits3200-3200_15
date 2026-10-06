@@ -215,13 +215,6 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   const spineUpper = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMax : spineRaw.tipMin;
   resolved.set("SK_Spine", withOrder(spineRaw, spineLower, spineUpper));
 
-  const sideRaw = rawByName.get("SK_Side");
-  if (sideRaw) {
-    const sideLower = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMin : sideRaw.tipMax;
-    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
-    resolved.set("SK_Side", withOrder(sideRaw, sideLower, sideUpper));
-  }
-
   // The pelvis is a single-landmark piece -- its only meaningful reference
   // point is its own top (see the single-target branch in
   // poseSkeletonPiece), which also doubles as the rest-pose anchor the
@@ -229,6 +222,20 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   const coccyxRaw = rawByName.get("SK_Coccyx");
   if (coccyxRaw) {
     resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
+  }
+
+  // The ribcages "from" landmark is the sacral, but the mesh itself has its
+  // lowest vertices well above the sacral as the lumbar spine is between the
+  // ribcage lower tip and sacral top tip. Using sacral as the top essentially 
+  // removed the lumbar region and ballooned the chest out to fill the gap, with 
+  // uniform scaling in the other directions (width and depth). The code now uses 
+  // its "fromTip" as the rest-pose sacrum as used by the legs directly off the mesh.
+  // Nothing joined onto the ribcage lower tip so the change doesn't effect other bones.
+  const sideRaw = rawByName.get("SK_Side");
+  const restSacrum = resolved.get("SK_Coccyx")?.topTip;
+  if (sideRaw && restSacrum) {
+    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
+    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, sideUpper));
   }
 
   function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined, invert = false): void {
@@ -625,7 +632,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -733,6 +740,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined),
         rigidWith ? posedTransforms.get(rigidWith) : undefined,
         orientationOverride,
+        scaleBounds,
       );
       posedTransforms.set(nodeName, { quaternion: piece.object.quaternion.clone(), scale: piece.object.scale.clone() });
     });

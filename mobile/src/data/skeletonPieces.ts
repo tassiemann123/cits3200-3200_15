@@ -35,7 +35,8 @@ export interface SkeletonPieceSpec {
    * "uniform" resizes the piece evenly in all directions instead of
    * stretching one axis, but still rotates it to point between the
    * landmarks -- for a piece that's a chunky, rounded shape but has no
-   * strong front/back identity of its own (the ribcage).
+   * strong front/back identity of its own (the ribcage). -- anchors to 
+   * the pieces `to` end not `from`
    *
    * "anchor" also resizes evenly, but skips rotation entirely and keeps
    * whatever direction the piece was actually modelled facing -- for a
@@ -189,12 +190,26 @@ export interface SkeletonPieceSpec {
    * full comparison against the old behaviour.
    */
   offsetFromRatio?: number;
+  /**
+   * For the scaling of the chest, an optional field for [minimum, maximum]
+   * scaling bound numbers, which act as a multiplier for the bodyScale, with
+   * the ribcage scale factor being clamped to that range.
+   * The fields purpose is to avoid having unrealistically large chests visualised
+   * for extreme data entries - a tall person does not necessarily have a larger 
+   * chest than a shorter person in width and depth, scaling is within the body length
+   * and some growth bounds.
+   * The current employed values are for +- 15% but these are ballpark values I chose
+   * for getting the feature implemented and further investigation into how the model
+   * reacts may yield more accurate lower and upper bounds (not necessarily equal to 
+   * one another).
+   */
+  scaleBounds?: [number, number];
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
   { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_shoulder", "right_shoulder"] },
-  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", twist: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_shoulder", "right_shoulder"] },
   {
     nodeName: "SK_Coccyx",
     from: "sacral_promontory",
