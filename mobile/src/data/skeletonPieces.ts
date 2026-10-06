@@ -179,15 +179,14 @@ export interface SkeletonPieceSpec {
    * sacral_promontory-to-head_proximal length below `to` (head_proximal),
    * measured along the body's own current up direction -- so it scales
    * with stature and still works for a body recorded lying down, not just
-   * standing. 0.143 was chosen to match the ratio the skull's old, real
-   * `centre_of_head` landmark sat below `head_proximal` in the CFA's own
-   * sample data, before it was removed: anchoring the skull's actual
-   * bottom-most mesh vertices at that point (rather than pinning its
-   * crown exactly to head_proximal, which is what a naive single-landmark
-   * treatment does) is what leaves the neck visible below it, since the
-   * skull mesh's own real height is otherwise easy to misjudge from its
-   * raw geometry alone -- see the fix that introduced this field for the
-   * full comparison against the old behaviour.
+   * standing. A value of 0.276 is used, coming from:
+   * (head_prox - chin)/(head_prox - sacral)
+   * With the values being the landmark coordinates from the mesh directly
+   * :anchoring the skull's jaw at chin height -- previous method used 
+   * centre-of-head joint value that had been part of the original project csv
+   * 
+   * Modification to the value chosen for offset: The offset is now set as
+   * 0.276 based on calculations from the mesh vertex coordinates checked directly
    */
   offsetFromRatio?: number;
   /**
@@ -207,7 +206,7 @@ export interface SkeletonPieceSpec {
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
-  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
+  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
   { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_shoulder", "right_shoulder"] },
   { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_shoulder", "right_shoulder"] },
   {
@@ -245,3 +244,18 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_LLegDown", from: "left_knee", fromBone: "Shin (proximal)", to: "left_ankle", toBone: "Shin (distal)" },
   { nodeName: "SK_LFoot", from: "left_ankle", fromBone: "Foot", to: "left_toes", stretch: "anchor" },
 ];
+
+/**
+ * The mesh uses a different coordinate system than the visualiser and to assist in
+ * the conversion of the values the global landmark coordinates of the joints on the
+ * skeleton mesh being used were found using vertices on Blender.
+ * The conversion takes (X, Y, Z) and converts to (X, Z, -Y)
+ * The values are scaled as the GLB uses model units not a standard unit of measure --
+ * see the globalScale in SceneViewport
+ */
+export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>> = {
+  head_proximal: [0, 3.32, 0],
+  chin: [0, 2.92, 0.115],
+  manubrium: [0, 2.74, 0.0279],
+  sacral_promontory: [0, 1.87, -0.109],
+};

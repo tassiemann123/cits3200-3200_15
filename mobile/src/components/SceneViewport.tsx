@@ -5,8 +5,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
-import { ALL_CFA_POINTS, pieceLandmarkId } from "../data/cfaSchema";
-import { SKELETON_PIECES } from "../data/skeletonPieces";
+import { ALL_CFA_POINTS, pieceLandmarkId, PointName } from "../data/cfaSchema";
+import { REST_LANDMARKS, SKELETON_PIECES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
@@ -192,11 +192,23 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
  * rest pose (found via the shared landmark name in SKELETON_PIECES, e.g.
  * the forearm's "elbow" end and the upper arm's "elbow" end), and
  * whichever tip sits closer to that neighbour is this piece's `fromTip`.
- * A few pieces have no such name-sharing predecessor (the legs' hip end,
- * and the skull) -- those resolve against the nearest fixed rest-pose
- * landmark instead (the pelvis piece's own top, and the spine's top).
+ * A few pieces have no such name-sharing predecessor (the legs' hip end) 
+ * -- those resolve against the nearest fixed rest-pose landmark instead
+ * The skull uses the chin as its landmark, while the spine and ribcage use 
+ * the values of their landmarks from REST_LANDMARKS directly
  */
-function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<string, PieceRestInfo> {
+function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, globalScale: number): Map<string, PieceRestInfo> {
+  // Lookup for the measured resting pose landmark coordinates -- see
+  // REST_LANDMARKS (in the GLB's coordinate system and units) and brings
+  // the value into the rescaled space so that it can be directly used in the
+  // fromTip / toTip works.
+  // If the landmark cannot be measured value is undefined and falls back to the
+  // mesh tip method.
+  const restPoint = (name: PointName) => {
+    const p = REST_LANDMARKS[name];
+    return p ? new THREE.Vector3(...p).multiplyScalar(globalScale) : undefined;
+  };
+  
   const resolved = new Map<string, PieceRestInfo>();
 
   const withOrder = (raw: RawPieceGeometry, fromTip: THREE.Vector3, toTip: THREE.Vector3): PieceRestInfo => ({
@@ -213,15 +225,17 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   if (!spineRaw) return resolved;
   const spineLower = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMin : spineRaw.tipMax;
   const spineUpper = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMax : spineRaw.tipMin;
-  resolved.set("SK_Spine", withOrder(spineRaw, spineLower, spineUpper));
+  resolved.set("SK_Spine", withOrder(spineRaw, restPoint("sacral_promontory") ?? spineLower, restPoint("head_proximal") ?? spineUpper));
 
-  // The pelvis is a single-landmark piece -- its only meaningful reference
-  // point is its own top (see the single-target branch in
+  // The pelvis is a single-landmark piece -- with possible references
+  // from the measured mesh landmark for the sacral or its own top
+  // the measured landmark is priority (see the single-target branch in
   // poseSkeletonPiece), which also doubles as the rest-pose anchor the
   // upper legs resolve against below.
   const coccyxRaw = rawByName.get("SK_Coccyx");
   if (coccyxRaw) {
-    resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
+    const pelvisAnchor = restPoint("sacral_promontory") ?? coccyxRaw.topTip;
+    resolved.set("SK_Coccyx", { ...withOrder(coccyxRaw, pelvisAnchor, pelvisAnchor), topTip: pelvisAnchor });
   }
 
   // The ribcages "from" landmark is the sacral, but the mesh itself has its
@@ -229,13 +243,14 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   // ribcage lower tip and sacral top tip. Using sacral as the top essentially 
   // removed the lumbar region and ballooned the chest out to fill the gap, with 
   // uniform scaling in the other directions (width and depth). The code now uses 
-  // its "fromTip" as the rest-pose sacrum as used by the legs directly off the mesh.
-  // Nothing joined onto the ribcage lower tip so the change doesn't effect other bones.
+  // the landmark measured sacral and manubrium values directly.
+  // Nothing joined onto the ribcage lower tip so the change doesn't affect 
+  // other bones.
   const sideRaw = rawByName.get("SK_Side");
-  const restSacrum = resolved.get("SK_Coccyx")?.topTip;
+  const restSacrum = restPoint("sacral_promontory");
   if (sideRaw && restSacrum) {
-    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
-    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, sideUpper));
+    const meshTop = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
+    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, restPoint("manubrium") ?? meshTop));
   }
 
   function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined, invert = false): void {
@@ -253,12 +268,15 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   // The clavicle pieces are anchored at the shoulder end now (from:
   // left/right_shoulder, to: manubrium -- see skeletonPieces.ts), so their
   // fromTip must be the shoulder-side vertex, not the manubrium-side one.
-  // We still only have the manubrium position (the spine's own resolved
-  // toTip) as a known anchor at this point in the walk, so `invert: true`
+  // We set the clavicle locations directly to the landmark point for the 
+  // manubrium, directly from the mesh. Then `invert: true`
   // flips the near/far assignment: the tip CLOSER to the manubrium becomes
   // toTip, and the farther one (the shoulder side) becomes fromTip.
-  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip, true);
-  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip, true);
+  // Modifications for the above: we set the clavicle locations directly
+  // to the landmark point for the manubrium, instead of the stand-in spine 
+  // location, directly from the mesh
+  resolveAgainst("SK_RClavicle", restPoint("manubrium"), true);
+  resolveAgainst("SK_LClavicle", restPoint("manubrium"), true);
   // The upper arm's proximal (shoulder) end sits at the same physical
   // point as the clavicle's own shoulder-side vertex -- now the
   // clavicle's fromTip (see above), not its toTip.
@@ -274,7 +292,10 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   resolveAgainst("SK_LLegDown", resolved.get("SK_LLegUp")?.toTip);
   resolveAgainst("SK_RFoot", resolved.get("SK_RLegDown")?.toTip);
   resolveAgainst("SK_LFoot", resolved.get("SK_LLegDown")?.toTip);
-  resolveAgainst("SK_Head", resolved.get("SK_Spine")?.toTip);
+  // The point assigned to the head is now set for the landmark point 
+  // directly from the mesh for the chin so that the jaw end becomes
+  // the fromTip for the end offsetFromRatio positions
+  resolveAgainst("SK_Head", restPoint("chin"));
 
   return resolved;
 }
@@ -839,7 +860,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         // Which tip of each piece is its `from` end versus its `to` end is
         // resolved once here, from the whole assembly's rest-pose geometry
         // -- not re-guessed per pose (see resolvePieceRestInfo above).
-        const restInfoByName = resolvePieceRestInfo(rawGeometryByName);
+        const restInfoByName = resolvePieceRestInfo(rawGeometryByName, globalScale);
 
         const foundPieces = new Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>();
         bakedByName.forEach((baked, nodeName) => {
