@@ -154,6 +154,11 @@ export function poseSkeletonPiece(
    * triangle was degenerate).
    */
   orientationOverride?: THREE.Quaternion,
+  /**
+   * Clamps a piece's scale factor to the [minimum, maximum] x bodyScale
+   * -- see `scaleBounds` in skeltonPieces.ts
+   */
+  scaleBounds?: [number, number],
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
@@ -215,9 +220,13 @@ export function poseSkeletonPiece(
   // two-landmark gap. It's an approximation (a real infant's head is
   // proportionally larger, not just uniformly smaller, than an adult's),
   // but it's far closer than never resizing at all, and needs no new
-  // landmark data. "rod" and "uniform" pieces ignore it entirely -- their
+  // landmark data. "rod" and "uniform" pieces ignore it, except for the case
+  // of using it as a reference with optional scaleBounds clamp -- their
   // own two landmarks already are that bone's real two ends.
-  const scaleFactor = stretch === "anchor" ? (bodyScale ?? 1) : targetLength / restLength;
+    let scaleFactor = stretch === "anchor" ? (bodyScale ?? 1) : targetLength / restLength;
+  if (scaleBounds && bodyScale !== undefined) {
+    scaleFactor = THREE.MathUtils.clamp(scaleFactor, bodyScale * scaleBounds[0], bodyScale * scaleBounds[1]);
+  }
 
   // A real long bone (upper arm, forearm, thigh, shin, spine) reads fine
   // stretched along just its one long axis -- it still looks like a bone,
@@ -277,7 +286,13 @@ export function poseSkeletonPiece(
   piece.scale.copy(scale);
   piece.quaternion.copy(quaternion);
 
-  const scaledLocalFrom = localFrom.clone().multiply(scale).applyQuaternion(quaternion);
-  piece.position.copy(fromTarget).sub(scaledLocalFrom);
+  // Pin the piece at a single end, normally anchoring to `from`, but for
+  // a "uniform" piece (the ribcage being the one) we pin with `to` instead
+  // Thus when scaleBounds clamps its size, it wont span both landmarks anymore,
+  // and the manubrium end is the one the clavicles attach to.
+  const anchorLocal = stretch === "uniform" ? localTo : localFrom;
+  const anchorTarget = stretch === "uniform" ? toTarget : fromTarget;
+  const scaledAnchor = anchorLocal.clone().multiply(scale).applyQuaternion(quaternion);
+  piece.position.copy(anchorTarget).sub(scaledAnchor);
   piece.visible = true;
 }
