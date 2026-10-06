@@ -138,7 +138,7 @@ describe('project import and export', () => {
     knee(owner.individuals[0]).endpoints[0].boneId = 'imaginary';
     expect(() => validateProject(owner)).toThrow(/unknown bone/);
     const reference = createDemoProject();
-    reference.individuals[0].bones.find((b) => b.id === 'left_femur')!.to.endpointIndex = 1;
+    reference.individuals[0].bones.find((b) => b.id === 'left_femur')!.to!.endpointIndex = 1;
     expect(() => validateProject(reference)).toThrow(/bone-owned/);
   });
 
