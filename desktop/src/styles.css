@@ -47,7 +47,7 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .graveyard-choice.selected{border-color:#9eafb9;background:#f3f1ec}
 .graveyard-choice strong{font-size:9px;font-weight:600;color:#355c7d}
 .graveyard-selector{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}
-.graveyard-selector>span{font-size:13px;font-weight:700;color:var(--ink)}
+.graveyard-selector>span{font-size:13px;font-weight:700;color:#000}
 .graveyard-selector select{height:32px;border:1px solid var(--line);border-radius:6px;background:#fff;padding:0 26px 0 9px;font-size:11px;color:var(--ink)}
 .header-button{height:32px;padding:0 11px;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink);white-space:nowrap;flex-shrink:0}
 .header-button:hover{background:var(--pale);border-color:#c7d0d6}
