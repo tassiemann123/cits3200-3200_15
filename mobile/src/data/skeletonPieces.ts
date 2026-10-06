@@ -118,6 +118,17 @@ export interface SkeletonPieceSpec {
   toBone?: string;
   rigidWith?: string;
   /**
+   * The piece is only shown if at least one of these landmarks is present.
+   * The pelvis hangs from sacral_promontory, which belongs to the "Head &
+   * torso" group, not the pelvis groups, so marking both pelvis groups
+   * "not present" left the pelvis drawn at the sacrum (rotation borrowed
+   * from the spine) even though no pelvis data remained. Listing the pelvis
+   * landmarks here hides it exactly when none of them are left, while still
+   * allowing one side alone (the pelvis is one solid piece, so a single
+   * side keeps it visible, oriented from whatever is available).
+   */
+  requiresAnyOf?: PointName[];
+  /**
    * Independently orients a single-landmark piece (from === to) using
    * three of its own landmarks instead of borrowing another piece's
    * rotation via `rigidWith` -- currently only the pelvis, so it can
@@ -189,10 +200,12 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
     from: "sacral_promontory",
     to: "sacral_promontory",
     rigidWith: "SK_Spine",
+    requiresAnyOf: ["left_ilium_superior", "right_ilium_superior", "left_ischium", "right_ischium", "left_acetabulum", "right_acetabulum"],
     orientationTriangle: {
       left: "left_ilium_superior",
       right: "right_ilium_superior",
       anchor: "sacral_promontory",
+      // [x = left, front, up] in the pelvis mesh's own frame (not raw CFA depth axes)
       restLeft: [0.19, 0.03, 0.041],
       restRight: [-0.19, 0.03, 0.041],
       restAnchor: [0, 0, 0],

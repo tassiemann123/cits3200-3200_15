@@ -7,7 +7,7 @@ import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
 import { ALL_CFA_POINTS, pieceLandmarkId } from "../data/cfaSchema";
 import { SKELETON_PIECES } from "../data/skeletonPieces";
-import { landmarksToDisplayPositions, centroid, cfaLandmarkToWorld } from "../lib/coordinates";
+import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
 export interface SceneViewportHandle {
@@ -625,7 +625,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -636,6 +636,12 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       const fromPos = positions.get(pieceLandmarkId(from, fromBone));
       const toPos = positions.get(pieceLandmarkId(to, toBone));
       if (!fromPos || !toPos) {
+        piece.object.visible = false;
+        return;
+      }
+      // A piece that depends on a whole group of landmarks (the pelvis) is
+      // hidden once none of them remain -- see requiresAnyOf in skeletonPieces.ts.
+      if (requiresAnyOf && !requiresAnyOf.some((point) => positions.has(point))) {
         piece.object.visible = false;
         return;
       }
@@ -684,36 +690,30 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         const rightPos = positions.get(orientationTriangle.right);
         const anchorPos = positions.get(orientationTriangle.anchor);
         if (leftPos && rightPos && anchorPos) {
-          // rest*/restAnchor are stored as raw entered CFA coordinates (see
-          // the doc comment in skeletonPieces.ts), not display/world space
-          // -- run them through the same cfaLandmarkToWorld conversion
-          // landmarksToDisplayPositions applies to everything else, so this
-          // stays correct even if that axis convention is ever revisited.
+          // rest*/restAnchor are authored in the pelvis mesh's own frame
+          // (x = left, y = up, z = front -- see skeletonPieces.ts), stored
+          // as [x, front, up] triples, so reorder them into x/y/z here.
+          const restToModel = (r: readonly [number, number, number]) => new THREE.Vector3(r[0], r[2], r[1]);
           //
-          // HANDEDNESS FIX: cfaLandmarkToWorld negates Z (depth) but not Y
-          // (elevation) -- correct for every piece that's just placed at a
-          // coordinate, but computeTriangleQuaternion derives a *rotation*
-          // by comparing two sets of points, and a rotation derived that
-          // way is sensitive to the handedness (reflection vs. proper
-          // rotation) of whatever coordinate system it's fed. Negating
-          // only one axis out of three makes cfaLandmarkToWorld a mirror
-          // reflection relative to the frame this pelvis math was
-          // originally built and validated against, which flips the
-          // *sense* of the computed rotation -- the pelvis swings in
-          // toward the ribcage instead of out to the hips, at the correct
-          // angle but the wrong direction. Negating the elevation (Y) of
-          // all six points here, right before building the two frames,
-          // exactly cancels that reflection back out for this one
-          // calculation, without changing cfaLandmarkToWorld's output (or
-          // anything else that reads it) at all.
-          const uncorrectHandedness = (v: THREE.Vector3) => new THREE.Vector3(v.x, -v.y, v.z);
+          // MIRROR FIX: the entered points go through cfaLandmarkToWorld,
+          // which turns the (left-handed) depth-based CFA axes into viewer
+          // axes while keeping that handedness, i.e. the displayed skeleton
+          // is a mirror image of the real body (left x up != front). The
+          // pelvis frame is built with cross products, so it needs a
+          // right-handed body to give the right rotation; fed the mirrored
+          // points it comes out upside-down / back-to-front (the tailbone
+          // ended up on the front of the body). The pelvis mesh is
+          // left/right symmetric, so mirroring it is harmless: we build
+          // the *entered* frame with left and right swapped, which flips
+          // only the frame's x axis (cancelling the mirror) and leaves
+          // up/front untouched. Rest stays in the mesh's own frame.
           orientationOverride = computeTriangleQuaternion(
-            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restLeft))),
-            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restRight))),
-            uncorrectHandedness(new THREE.Vector3(...cfaLandmarkToWorld(orientationTriangle.restAnchor))),
-            uncorrectHandedness(new THREE.Vector3(...leftPos)),
-            uncorrectHandedness(new THREE.Vector3(...rightPos)),
-            uncorrectHandedness(new THREE.Vector3(...anchorPos)),
+            restToModel(orientationTriangle.restLeft),
+            restToModel(orientationTriangle.restRight),
+            restToModel(orientationTriangle.restAnchor),
+            new THREE.Vector3(...rightPos),
+            new THREE.Vector3(...leftPos),
+            new THREE.Vector3(...anchorPos),
           );
         }
       }
