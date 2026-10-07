@@ -17,6 +17,9 @@ import * as THREE from "three";
  * up perfectly on paper. Using the real, nearby vertices instead keeps
  * both pieces' visible surfaces meeting where the joint actually is.
  *
+ * The spine and ribcage specifically use measured landmark positions
+ * instead -- see REST_LANDMARKS in ScenePieces.ts
+ * 
  * Which of the two tips is `fromTip` (matching this piece's `from`
  * landmark, e.g. the wrist end of a hand) versus `toTip` (its `to`
  * landmark, e.g. the fingertip end) is resolved once, from the model's own
