@@ -785,20 +785,16 @@ export default function App() {
     notify('Skeleton deleted.');
   };
 
-  // Delete the current graveyard after the user confirms, unless it still has skeletons.
+  // Delete the graveyard and all skeletons assigned to it after confirmation.
   const confirmDeleteGraveyard = () => {
     if (!deleteGraveyardId) return;
 
-    const hasSkeletons = project.individuals.some(
+    const graveyardName = graveyards.find(
+      graveyard => graveyard.id === deleteGraveyardId,
+    )?.name ?? 'Graveyard';
+    const deletedSkeletonCount = project.individuals.filter(
       individual => individual.graveyardId === deleteGraveyardId,
-    );
-
-    if (hasSkeletons) {
-      notify('Graveyards containing skeletons cannot be deleted.');
-      setDeleteGraveyardId(null);
-      setModal('edit-graveyard');
-      return;
-    }
+    ).length;
 
     const remainingGraveyards = graveyards.filter(
       graveyard => graveyard.id !== deleteGraveyardId,
@@ -809,6 +805,9 @@ export default function App() {
     setProject(previous => ({
       ...previous,
       updatedAt: new Date().toISOString(),
+      individuals: previous.individuals.filter(
+        individual => individual.graveyardId !== deleteGraveyardId,
+      ),
       graveyards: remainingGraveyards,
     }));
 
@@ -818,7 +817,11 @@ export default function App() {
 
     setDeleteGraveyardId(null);
     setModal(null);
-    notify('Graveyard deleted.');
+    notify(
+      `${graveyardName} has been deleted along with ${deletedSkeletonCount} ${
+        deletedSkeletonCount === 1 ? 'skeleton' : 'skeletons'
+      }.`,
+    );
   };
 
   // Main page layout: header, skeleton sidebar, and 3D viewer.
@@ -1191,7 +1194,11 @@ export default function App() {
                 </p>
 
                 <p className="input-hint">
-                  Graveyards containing skeletons cannot be deleted.
+                  This will also permanently delete{' '}
+                  {project.individuals.filter(
+                    individual => individual.graveyardId === deleteGraveyardId,
+                  ).length}{' '}
+                  skeleton(s) assigned to this graveyard.
                 </p>
               </div>
 
