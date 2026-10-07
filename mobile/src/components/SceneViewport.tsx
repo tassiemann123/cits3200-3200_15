@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, use, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -24,6 +24,8 @@ interface SceneViewportProps {
   showLandmarks: boolean;
   landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
+  /** Called after each redraw of the camera rotation as [x, y, z, w] */
+  onCameraRotate?: (quaternion: [number, number, number, number]) => void;
 }
 
 const DEFAULT_CAMERA = new THREE.Vector3(2.6, 1.4, 3.4);
@@ -308,7 +310,7 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLand
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange },
+  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange, onCameraRotate },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -324,6 +326,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
   const overlayRef = useRef<THREE.Group | null>(null);
   const piecesRef = useRef<Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>>(new Map());
+  const onCameraRotateRef = useRef(onCameraRotate);
+  useEffect(() => { onCameraRotateRef.current = onCameraRotate; }, [onCameraRotate]);
   const restLandmarksRef = useRef<Map<PointName, THREE.Vector3>>(new Map());
 
   const resetCamera = () => {
@@ -443,21 +447,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     floor.position.y = -0.09;
     scene.add(floor);
 
-    const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.18, 1.28, 0.09, 72),
-      new THREE.MeshStandardMaterial({ color: "#2B333A", roughness: 0.72, metalness: 0.18 }),
-    );
-    pedestal.position.y = -0.045;
-    scene.add(pedestal);
-
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(1.17, 1.195, 96),
-      new THREE.MeshBasicMaterial({ color: "#C8A96B", transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.006;
-    scene.add(ring);
-
     scene.add(new THREE.HemisphereLight("#F4F0E6", "#171B1F", 2.1));
     const keyLight = new THREE.DirectionalLight("#fff1d9", 3.1);
     keyLight.position.set(3.8, 6.5, 4.2);
@@ -497,7 +486,11 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // OrbitControls emits change events while damping settles.
       controls.update();
       renderer.render(scene, camera);
+      
+      const { x, y, z, w } = camera.quaternion;
+      onCameraRotateRef.current?.([x, y, z, w]);
     };
+
     invalidateRef.current = invalidate;
     controls.addEventListener("change", invalidate);
     document.addEventListener("visibilitychange", invalidate);
