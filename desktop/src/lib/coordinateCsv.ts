@@ -7,6 +7,8 @@
  */
 
 export interface CoordinateCsvRow {
+  /** Line where this CSV row begins, for actionable import warnings. */
+  lineNumber?: number;
   skeletonId: string;
   jointName: string;
   bone: string;
@@ -27,11 +29,14 @@ export interface CoordinateCsvParseResult {
   warnings: string[];
 }
 
-function parseRows(text: string): string[][] {
+function parseRows(text: string): { rows: string[][]; lineNumbers: number[] } {
   const rows: string[][] = [];
+  const lineNumbers: number[] = [];
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+  let lineNumber = 1;
+  let rowStartLine = 1;
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
@@ -58,12 +63,16 @@ function parseRows(text: string): string[][] {
 
       if (row.some(Boolean)) {
         rows.push(row);
+        lineNumbers.push(rowStartLine);
       }
 
       row = [];
       cell = "";
+      lineNumber += 1;
+      rowStartLine = lineNumber;
     } else {
       cell += character;
+      if (character === "\r" || (character === "\n" && text[index - 1] !== "\r")) lineNumber += 1;
     }
   }
 
@@ -71,9 +80,10 @@ function parseRows(text: string): string[][] {
 
   if (row.some(Boolean)) {
     rows.push(row);
+    lineNumbers.push(rowStartLine);
   }
 
-  return rows;
+  return { rows, lineNumbers };
 }
 
 function normaliseName(value: string): string {
@@ -144,7 +154,7 @@ export function serialiseCoordinateCsv(
 export function parseCoordinateCsv(
   text: string,
 ): CoordinateCsvParseResult {
-  const rows = parseRows(text);
+  const { rows, lineNumbers } = parseRows(text);
   const warnings: string[] = [];
 
   if (rows.length < 2) {
@@ -172,7 +182,7 @@ export function parseCoordinateCsv(
       graveyardName,
       records: [],
       warnings: [
-        "The CSV must contain skeleton_id, joint_name, x, y, and z columns.",
+        "No skeleton_id header was found. Expected a header row with skeleton_id, joint_name, x, y, and z.",
       ],
     };
   }
@@ -216,11 +226,18 @@ export function parseCoordinateCsv(
     [skeletonIndex, jointIndex, xIndex, yIndex, zIndex]
       .some((index) => index < 0)
   ) {
+    const missing = [
+      [skeletonIndex, "skeleton_id"],
+      [jointIndex, "joint_name"],
+      [xIndex, "x"],
+      [yIndex, "y"],
+      [zIndex, "z"],
+    ].filter(([index]) => index === -1).map(([, name]) => name);
     return {
       graveyardName,
       records: [],
       warnings: [
-        "The CSV must contain skeleton_id, joint_name, x, y, and z columns.",
+        `Missing required CSV column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`,
       ],
     };
   }
@@ -228,7 +245,7 @@ export function parseCoordinateCsv(
   const records = new Map<string, CoordinateCsvRow[]>();
 
   rows.slice(headerIndex + 1).forEach((row, offset) => {
-    const rowNumber = headerIndex + offset + 2;
+    const rowNumber = lineNumbers[headerIndex + offset + 1];
 
     const skeletonId =
       row[skeletonIndex]?.trim();
@@ -264,12 +281,24 @@ export function parseCoordinateCsv(
         ? row[presentIndex]?.trim().toLowerCase()
         : undefined;
 
+    if (presentValue && !["yes", "true", "1", "no", "false", "0"].includes(presentValue)) {
+      warnings.push(`Row ${rowNumber} has an invalid present value "${presentValue}" and was skipped. Use yes or no.`);
+      return;
+    }
+
     const present =
       presentValue === undefined
         ? true
         : !["no", "false", "0"].includes(presentValue);
 
+    if (present && [x, y, z].some((value) => value === null)) {
+      const invalid = (["x", "y", "z"] as const).filter((_, index) => [x, y, z][index] === null);
+      warnings.push(`Row ${rowNumber} (${skeletonId}, ${jointName}) has missing or invalid ${invalid.join(", ")} coordinate${invalid.length === 1 ? "" : "s"} and was skipped.`);
+      return;
+    }
+
     const coordinateRow: CoordinateCsvRow = {
+      lineNumber: rowNumber,
       skeletonId,
       jointName,
       bone,
