@@ -181,6 +181,18 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
 }
 
 /**
+ * Scaling function for the REST_LANDMARKS to bring it into the same space as the 
+ * fully baked pieces geometry
+ */
+function scaleRestLandmarks(globalScale: number): Map<PointName, THREE.Vector3> {
+  const scaled = new Map<PointName, THREE.Vector3>();
+  for (const [name, p] of Object.entries(REST_LANDMARKS)) {
+    if (p) scaled.set(name as PointName, new THREE.Vector3(...p).multiplyScalar(globalScale));
+  }
+  return scaled;
+}
+
+/**
  * Turns each piece's raw, direction-agnostic tip pair into a real
  * PieceRestInfo whose `fromTip`/`toTip` genuinely match its `from`/`to`
  * landmark (see the PieceRestInfo comment in lib/skeletonPose.ts for why
@@ -197,18 +209,13 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
  * The skull uses the chin as its landmark, while the spine and ribcage use 
  * the values of their landmarks from REST_LANDMARKS directly
  */
-function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, globalScale: number): Map<string, PieceRestInfo> {
-  // Lookup for the measured resting pose landmark coordinates -- see
-  // REST_LANDMARKS (in the GLB's coordinate system and units) and brings
-  // the value into the rescaled space so that it can be directly used in the
-  // fromTip / toTip works.
-  // If the landmark cannot be measured value is undefined and falls back to the
-  // mesh tip method.
-  const restPoint = (name: PointName) => {
-    const p = REST_LANDMARKS[name];
-    return p ? new THREE.Vector3(...p).multiplyScalar(globalScale) : undefined;
-  };
-  
+function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLandmarks: Map<PointName, THREE.Vector3>): Map<string, PieceRestInfo> {
+  // Lookup for the measured and scaled resting pose landmark coordinates 
+  // -- see REST_LANDMARKS and the scaleRestLandmarks function below.
+  // This function tus works as a helper to store clones and prevent access
+  // to the main table. 
+  const restPoint = (name: PointName) => restLandmarks.get(name)?.clone();
+
   const resolved = new Map<string, PieceRestInfo>();
 
   const withOrder = (raw: RawPieceGeometry, fromTip: THREE.Vector3, toTip: THREE.Vector3): PieceRestInfo => ({
@@ -317,6 +324,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
   const overlayRef = useRef<THREE.Group | null>(null);
   const piecesRef = useRef<Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>>(new Map());
+  const restLandmarksRef = useRef<Map<PointName, THREE.Vector3>>(new Map());
 
   const resetCamera = () => {
     const camera = cameraRef.current;
@@ -653,7 +661,19 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds }) => {
+    // Where `point` would be if it moved rigidly with the already-posed
+    // `carrierName` piece -- see `toCarrier` in skeletonPieces.ts.
+    const carriedLandmark = (carrierName: string, point: PointName): Vec3 | undefined => {
+      const carrier = piecesRef.current.get(carrierName);
+      const rest = restLandmarksRef.current.get(point);
+      if (!carrier?.object.visible || !rest) return undefined;
+      // Force update the matrix as it is rebuilt at render time normally
+      carrier.object.updateMatrix();
+      const p = rest.clone().applyMatrix4(carrier.object.matrix);
+      return [p.x, p.y, p.z];
+    };
+
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -662,7 +682,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // what makes two disarticulated bones actually show a gap here,
       // rather than only being recorded in the exported data.
       const fromPos = positions.get(pieceLandmarkId(from, fromBone));
-      const toPos = positions.get(pieceLandmarkId(to, toBone));
+      const toPos = positions.get(pieceLandmarkId(to, toBone)) ?? (toCarrier ? carriedLandmark(toCarrier, to) : undefined);
       if (!fromPos || !toPos) {
         piece.object.visible = false;
         return;
@@ -852,7 +872,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         // Which tip of each piece is its `from` end versus its `to` end is
         // resolved once here, from the whole assembly's rest-pose geometry
         // -- not re-guessed per pose (see resolvePieceRestInfo above).
-        const restInfoByName = resolvePieceRestInfo(rawGeometryByName, globalScale);
+        const restLandmarks = scaleRestLandmarks(globalScale);
+        restLandmarksRef.current = restLandmarks;
+        const restInfoByName = resolvePieceRestInfo(rawGeometryByName, restLandmarks);
 
         const foundPieces = new Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>();
         bakedByName.forEach((baked, nodeName) => {

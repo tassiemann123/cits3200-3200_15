@@ -217,12 +217,25 @@ export interface SkeletonPieceSpec {
    * one another).
    */
   scaleBounds?: [number, number];
+  /**
+  * If this piece's `to` landmark is missing, estimate it instead of hiding
+  * the piece: take that landmark's measured rest-pose position
+  * (REST_LANDMARKS) and carry it along with this other, already-posed
+  * piece's transform. Exact when the body matches the rest proportions,
+  * and needs no cross products (so it is unaffected by the display's
+  * handedness). The estimate is only used to pose this piece -- it is
+  * never added to the entered landmarks, so e.g. the skull still hides
+  * when the head is marked missing. The carrier must appear earlier in
+  * SKELETON_PIECES so it has already been posed.
+  */
+  toCarrier?: string;
+
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
-  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
   { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"], requiresAnyOf: ["manubrium"], toCarrier: "SK_Side" },
   {
     nodeName: "SK_Coccyx",
     from: "sacral_promontory",
