@@ -47,26 +47,39 @@ export interface SkeletonPieceSpec {
    */
   stretch?: "rod" | "uniform" | "anchor";
   /**
-   * One landmark, or several averaged together, off the piece's main axis,
-   * used to resolve the twist *around* that axis that a two-point aim
-   * can't determine. Works for any piece with two distinct `from`/`to`
-   * landmarks (not just "anchor" pieces) -- rotates the piece so its real,
-   * modelled facing direction (assumed +Z in the model's own rest pose --
-   * confirmed by inspecting the skull mesh directly) points from `from`
-   * toward this landmark, or toward the averaged position of the listed
-   * landmarks, instead of landing on an arbitrary twist.
-   *
-   * A single landmark only works as a twist reference if it genuinely
-   * sits in front of (or behind) the piece rather than off to one side --
-   * the skull's `chin` does. A bilateral pair like the two ASIS points
-   * (`left_ilium_superior` / `right_ilium_superior`) does not: either one
-   * alone is mostly a *sideways* offset from the spine axis, so using just
-   * one would twist the piece to face off toward that side. Passing both
-   * as an array averages them, cancelling the left/right offset and
-   * leaving only the forward component -- giving a proper front-facing
-   * reference the same way a single midline landmark would.
-   */
+  * One landmark, or several averaged together, off the piece's main axis,
+  * used to resolve the twist *around* that axis that a two-point aim
+  * can't determine. Works for any piece with two distinct `from`/`to`
+  * landmarks (not just "anchor" pieces) -- rotates the piece so its real,
+  * modelled facing direction (assumed +Z in the model's own rest pose --
+  * confirmed by inspecting the skull mesh directly) points from `from`
+  * toward this landmark, or toward the averaged position of the listed
+  * landmarks, instead of landing on an arbitrary twist.
+  *
+  * A single landmark only works as a twist reference if it genuinely
+  * sits in front of (or behind) the piece rather than off to one side --
+  * the skull's `chin` does. A bilateral pair like the two ASIS points
+  * (`left_ilium_superior` / `right_ilium_superior`) does not: either one
+  * alone is mostly a *sideways* offset from the spine axis, so using just
+  * one would twist the piece to face off toward that side. Passing both
+  * as an array averages them, cancelling the left/right offset and
+  * leaving only the forward component -- giving a proper front-facing
+  * reference the same way a single midline landmark would.
+  *
+  * For the same reason, a listed set is only used when *every* landmark
+  * in it is present: with one side marked not present, the remaining
+  * landmark alone would twist the piece toward that side (seen as the
+  * torso turning to face the one remaining shoulder). If this set is
+  * incomplete, `twistFallback` is tried instead; if neither is complete,
+  * no twist is applied.
+  */
   twist?: PointName | PointName[];
+  /**
+   * A second landmark pair to twist toward when `twist` isn't complete
+   * (e.g. one arm marked not present). Like `twist`, it's only used when
+   * every landmark in it is present -- see `twist` above for why.
+   */
+  twistFallback?: PointName[];
   /**
    * Which direction, in this piece's own untransformed rest-pose local
    * space, actually counts as "facing forward" for the twist correction
@@ -207,8 +220,8 @@ export interface SkeletonPieceSpec {
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
-  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_shoulder", "right_shoulder"] },
-  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
   {
     nodeName: "SK_Coccyx",
     from: "sacral_promontory",

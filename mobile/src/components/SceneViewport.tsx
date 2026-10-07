@@ -653,7 +653,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -673,29 +673,21 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         piece.object.visible = false;
         return;
       }
-      // The twist landmark is optional even when the piece declares one --
-      // an archaeologist may not have recorded it yet, or (for a bilateral
-      // pair like the two ASIS points) marked the whole side "not present"
-      // -- and a piece can declare several landmarks to be averaged
-      // together instead of one (see the SK_Side comment in
-      // skeletonPieces.ts for why). Averaging whichever of those landmarks
-      // are actually available, rather than demanding every one of them,
-      // matters more than it looks: dropping to NO twist correction isn't
-      // a graceful "keeps its old two-point-only behaviour" fallback the
-      // way it sounds -- confirmed by actually toggling a side's pelvis
-      // group off on the live app -- it's the exact pre-fix broken
-      // orientation the twist correction exists to prevent (the ribcage
-      // and both clavicles spin to show their back/underside, since the
-      // bare two-point rotation never guaranteed a correct facing on its
-      // own; see the twistForward comment in skeletonPieces.ts). A single
-      // remaining landmark is a real but imperfect stand-in (biased toward
-      // that one side rather than the true midline), which is still far
-      // closer than a full flip.
+       // The twist reference is optional -- an archaeologist may not have
+      // recorded it, or marked a side "not present". A bilateral pair is
+      // only used when complete: one side alone is mostly a sideways offset
+      // from the piece's axis, so it twists the piece to face that side
+      // (seen with one arm marked absent). An incomplete `twist` falls back
+      // to `twistFallback`; with neither complete, no twist is applied and
+      // the piece keeps its bare two-point aim, which can face the wrong way
+      // (see the twistForward comment in skeletonPieces.ts).
+      const completeCentroid = (points: readonly PointName[] | undefined) => {
+        if (!points || points.length === 0) return undefined;
+        const samples = points.map((point) => positions.get(point));
+        return samples.every((pos): pos is Vec3 => pos !== undefined) ? centroid(samples) : undefined;
+      };
       const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
-      const twistSamples = twistLandmarks
-        .map((point) => positions.get(point))
-        .filter((pos): pos is Vec3 => pos !== undefined);
-      const twistPos = twistSamples.length > 0 ? centroid(twistSamples) : undefined;
+      const twistPos = completeCentroid(twistLandmarks) ?? completeCentroid(twistFallback);
 
       const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
       // A piece with no real second landmark of its own (currently just
