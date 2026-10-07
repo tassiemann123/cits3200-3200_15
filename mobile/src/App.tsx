@@ -83,6 +83,13 @@ const INITIAL_MODEL: ViewerModel = {
 
 const GROUP_IDS = new Set<PointGroupId>(CFA_GROUPS.map((group) => group.id));
 
+/**
+ * Group ids from older saved records, mapped to the groups that replaced them
+ */
+const LEGACY_GROUP_IDS: Record<string, PointGroupId[]> = {
+  head_torso: ["head", "spine_ribcage", "sacrum"],
+};
+
 function modelNameFromFile(fileName: string): string {
   const name = fileName.replace(/\.glb$/i, "").replace(/[-_]+/g, " ").trim();
   if (!name) return "Imported Model";
@@ -109,8 +116,10 @@ function normaliseRecord(value: unknown, index: number): SkeletonRecord | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<SkeletonRecord>;
   if (typeof candidate.id !== "string" || !candidate.id) return null;
+  // If the head and torso group is marked to be missing then all the now split head+torso groups are missing
   const excludedGroups = Array.isArray(candidate.excludedGroups)
-    ? candidate.excludedGroups.filter((group): group is PointGroupId => GROUP_IDS.has(group as PointGroupId))
+    ? [...new Set(candidate.excludedGroups.flatMap((group): PointGroupId[] => 
+        LEGACY_GROUP_IDS[group as string] ?? (GROUP_IDS.has(group as PointGroupId) ? [group as PointGroupId] : [])))]
     : [];
   return {
     id: candidate.id,

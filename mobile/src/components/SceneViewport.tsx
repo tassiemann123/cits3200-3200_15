@@ -5,8 +5,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
-import { ALL_CFA_POINTS, pieceLandmarkId } from "../data/cfaSchema";
-import { SKELETON_PIECES } from "../data/skeletonPieces";
+import { ALL_CFA_POINTS, pieceLandmarkId, PointName } from "../data/cfaSchema";
+import { REST_LANDMARKS, SKELETON_PIECES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
@@ -181,6 +181,18 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
 }
 
 /**
+ * Scaling function for the REST_LANDMARKS to bring it into the same space as the 
+ * fully baked pieces geometry
+ */
+function scaleRestLandmarks(globalScale: number): Map<PointName, THREE.Vector3> {
+  const scaled = new Map<PointName, THREE.Vector3>();
+  for (const [name, p] of Object.entries(REST_LANDMARKS)) {
+    if (p) scaled.set(name as PointName, new THREE.Vector3(...p).multiplyScalar(globalScale));
+  }
+  return scaled;
+}
+
+/**
  * Turns each piece's raw, direction-agnostic tip pair into a real
  * PieceRestInfo whose `fromTip`/`toTip` genuinely match its `from`/`to`
  * landmark (see the PieceRestInfo comment in lib/skeletonPose.ts for why
@@ -192,11 +204,18 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
  * rest pose (found via the shared landmark name in SKELETON_PIECES, e.g.
  * the forearm's "elbow" end and the upper arm's "elbow" end), and
  * whichever tip sits closer to that neighbour is this piece's `fromTip`.
- * A few pieces have no such name-sharing predecessor (the legs' hip end,
- * and the skull) -- those resolve against the nearest fixed rest-pose
- * landmark instead (the pelvis piece's own top, and the spine's top).
+ * A few pieces have no such name-sharing predecessor (the legs' hip end) 
+ * -- those resolve against the nearest fixed rest-pose landmark instead
+ * The skull uses the chin as its landmark, while the spine and ribcage use 
+ * the values of their landmarks from REST_LANDMARKS directly
  */
-function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<string, PieceRestInfo> {
+function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLandmarks: Map<PointName, THREE.Vector3>): Map<string, PieceRestInfo> {
+  // Lookup for the measured and scaled resting pose landmark coordinates 
+  // -- see REST_LANDMARKS and the scaleRestLandmarks function below.
+  // This function tus works as a helper to store clones and prevent access
+  // to the main table. 
+  const restPoint = (name: PointName) => restLandmarks.get(name)?.clone();
+
   const resolved = new Map<string, PieceRestInfo>();
 
   const withOrder = (raw: RawPieceGeometry, fromTip: THREE.Vector3, toTip: THREE.Vector3): PieceRestInfo => ({
@@ -213,15 +232,17 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   if (!spineRaw) return resolved;
   const spineLower = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMin : spineRaw.tipMax;
   const spineUpper = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMax : spineRaw.tipMin;
-  resolved.set("SK_Spine", withOrder(spineRaw, spineLower, spineUpper));
+  resolved.set("SK_Spine", withOrder(spineRaw, restPoint("sacral_promontory") ?? spineLower, restPoint("head_proximal") ?? spineUpper));
 
-  // The pelvis is a single-landmark piece -- its only meaningful reference
-  // point is its own top (see the single-target branch in
+  // The pelvis is a single-landmark piece -- with possible references
+  // from the measured mesh landmark for the sacral or its own top
+  // the measured landmark is priority (see the single-target branch in
   // poseSkeletonPiece), which also doubles as the rest-pose anchor the
   // upper legs resolve against below.
   const coccyxRaw = rawByName.get("SK_Coccyx");
   if (coccyxRaw) {
-    resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
+    const pelvisAnchor = restPoint("sacral_promontory") ?? coccyxRaw.topTip;
+    resolved.set("SK_Coccyx", { ...withOrder(coccyxRaw, pelvisAnchor, pelvisAnchor), topTip: pelvisAnchor });
   }
 
   // The ribcages "from" landmark is the sacral, but the mesh itself has its
@@ -229,13 +250,14 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   // ribcage lower tip and sacral top tip. Using sacral as the top essentially 
   // removed the lumbar region and ballooned the chest out to fill the gap, with 
   // uniform scaling in the other directions (width and depth). The code now uses 
-  // its "fromTip" as the rest-pose sacrum as used by the legs directly off the mesh.
-  // Nothing joined onto the ribcage lower tip so the change doesn't effect other bones.
+  // the landmark measured sacral and manubrium values directly.
+  // Nothing joined onto the ribcage lower tip so the change doesn't affect 
+  // other bones.
   const sideRaw = rawByName.get("SK_Side");
-  const restSacrum = resolved.get("SK_Coccyx")?.topTip;
+  const restSacrum = restPoint("sacral_promontory");
   if (sideRaw && restSacrum) {
-    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
-    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, sideUpper));
+    const meshTop = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
+    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, restPoint("manubrium") ?? meshTop));
   }
 
   function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined, invert = false): void {
@@ -253,12 +275,15 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   // The clavicle pieces are anchored at the shoulder end now (from:
   // left/right_shoulder, to: manubrium -- see skeletonPieces.ts), so their
   // fromTip must be the shoulder-side vertex, not the manubrium-side one.
-  // We still only have the manubrium position (the spine's own resolved
-  // toTip) as a known anchor at this point in the walk, so `invert: true`
+  // We set the clavicle locations directly to the landmark point for the 
+  // manubrium, directly from the mesh. Then `invert: true`
   // flips the near/far assignment: the tip CLOSER to the manubrium becomes
   // toTip, and the farther one (the shoulder side) becomes fromTip.
-  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip, true);
-  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip, true);
+  // Modifications for the above: we set the clavicle locations directly
+  // to the landmark point for the manubrium, instead of the stand-in spine 
+  // location, directly from the mesh
+  resolveAgainst("SK_RClavicle", restPoint("manubrium"), true);
+  resolveAgainst("SK_LClavicle", restPoint("manubrium"), true);
   // The upper arm's proximal (shoulder) end sits at the same physical
   // point as the clavicle's own shoulder-side vertex -- now the
   // clavicle's fromTip (see above), not its toTip.
@@ -274,7 +299,10 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   resolveAgainst("SK_LLegDown", resolved.get("SK_LLegUp")?.toTip);
   resolveAgainst("SK_RFoot", resolved.get("SK_RLegDown")?.toTip);
   resolveAgainst("SK_LFoot", resolved.get("SK_LLegDown")?.toTip);
-  resolveAgainst("SK_Head", resolved.get("SK_Spine")?.toTip);
+  // The point assigned to the head is now set for the landmark point 
+  // directly from the mesh for the chin so that the jaw end becomes
+  // the fromTip for the end offsetFromRatio positions
+  resolveAgainst("SK_Head", restPoint("chin"));
 
   return resolved;
 }
@@ -296,6 +324,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
   const overlayRef = useRef<THREE.Group | null>(null);
   const piecesRef = useRef<Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>>(new Map());
+  const restLandmarksRef = useRef<Map<PointName, THREE.Vector3>>(new Map());
 
   const resetCamera = () => {
     const camera = cameraRef.current;
@@ -632,7 +661,19 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds }) => {
+    // Where `point` would be if it moved rigidly with the already-posed
+    // `carrierName` piece -- see `toCarrier` in skeletonPieces.ts.
+    const carriedLandmark = (carrierName: string, point: PointName): Vec3 | undefined => {
+      const carrier = piecesRef.current.get(carrierName);
+      const rest = restLandmarksRef.current.get(point);
+      if (!carrier?.object.visible || !rest) return undefined;
+      // Force update the matrix as it is rebuilt at render time normally
+      carrier.object.updateMatrix();
+      const p = rest.clone().applyMatrix4(carrier.object.matrix);
+      return [p.x, p.y, p.z];
+    };
+
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -641,7 +682,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // what makes two disarticulated bones actually show a gap here,
       // rather than only being recorded in the exported data.
       const fromPos = positions.get(pieceLandmarkId(from, fromBone));
-      const toPos = positions.get(pieceLandmarkId(to, toBone));
+      const toPos = positions.get(pieceLandmarkId(to, toBone)) ?? (toCarrier ? carriedLandmark(toCarrier, to) : undefined);
       if (!fromPos || !toPos) {
         piece.object.visible = false;
         return;
@@ -652,29 +693,21 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         piece.object.visible = false;
         return;
       }
-      // The twist landmark is optional even when the piece declares one --
-      // an archaeologist may not have recorded it yet, or (for a bilateral
-      // pair like the two ASIS points) marked the whole side "not present"
-      // -- and a piece can declare several landmarks to be averaged
-      // together instead of one (see the SK_Side comment in
-      // skeletonPieces.ts for why). Averaging whichever of those landmarks
-      // are actually available, rather than demanding every one of them,
-      // matters more than it looks: dropping to NO twist correction isn't
-      // a graceful "keeps its old two-point-only behaviour" fallback the
-      // way it sounds -- confirmed by actually toggling a side's pelvis
-      // group off on the live app -- it's the exact pre-fix broken
-      // orientation the twist correction exists to prevent (the ribcage
-      // and both clavicles spin to show their back/underside, since the
-      // bare two-point rotation never guaranteed a correct facing on its
-      // own; see the twistForward comment in skeletonPieces.ts). A single
-      // remaining landmark is a real but imperfect stand-in (biased toward
-      // that one side rather than the true midline), which is still far
-      // closer than a full flip.
+       // The twist reference is optional -- an archaeologist may not have
+      // recorded it, or marked a side "not present". A bilateral pair is
+      // only used when complete: one side alone is mostly a sideways offset
+      // from the piece's axis, so it twists the piece to face that side
+      // (seen with one arm marked absent). An incomplete `twist` falls back
+      // to `twistFallback`; with neither complete, no twist is applied and
+      // the piece keeps its bare two-point aim, which can face the wrong way
+      // (see the twistForward comment in skeletonPieces.ts).
+      const completeCentroid = (points: readonly PointName[] | undefined) => {
+        if (!points || points.length === 0) return undefined;
+        const samples = points.map((point) => positions.get(point));
+        return samples.every((pos): pos is Vec3 => pos !== undefined) ? centroid(samples) : undefined;
+      };
       const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
-      const twistSamples = twistLandmarks
-        .map((point) => positions.get(point))
-        .filter((pos): pos is Vec3 => pos !== undefined);
-      const twistPos = twistSamples.length > 0 ? centroid(twistSamples) : undefined;
+      const twistPos = completeCentroid(twistLandmarks) ?? completeCentroid(twistFallback);
 
       const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
       // A piece with no real second landmark of its own (currently just
@@ -839,7 +872,9 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         // Which tip of each piece is its `from` end versus its `to` end is
         // resolved once here, from the whole assembly's rest-pose geometry
         // -- not re-guessed per pose (see resolvePieceRestInfo above).
-        const restInfoByName = resolvePieceRestInfo(rawGeometryByName);
+        const restLandmarks = scaleRestLandmarks(globalScale);
+        restLandmarksRef.current = restLandmarks;
+        const restInfoByName = resolvePieceRestInfo(rawGeometryByName, restLandmarks);
 
         const foundPieces = new Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>();
         bakedByName.forEach((baked, nodeName) => {

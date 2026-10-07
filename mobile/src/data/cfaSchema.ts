@@ -1,8 +1,18 @@
 export const CFA_GROUPS = [
+  { 
+    id: "head",
+    label: "Head",
+    points: ["head_proximal", "chin"]
+  },
   {
-    id: "head_torso",
-    label: "Head & torso",
-    points: ["head_proximal", "chin", "manubrium", "sacral_promontory"],
+    id: "spine_ribcage",
+    label: "Spine and Ribcage",
+    points: ["manubrium"]
+  },
+  {
+    id: "sacrum",
+    label: "Sacrum",
+    points: ["sacral_promontory"]
   },
   {
     id: "left_arm",
@@ -49,7 +59,7 @@ export function pointLabel(point: PointName): string {
 }
 
 export function groupForPoint(point: PointName): PointGroupId {
-  return CFA_GROUPS.find((group) => (group.points as readonly PointName[]).includes(point))?.id ?? "head_torso";
+  return CFA_GROUPS.find((group) => (group.points as readonly PointName[]).includes(point))?.id ?? "head";
 }
 
 /**
@@ -113,7 +123,7 @@ export function boneCountFor(point: PointName): number {
  * bone at a multi-bone joint, for the one case where a bone doesn't
  * belong to the same body part as the joint it's displayed under.
  *
- * Every other multi-bone joint's bones are both genuinely part of the
+ * Most other multi-bone joint's bones are both genuinely part of the
  * same limb as each other (an elbow's upper-arm and forearm ends, a
  * wrist's forearm and hand, a knee's thigh and shin), so marking that
  * whole joint -- or the group it lives in -- "not present" correctly
@@ -128,8 +138,12 @@ export function boneCountFor(point: PointName): number {
  * 3D view even though it was never itself marked absent -- see the fix
  * that added this for the full symptom (reported as "marking pelvis not
  * present makes the thigh disappear, which doesn't make sense").
+ * Similarly the clavicles proximal ends are displayed as under the manubrium
+ * but belong to each arms shoulder bone system, so marking the spine and 
+ * ribcage as absent should not remove them.
  */
 const BONE_GROUP_OVERRIDES: Partial<Record<PointName, Partial<Record<number, PointGroupId>>>> = {
+  manubrium: { 1: "left_arm", 2: "right_arm" },
   left_acetabulum: { 1: "left_leg" },
   right_acetabulum: { 1: "right_leg" },
 };

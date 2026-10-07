@@ -47,26 +47,39 @@ export interface SkeletonPieceSpec {
    */
   stretch?: "rod" | "uniform" | "anchor";
   /**
-   * One landmark, or several averaged together, off the piece's main axis,
-   * used to resolve the twist *around* that axis that a two-point aim
-   * can't determine. Works for any piece with two distinct `from`/`to`
-   * landmarks (not just "anchor" pieces) -- rotates the piece so its real,
-   * modelled facing direction (assumed +Z in the model's own rest pose --
-   * confirmed by inspecting the skull mesh directly) points from `from`
-   * toward this landmark, or toward the averaged position of the listed
-   * landmarks, instead of landing on an arbitrary twist.
-   *
-   * A single landmark only works as a twist reference if it genuinely
-   * sits in front of (or behind) the piece rather than off to one side --
-   * the skull's `chin` does. A bilateral pair like the two ASIS points
-   * (`left_ilium_superior` / `right_ilium_superior`) does not: either one
-   * alone is mostly a *sideways* offset from the spine axis, so using just
-   * one would twist the piece to face off toward that side. Passing both
-   * as an array averages them, cancelling the left/right offset and
-   * leaving only the forward component -- giving a proper front-facing
-   * reference the same way a single midline landmark would.
-   */
+  * One landmark, or several averaged together, off the piece's main axis,
+  * used to resolve the twist *around* that axis that a two-point aim
+  * can't determine. Works for any piece with two distinct `from`/`to`
+  * landmarks (not just "anchor" pieces) -- rotates the piece so its real,
+  * modelled facing direction (assumed +Z in the model's own rest pose --
+  * confirmed by inspecting the skull mesh directly) points from `from`
+  * toward this landmark, or toward the averaged position of the listed
+  * landmarks, instead of landing on an arbitrary twist.
+  *
+  * A single landmark only works as a twist reference if it genuinely
+  * sits in front of (or behind) the piece rather than off to one side --
+  * the skull's `chin` does. A bilateral pair like the two ASIS points
+  * (`left_ilium_superior` / `right_ilium_superior`) does not: either one
+  * alone is mostly a *sideways* offset from the spine axis, so using just
+  * one would twist the piece to face off toward that side. Passing both
+  * as an array averages them, cancelling the left/right offset and
+  * leaving only the forward component -- giving a proper front-facing
+  * reference the same way a single midline landmark would.
+  *
+  * For the same reason, a listed set is only used when *every* landmark
+  * in it is present: with one side marked not present, the remaining
+  * landmark alone would twist the piece toward that side (seen as the
+  * torso turning to face the one remaining shoulder). If this set is
+  * incomplete, `twistFallback` is tried instead; if neither is complete,
+  * no twist is applied.
+  */
   twist?: PointName | PointName[];
+  /**
+   * A second landmark pair to twist toward when `twist` isn't complete
+   * (e.g. one arm marked not present). Like `twist`, it's only used when
+   * every landmark in it is present -- see `twist` above for why.
+   */
+  twistFallback?: PointName[];
   /**
    * Which direction, in this piece's own untransformed rest-pose local
    * space, actually counts as "facing forward" for the twist correction
@@ -145,14 +158,15 @@ export interface SkeletonPieceSpec {
    * (the sacral promontory, as `anchor`) is enough to build a complete,
    * unambiguous frame -- no mesh geometry required.
    *
-   * `restLeft`/`restRight`/`restAnchor` are what those same three
-   * landmarks read as in the bundled neutral standing reference
-   * (public/samples/standard-skeleton-coordinates.csv), which is also
-   * the pose the bundled GLB mesh itself was modelled to match. The
-   * computed rotation is the identity exactly when the entered
-   * coordinates equal these, and rotates away from identity by however
-   * much the entered triangle differs from this rest triangle -- see
-   * computeTriangleQuaternion in skeletonPose.ts.
+   * `restLeft`/`restRight`/`restAnchor` are where those same three
+   * landmarks sit on the bundled GLB mesh itself, relative to the sacral
+   * promontory, in metres -- the same Blender vertex measurements as
+   * REST_LANDMARKS below, and the same values the bundled lying-down
+   * default (standard-skeleton-lying-coordinates.csv)
+   * enters for them. The computed rotation is the identity exactly 
+   * when the entered coordinates equal these, and rotates away from 
+   * identity by however much the entered triangle differs from this 
+   * rest triangle -- see computeTriangleQuaternion in skeletonPose.ts.
    *
    * Falls back to `rigidWith` (if given) whenever any of the three
    * landmarks is missing, or the triangle is degenerate (the anchor
@@ -179,15 +193,14 @@ export interface SkeletonPieceSpec {
    * sacral_promontory-to-head_proximal length below `to` (head_proximal),
    * measured along the body's own current up direction -- so it scales
    * with stature and still works for a body recorded lying down, not just
-   * standing. 0.143 was chosen to match the ratio the skull's old, real
-   * `centre_of_head` landmark sat below `head_proximal` in the CFA's own
-   * sample data, before it was removed: anchoring the skull's actual
-   * bottom-most mesh vertices at that point (rather than pinning its
-   * crown exactly to head_proximal, which is what a naive single-landmark
-   * treatment does) is what leaves the neck visible below it, since the
-   * skull mesh's own real height is otherwise easy to misjudge from its
-   * raw geometry alone -- see the fix that introduced this field for the
-   * full comparison against the old behaviour.
+   * standing. A value of 0.276 is used, coming from:
+   * (head_prox - chin)/(head_prox - sacral)
+   * With the values being the landmark coordinates from the mesh directly
+   * :anchoring the skull's jaw at chin height -- previous method used 
+   * centre-of-head joint value that had been part of the original project csv
+   * 
+   * Modification to the value chosen for offset: The offset is now set as
+   * 0.276 based on calculations from the mesh vertex coordinates checked directly
    */
   offsetFromRatio?: number;
   /**
@@ -204,12 +217,25 @@ export interface SkeletonPieceSpec {
    * one another).
    */
   scaleBounds?: [number, number];
+  /**
+  * If this piece's `to` landmark is missing, estimate it instead of hiding
+  * the piece: take that landmark's measured rest-pose position
+  * (REST_LANDMARKS) and carry it along with this other, already-posed
+  * piece's transform. Exact when the body matches the rest proportions,
+  * and needs no cross products (so it is unaffected by the display's
+  * handedness). The estimate is only used to pose this piece -- it is
+  * never added to the entered landmarks, so e.g. the skull still hides
+  * when the head is marked missing. The carrier must appear earlier in
+  * SKELETON_PIECES so it has already been posed.
+  */
+  toCarrier?: string;
+
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
-  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
-  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_shoulder", "right_shoulder"] },
-  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
+  { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
+  { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal", twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"], requiresAnyOf: ["manubrium"], toCarrier: "SK_Side" },
   {
     nodeName: "SK_Coccyx",
     from: "sacral_promontory",
@@ -221,8 +247,8 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
       right: "right_ilium_superior",
       anchor: "sacral_promontory",
       // [x = left, front, up] in the pelvis mesh's own frame (not raw CFA depth axes)
-      restLeft: [0.19, 0.03, 0.041],
-      restRight: [-0.19, 0.03, 0.041],
+      restLeft: [0.126, 0.036, 0.047],
+      restRight: [-0.126, 0.036, 0.047],
       restAnchor: [0, 0, 0],
     },
   },
@@ -245,3 +271,18 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_LLegDown", from: "left_knee", fromBone: "Shin (proximal)", to: "left_ankle", toBone: "Shin (distal)" },
   { nodeName: "SK_LFoot", from: "left_ankle", fromBone: "Foot", to: "left_toes", stretch: "anchor" },
 ];
+
+/**
+ * The mesh uses a different coordinate system than the visualiser and to assist in
+ * the conversion of the values the global landmark coordinates of the joints on the
+ * skeleton mesh being used were found using vertices on Blender.
+ * The conversion takes (X, Y, Z) and converts to (X, Z, -Y)
+ * The values are scaled as the GLB uses model units not a standard unit of measure --
+ * see the globalScale in SceneViewport
+ */
+export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>> = {
+  head_proximal: [0, 3.32, 0],
+  chin: [0, 2.92, 0.115],
+  manubrium: [0, 2.74, 0.0279],
+  sacral_promontory: [0, 1.87, -0.109],
+};
