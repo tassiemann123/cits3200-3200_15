@@ -158,14 +158,15 @@ export interface SkeletonPieceSpec {
    * (the sacral promontory, as `anchor`) is enough to build a complete,
    * unambiguous frame -- no mesh geometry required.
    *
-   * `restLeft`/`restRight`/`restAnchor` are what those same three
-   * landmarks read as in the bundled neutral standing reference
-   * (public/samples/standard-skeleton-coordinates.csv), which is also
-   * the pose the bundled GLB mesh itself was modelled to match. The
-   * computed rotation is the identity exactly when the entered
-   * coordinates equal these, and rotates away from identity by however
-   * much the entered triangle differs from this rest triangle -- see
-   * computeTriangleQuaternion in skeletonPose.ts.
+   * `restLeft`/`restRight`/`restAnchor` are where those same three
+   * landmarks sit on the bundled GLB mesh itself, relative to the sacral
+   * promontory, in metres -- the same Blender vertex measurements as
+   * REST_LANDMARKS below, and the same values the bundled lying-down
+   * default (standard-skeleton-lying-coordinates.csv)
+   * enters for them. The computed rotation is the identity exactly 
+   * when the entered coordinates equal these, and rotates away from 
+   * identity by however much the entered triangle differs from this 
+   * rest triangle -- see computeTriangleQuaternion in skeletonPose.ts.
    *
    * Falls back to `rigidWith` (if given) whenever any of the three
    * landmarks is missing, or the triangle is degenerate (the anchor
@@ -233,8 +234,8 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
       right: "right_ilium_superior",
       anchor: "sacral_promontory",
       // [x = left, front, up] in the pelvis mesh's own frame (not raw CFA depth axes)
-      restLeft: [0.19, 0.03, 0.041],
-      restRight: [-0.19, 0.03, 0.041],
+      restLeft: [0.126, 0.036, 0.047],
+      restRight: [-0.126, 0.036, 0.047],
       restAnchor: [0, 0, 0],
     },
   },
