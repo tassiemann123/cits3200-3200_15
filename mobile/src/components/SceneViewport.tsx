@@ -183,6 +183,80 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
 }
 
 /**
+ * New type for storing the landmark pair names for the pelvis toggle -- see
+ * estimateSacralPromontory and SACRUM_ESTIMATE_PAIRS
+ */
+type PelvisLandmarkPair = [PointName, PointName];
+const ILIUM_SUPS: PelvisLandmarkPair = ["left_ilium_superior", "right_ilium_superior"];
+const ACETABS: PelvisLandmarkPair = ["left_acetabulum", "right_acetabulum"];
+const ISCHIS: PelvisLandmarkPair = ["left_ischium", "right_ischium"];
+
+/**
+ * Pairs for trying to generate the midline pelvis from the possible reference points 
+ * in order of best usage -- see estimateSacralPromontory.
+ */
+const SACRUM_ESTIMATE_PAIRS: [PelvisLandmarkPair, PelvisLandmarkPair][] = [
+  [ILIUM_SUPS, ACETABS],
+  [ILIUM_SUPS, ISCHIS],
+  [ACETABS, ISCHIS],
+];
+
+/**
+ * Function to ensure the rendering of all bones are still possible when the sacral
+ * is selected to be 'not present', current build requirements for the sacral are the 
+ * spine and manubrium (ribcage bone section) that get references off of the sacrals 
+ * location, so when it is missing they lose a reference and cannot be rendered, so 
+ * by using the same logic of estimating a position as was done for the head location 
+ * to render the spine properly, however we had to do that off of a different bone segment,
+ * here we can use the landmarks within the pelvis to create a reference position for the 
+ * sacral via a triangle system. We can then also get estimates from the mesh for where
+ * the sacral would be - use the mesh offset and pelvis rotation scaled by bodyScale, 
+ * thus provide a theorised location for the spine and manubrium referencing.
+ * 
+ * The best case is to have the main left-right reference off of the ilium superior pair
+ * as they are the same pair used in the orientationTriangle for the pelvis, but per 
+ * the nature of all of our rendering system we want as many fallbacks available to 
+ * allow missing bones as possible, setting the other pelvis pairs in decreasing width
+ * order as our fallbacks here.
+ */
+function estimateSacralPromontory(
+  positions: Map<string, Vec3>,
+  rest: Map<PointName, THREE.Vector3>,
+  bodyScale: number,
+): Vec3 | undefined {
+  const restSacrum = rest.get("sacral_promontory");
+  if (!restSacrum) return undefined;
+
+  for (const [[sideL, sideR], [refL, refR]] of SACRUM_ESTIMATE_PAIRS) {
+    const sideLeft = positions.get(sideL);
+    const sideRight = positions.get(sideR);
+    const refLeft = positions.get(refL);
+    const refRight = positions.get(refR);
+    const restSideLeft = rest.get(sideL);
+    const restSideRight = rest.get(sideR);
+    const restRefLeft = rest.get(refL);
+    const restRefRight = rest.get(refR);
+
+    if (!sideLeft || !sideRight || !refLeft || !refRight || !restSideLeft 
+      || !restSideRight || !restRefLeft || !restRefRight) continue;
+    const anchor = new THREE.Vector3(...refLeft).add(new THREE.Vector3(...refRight)).multiplyScalar(0.5);
+    const restAnchor = restRefLeft.clone().add(restRefRight).multiplyScalar(0.5);
+    // for input coordinates left and right swapped we can use the same mirroring 
+    // fix as the pelvis orientation -- see orientationTriangle
+    const rotation = computeTriangleQuaternion(
+      restSideLeft, restSideRight, restAnchor,
+      new THREE.Vector3(...sideRight), new THREE.Vector3(...sideLeft), anchor,
+    );
+    if (!rotation) continue;
+    const offset = restSacrum.clone().sub(restAnchor).multiplyScalar(bodyScale).applyQuaternion(rotation);
+    const p = anchor.add(offset);
+    return [p.x, p.y, p.z];
+  }
+return undefined; 
+}
+
+
+/**
  * Scaling function for the REST_LANDMARKS to bring it into the same space as the 
  * fully baked pieces geometry
  */
@@ -622,14 +696,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     // an exact fix and see BODY_SCALE_MEASURES for the set of landmarks in
     // skeletonPieces.ts.
     let bodyScale: number | undefined;
-    let spineTargetLength: number | undefined;
-    const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
-    const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
-    const spineFromPos = spineSpec ? positions.get(spineSpec.from) : undefined;
-    const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
-    if (spineFromPos && spineToPos) {
-      spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
-    }
+    
     // Implementation of the ordered fallback list for setting the bodyScale
     // -- see BODY_SCALE_MEASURES in skeltonPieces.ts
     // Uses the mesh defined distances between select bones we determine the scale
@@ -649,6 +716,24 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       bodyScale = new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)) / restLength;
       // Value works so we break
       break;
+    }
+
+    // Generating the estimate sacral location for cases where sacral is toggled
+    // `not present` but other pelvis landmarks are -- see estimateSacralPromontory.
+    // We dont add this to the actual landmarks map or pins but just use if for the
+    // posing map so the ribcage and spine can be rendered while the sacral is absent.
+    // Moved to run after the bodyScale to allow for its use in the estimates generation.
+    if (!positions.has("sacral_promontory")) {
+      const estimate = estimateSacralPromontory(positions, restLandmarksRef.current, bodyScale ?? 1);
+      if (estimate) positions.set("sacral_promontory", estimate);
+    }
+    let spineTargetLength: number | undefined;
+    const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
+    const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
+    const spineFromPos = spineSpec ? positions.get(spineSpec.from) : undefined;
+    const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
+    if (spineFromPos && spineToPos) {
+      spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
     }
 
     // Tracked so a `rigidWith` piece (see skeletonPieces.ts) can copy the

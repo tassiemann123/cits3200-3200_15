@@ -294,6 +294,8 @@ export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>
   right_acetabulum: [-0.144, 1.71, -0.0519],
   left_knee: [0.143, 0.916, -0.0266],
   right_knee: [-0.143, 0.916, -0.0266],
+  left_ischium: [0.0872, 1.57, -0.0684],
+  right_ischium: [-0.0872, 1.57, -0.0684],
 };
 
 /**
