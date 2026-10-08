@@ -104,9 +104,8 @@ export interface SkeletonPieceSpec {
    * sacral_promontory-to-head_proximal length below `to` (head_proximal),
    * measured along the body's own current up direction -- so it scales
    * with stature and still works for a body recorded lying down, not just
-   * standing. 0.143 was chosen to match the ratio the skull's old, real
-   * `centre_of_head` landmark sat below `head_proximal` in the CFA's own
-   * sample data, before it was removed: anchoring the skull's actual
+   * standing. 0.276 matches the head_proximal-to-chin ratio used by mobile:
+   * anchoring the skull's actual
    * bottom-most mesh vertices at that point (rather than pinning its
    * crown exactly to head_proximal, which is what a naive single-landmark
    * treatment does) is what leaves the neck visible below it, since the
@@ -118,7 +117,7 @@ export interface SkeletonPieceSpec {
 }
 
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
-  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.143 },
+  { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
   { nodeName: "SK_Spine", from: "sacral_promontory", to: "head_proximal" },
   { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", stretch: "uniform", twist: ["left_ilium_superior", "right_ilium_superior"] },
   { nodeName: "SK_Coccyx", from: "sacral_promontory", to: "sacral_promontory", rigidWith: "SK_Side" },

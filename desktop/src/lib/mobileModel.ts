@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { computeTriangleQuaternion, poseSkeletonPiece, type PieceRestInfo } from './skeletonPose';
 import { getRenderableBones, type Individual } from '../model';
+import { CFA_GROUPS } from '../data/cfaSchema';
 
 // Keep these values synchronized with mobile/src/data/skeletonPieces.ts and
 // mobile/src/components/SceneViewport.tsx 
@@ -27,11 +28,6 @@ const REST_LANDMARKS: Record<string, readonly [number, number, number]> = {
   left_ischium: [0.0872, 1.57, -0.0684],
   right_ischium: [-0.0872, 1.57, -0.0684],
 };
-const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [string, string])[])[] = [
-  [['left_knee', 'right_knee'], ['left_ankle', 'right_ankle'], ['left_toes', 'right_toes']],
-  [['left_elbow', 'right_elbow'], ['left_wrist', 'right_wrist'], ['left_fingertips', 'right_fingertips']],
-];
-
 const isMesh = (object: THREE.Object3D): object is THREE.Mesh => Boolean((object as THREE.Mesh).isMesh);
 
 function bakePieceWorldTransform(pieceNode: THREE.Object3D): THREE.Group {
@@ -257,20 +253,39 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   const root = new THREE.Group();
   root.rotation.x = MODEL_TO_SCENE_ROTATION; // Mobile meshes are Y-up; the desktop scene is Z-up.
   const bones = new Map(getRenderableBones(individual).map(b => [b.id, b]));
+  const absentGroups = individual.absentGroups ?? [];
 
   // Landmarks (head, chin, sacral promontory, shoulders...) are read from the
   // joint's first endpoint, regardless of bone inventory.
   const landmark = (jointId: string) => {
-    const value = individual.joints.find(j => j.id === jointId)?.endpoints[0]?.coordinate;
-    return complete(value) ? toModel(value) : undefined;
+    const joint = individual.joints.find(j => j.id === jointId);
+    const pointGroup = CFA_GROUPS.find(group => (group.points as readonly string[]).includes(jointId))?.id;
+    for (const [index, endpoint] of joint?.endpoints.entries() ?? []) {
+      const groupId = jointId.endsWith('_acetabulum') && index === 1
+        ? `${jointId.startsWith('left_') ? 'left' : 'right'}_leg`
+        : pointGroup;
+      if ((groupId === 'sacrum' && absentGroups.includes(groupId))
+        || (endpoint.boneId && !bones.has(endpoint.boneId))) continue;
+      if (complete(endpoint.coordinate)) return toModel(endpoint.coordinate);
+    }
+    return undefined;
   };
 
   // Head, spine and ribcage used to hang off the old "spine" bone.
   // The sternum bone ("Head & torso" group) now controls them.
-  const torsoPresent = individual.bones.find(b => b.id === 'sternum')?.status === 'present';
+  const sternumPresent = individual.bones.find(b => b.id === 'sternum')?.status === 'present';
+  const headPresent = sternumPresent && !absentGroups.includes('head');
+  const torsoPresent = sternumPresent && !absentGroups.includes('spine_ribcage');
   const spineRest = templates.get('SK_Spine')!.rest;
   const headRaw = landmark('head_proximal');
   const sacrumRaw = landmark('sacral_promontory');
+  const recordedLandmark = (jointId: string) => {
+    const coordinate = individual.joints.find(j => j.id === jointId)?.endpoints[0]?.coordinate;
+    return complete(coordinate) ? toModel(coordinate) : undefined;
+  };
+  const headForScale = recordedLandmark('head_proximal');
+  const sacrumForScale = recordedLandmark('sacral_promontory');
+  const manubriumForScale = recordedLandmark('manubrium');
   const manubrium = landmark('manubrium');
   const modelScale = spineRest.fromTip.distanceTo(spineRest.toTip)
     / new THREE.Vector3(...REST_LANDMARKS.sacral_promontory).distanceTo(new THREE.Vector3(...REST_LANDMARKS.head_proximal));
@@ -284,8 +299,8 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     return a && b ? a.distanceTo(b) : undefined;
   };
   const scaleMeasures: [number | undefined, number | undefined][] = [
-    [headRaw && sacrumRaw ? headRaw.distanceTo(sacrumRaw) : undefined, spineRest.fromTip.distanceTo(spineRest.toTip)],
-    [manubrium && sacrumRaw ? manubrium.distanceTo(sacrumRaw) : undefined, restLength('sacral_promontory', 'manubrium')],
+    [headForScale && sacrumForScale ? headForScale.distanceTo(sacrumForScale) : undefined, spineRest.fromTip.distanceTo(spineRest.toTip)],
+    [manubriumForScale && sacrumForScale ? manubriumForScale.distanceTo(sacrumForScale) : undefined, restLength('sacral_promontory', 'manubrium')],
   ];
   for (const side of ['left', 'right']) {
     const femur = bones.get(`${side}_femur`);
@@ -346,6 +361,7 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     twistForward?: THREE.Vector3,
     orientationOverride?: THREE.Quaternion,
     scaleBounds?: [number, number],
+    visible = true,
   ) => {
     const template = templates.get(name);
     if (!template || !from || !to) return;
@@ -368,10 +384,11 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
       piece, template.rest, from, to, stretch, twist, resolvedBodyScale,
       twistForward, undefined, orientationOverride, scaleBounds,
     );
+    piece.visible = visible;
     root.add(piece);
   };
 
-  const head = torsoPresent ? headRaw : undefined;
+  const head = headRaw;
 
   // The mobile view derives torso facing from left/right axes, not pair
   // midpoints, which can sit behind the torso and make it face backwards.
@@ -385,7 +402,6 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     };
     const pairs = [
       ['left_ilium_superior', 'right_ilium_superior'],
-      ['left_shoulder', 'right_shoulder'],
     ] as const;
     let left: THREE.Vector3 | undefined;
     for (const [leftId, rightId] of pairs) {
@@ -407,22 +423,6 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
         }
       }
     }
-    if (!left) {
-      for (const group of EXTRA_SIDE_PAIRS) {
-        const sum = new THREE.Vector3();
-        for (const [leftId, rightId] of group) {
-          const leftPoint = landmark(leftId);
-          const rightPoint = landmark(rightId);
-          if (!leftPoint || !rightPoint) continue;
-          const direction = perpendicular(leftPoint.sub(rightPoint));
-          if (direction) sum.add(direction);
-        }
-        if (sum.lengthSq() > 1e-8) {
-          left = sum.normalize();
-          break;
-        }
-      }
-    }
     if (left) {
       return from.clone().add(new THREE.Vector3().crossVectors(axis, left).normalize().multiplyScalar(0.1));
     }
@@ -438,12 +438,13 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   };
 
   let ribcagePiece: THREE.Object3D | undefined;
-  if (torsoPresent && sacrum && manubrium) {
+  if (sacrum && manubrium) {
     const beforeRibcage = root.children.length;
     add(
       'SK_Side', sacrum, manubrium, 'uniform',
       torsoTwistTarget(sacrum, manubrium),
       undefined, undefined, RIBCAGE_SCALE_BOUNDS,
+      torsoPresent,
     );
     if (root.children.length > beforeRibcage) ribcagePiece = root.children[root.children.length - 1];
   }
@@ -457,8 +458,8 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
   }
   const spineHead = headRaw ?? carriedHead;
   const beforeSpine = root.children.length;
-  if (torsoPresent && sacrum && manubrium && spineHead) {
-    add('SK_Spine', sacrum, spineHead, 'rod', torsoTwistTarget(sacrum, spineHead));
+  if (sacrum && spineHead) {
+    add('SK_Spine', sacrum, spineHead, 'rod', torsoTwistTarget(sacrum, spineHead), undefined, undefined, undefined, torsoPresent && Boolean(manubrium));
   }
   const spinePiece = root.children.length > beforeSpine ? root.children[root.children.length - 1] : undefined;
 
@@ -481,11 +482,12 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     const headFrom = bodyUp
       ? head.clone().addScaledVector(bodyUp, -HEAD_OFFSET_RATIO * spineLength)
       : head;
-    add('SK_Head', headFrom, head, 'anchor', landmark('chin'));
+    add('SK_Head', headFrom, head, 'anchor', landmark('chin'), undefined, undefined, undefined, headPresent);
   }
 
   // Orient the pelvis from the same measured triangle as the mobile view.
-  const pelvisPresent = individual.bones.find(b => b.id === 'pelvis')?.status === 'present';
+  const pelvisPresent = individual.bones.find(b => b.id === 'pelvis')?.status === 'present'
+    && (!absentGroups.includes('left_pelvis') || !absentGroups.includes('right_pelvis'));
   const hasPelvisLandmark = [
     'left_ilium_superior', 'right_ilium_superior',
     'left_ischium', 'right_ischium',
@@ -502,7 +504,7 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
           rightAsis, leftAsis, sacrum,
         )
       : undefined;
-    add('SK_Coccyx', sacrum, sacrum, 'anchor', undefined, undefined, triangleQuat ?? spinePiece?.quaternion);
+    add('SK_Coccyx', sacrum, sacrum, 'anchor', undefined, undefined, triangleQuat ?? spinePiece?.quaternion, undefined, pelvisPresent);
   }
 
   const addFollowingTorso = (

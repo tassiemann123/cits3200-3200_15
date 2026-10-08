@@ -16,6 +16,7 @@ interface SkeletonSidebarProps {
   onImport: () => void;
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
+  onGroupPresenceChange: (groupId: string, present: boolean) => void;
   onCoordinateChange: (
     jointId: string,
     endpointIndex: number,
@@ -28,13 +29,8 @@ interface SkeletonSidebarProps {
 // Bones each group controls. Joints are shared between bones (e.g. the acetabulum
 // belongs to both the pelvis and the femur), so the ownership is listed explicitly.
 const GROUP_BONES: Record<string, string[]> = {
-  head: ['sternum'],
-  spine_ribcage: ['sternum'],
-  sacrum: ['sternum'],
   left_arm: ['left_clavicle', 'left_humerus', 'left_forearm', 'left_hand'],
   right_arm: ['right_clavicle', 'right_humerus', 'right_forearm', 'right_hand'],
-  left_pelvis: ['pelvis'],
-  right_pelvis: ['pelvis'],
   left_leg: ['left_femur', 'left_lower_leg', 'left_foot'],
   right_leg: ['right_femur', 'right_lower_leg', 'right_foot'],
 };
@@ -64,6 +60,7 @@ export default function SkeletonSidebar({
   onImport,
   onNameChange,
   onColorChange,
+  onGroupPresenceChange,
   onCoordinateChange,
   onBoneStatusChange,
 }: SkeletonSidebarProps) {
@@ -255,15 +252,17 @@ export default function SkeletonSidebar({
                 .filter((joint): joint is Individual['joints'][number] => !!joint);
 
               const boneIds = GROUP_BONES[group.id] ?? [];
-              const status = getGroupStatus(selected, boneIds);
+              const separatePresence = ['head', 'spine_ribcage', 'sacrum', 'left_pelvis', 'right_pelvis'].includes(group.id);
+              const status = separatePresence
+                ? selected.absentGroups?.includes(group.id) ? 'absent' : 'present'
+                : getGroupStatus(selected, boneIds);
 
               const handleTogglePresence = () => {
                 const nextStatus: BoneStatus =
                   status === 'present' ? 'absent' : 'present';
 
-                boneIds.forEach(boneId =>
-                  onBoneStatusChange(boneId, nextStatus),
-                );
+                if (separatePresence) onGroupPresenceChange(group.id, nextStatus === 'present');
+                else boneIds.forEach(boneId => onBoneStatusChange(boneId, nextStatus));
 
                 setCollapsedGroups(groups =>
                   nextStatus === 'absent'

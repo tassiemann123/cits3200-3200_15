@@ -5,6 +5,7 @@ import {
   createDemoProject,
   updateCoordinate,
   setBoneStatus,
+  setGroupPresence,
   linkMatchingImportedEndpoints,
   validateProject,
 } from './model';
@@ -923,6 +924,9 @@ export default function App() {
           }
           onBoneStatusChange={(boneId, status) =>
             changeIndividual(individual => setBoneStatus(individual, boneId, status))
+          }
+          onGroupPresenceChange={(groupId, present) =>
+            changeIndividual(individual => setGroupPresence(individual, groupId, present))
           }
         />
 
