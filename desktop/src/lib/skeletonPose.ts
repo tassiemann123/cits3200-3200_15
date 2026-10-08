@@ -17,6 +17,9 @@ import * as THREE from "three";
  * up perfectly on paper. Using the real, nearby vertices instead keeps
  * both pieces' visible surfaces meeting where the joint actually is.
  *
+ * The spine and ribcage specifically use measured landmark positions
+ * instead -- see REST_LANDMARKS in ScenePieces.ts
+ *
  * Which of the two tips is `fromTip` (matching this piece's `from`
  * landmark, e.g. the wrist end of a hand) versus `toTip` (its `to`
  * landmark, e.g. the fingertip end) is resolved once, from the model's own
@@ -45,14 +48,76 @@ export interface PieceRestInfo {
 }
 
 /**
- * Every piece in the bundled GLB was modelled facing the same way in its
- * untransformed rest pose -- confirmed directly by isolating the skull
- * mesh and checking which axis its face actually protrudes along -- so
- * this is a fixed constant for the whole model, not something measured
- * per piece. Only pieces that opt in with a `twist` landmark (see
- * SkeletonPieceSpec) use it.
+ * Default facing direction for a piece's twist correction, in that
+ * piece's own untransformed rest-pose local space. Confirmed directly for
+ * the skull by isolating its mesh and checking which axis its face
+ * actually protrudes along, and for SK_Side (the ribcage) by rendering a
+ * posed front and back view and checking the sternum -- not the shoulder
+ * blades -- landed on the front one. An earlier pass got SK_Side's check
+ * backwards and shipped it with a -Z override; this is only a default,
+ * not a guaranteed whole-model constant, so `twistForward` (see
+ * SkeletonPieceSpec) stays available for a future piece whose modelled
+ * front genuinely does run the other way -- just verify it by actually
+ * rendering both sides, not by eyeballing the raw mesh.
  */
 const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Builds an orthonormal frame from three points: `xAxis` runs right-to-left
+ * (from `right` to `left`), and the frame's other two axes come from
+ * whatever component of the direction toward `anchor` is left over once
+ * the part already along `xAxis` is removed -- i.e. `anchor` just needs to
+ * sit somewhere off the left-right line, not at any particular angle.
+ * Returns undefined if the three points are degenerate for this purpose
+ * (left and right coincide, or anchor sits exactly on their line), since
+ * there's then no reliable frame to build.
+ */
+function frameFromTriangle(left: THREE.Vector3, right: THREE.Vector3, anchor: THREE.Vector3): THREE.Matrix4 | undefined {
+  const xAxis = new THREE.Vector3().subVectors(left, right);
+  if (xAxis.lengthSq() < 1e-10) return undefined;
+  xAxis.normalize();
+
+  const midpoint = new THREE.Vector3().addVectors(left, right).multiplyScalar(0.5);
+  const towardAnchor = new THREE.Vector3().subVectors(anchor, midpoint);
+  const inPlane = towardAnchor.addScaledVector(xAxis, -towardAnchor.dot(xAxis));
+  if (inPlane.lengthSq() < 1e-10) return undefined;
+  inPlane.normalize();
+
+  const zAxis = new THREE.Vector3().crossVectors(xAxis, inPlane).normalize();
+  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+  return new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+}
+
+/**
+ * Independently orients a single-landmark piece (the pelvis) from three of
+ * its own landmarks, instead of borrowing another piece's rotation -- see
+ * `orientationTriangle` in skeletonPieces.ts for the full rationale. Builds
+ * a frame from the rest (neutral-pose) triangle and another from the
+ * entered (current) triangle, and returns the rotation that takes one to
+ * the other: identity when the entered triangle matches the rest triangle
+ * exactly, and rotating away from identity in proportion to how much the
+ * entered triangle actually differs.
+ *
+ * Returns undefined if either triangle is degenerate (see
+ * frameFromTriangle) -- the caller should fall back to something else
+ * (currently `rigidWith`) rather than silently applying no rotation.
+ */
+export function computeTriangleQuaternion(
+  restLeft: THREE.Vector3,
+  restRight: THREE.Vector3,
+  restAnchor: THREE.Vector3,
+  curLeft: THREE.Vector3,
+  curRight: THREE.Vector3,
+  curAnchor: THREE.Vector3,
+): THREE.Quaternion | undefined {
+  const restFrame = frameFromTriangle(restLeft, restRight, restAnchor);
+  const curFrame = frameFromTriangle(curLeft, curRight, curAnchor);
+  if (!restFrame || !curFrame) return undefined;
+
+  const restQuat = new THREE.Quaternion().setFromRotationMatrix(restFrame);
+  const curQuat = new THREE.Quaternion().setFromRotationMatrix(curFrame);
+  return curQuat.multiply(restQuat.invert());
+}
 
 /**
  * Repositions, rotates, and stretches a single rigid mesh piece so its
@@ -60,8 +125,19 @@ const NATIVE_FORWARD = new THREE.Vector3(0, 0, 1);
  * coordinate space as the piece's own untransformed position (i.e. the
  * piece must be parented under a group with no transform of its own).
  *
- * If both targets are the same point, the piece is just translated there
- * with no rotation or stretch -- for single-anchor pieces like the pelvis.
+ * If both targets are the same point, the piece is just translated there.
+ * By default that also means no rotation or stretch at all -- fine for a
+ * piece that's genuinely orientation-free, but wrong for one that's
+ * rigidly fused to a neighbouring two-point piece (the coccyx is fused to
+ * the sacrum/ribcage assembly, not free-floating): left at the identity
+ * rotation, it would keep facing however it happened to sit in the rest
+ * pose no matter which way the rest of the body has actually been posed
+ * -- looking fine for a standing skeleton (which is close to the rest
+ * pose already) but visibly hanging off at the wrong angle for any other
+ * orientation, a lying-down pose included. `rigidTransform` lets such a
+ * piece instead copy the rotation and scale another, already-posed piece
+ * ended up with, so the two move as the one rigid unit they anatomically
+ * are.
  */
 export function poseSkeletonPiece(
   piece: THREE.Object3D,
@@ -71,17 +147,48 @@ export function poseSkeletonPiece(
   stretch: "rod" | "uniform" | "anchor" = "rod",
   twistTarget?: THREE.Vector3,
   bodyScale?: number,
+  twistForward: THREE.Vector3 = NATIVE_FORWARD,
+  rigidTransform?: { quaternion: THREE.Quaternion; scale: THREE.Vector3 },
+  /**
+   * Takes precedence over `rigidTransform` for a single-landmark piece's
+   * rotation -- see `orientationTriangle` in skeletonPieces.ts and
+   * computeTriangleQuaternion above. `rigidTransform` still supplies the
+   * fallback rotation when this is undefined (landmarks missing, or the
+   * triangle was degenerate).
+   */
+  orientationOverride?: THREE.Quaternion,
+  /**
+   * Clamps a piece's scale factor to the [minimum, maximum] x bodyScale
+   * -- see `scaleBounds` in skeltonPieces.ts
+   */
+  scaleBounds?: [number, number],
 ): void {
   if (fromTarget.distanceToSquared(toTarget) < 1e-8) {
     // Only one landmark to go on, so there's no direction to derive an
-    // attachment point from. The one piece this applies to (the pelvis)
-    // hangs from its single landmark at the *top* -- most of its mass
-    // (hip sockets, ischium) is below the sacral attachment, not centred
-    // on it -- so topTip (not the piece's overall centre) is what should
-    // land on that landmark.
-    piece.quaternion.identity();
-    piece.scale.set(1, 1, 1);
-    piece.position.copy(fromTarget).sub(rest.topTip);
+    // attachment point from. Most such pieces (the pelvis/coccyx) hang
+    // from their single landmark at the *top* -- most of their mass (hip
+    // sockets, ischium) is below the sacral attachment, not centred on it
+    // -- so topTip (not the piece's overall centre) is what should land
+    // on that landmark.
+    // Only the ROTATION is actually borrowed rigidly from the referenced
+    // piece -- its own scale isn't, since a piece stretched with "rod"
+    // (the spine) carries an anisotropic scale (stretched along just its
+    // own long axis) that means nothing applied to a different piece's
+    // own local axes. The coccyx needs to resize with the patient's
+    // stature like any other anchor-style piece, uniformly, via the same
+    // bodyScale every such piece already uses -- not inherit a stretch
+    // factor that was only ever meant for its rigid neighbour's own shape.
+    const quaternion = orientationOverride ?? (rigidTransform ? rigidTransform.quaternion : new THREE.Quaternion());
+    // Scaling with the patient's stature only ever made sense because the
+    // one piece that takes this branch (the pelvis) also always supplied
+    // bodyScale alongside rigidTransform -- decoupled here from *how* its
+    // rotation was determined, since that's a separate concern now that
+    // there are two possible sources for it.
+    const scale = bodyScale !== undefined ? new THREE.Vector3(bodyScale, bodyScale, bodyScale) : new THREE.Vector3(1, 1, 1);
+    piece.quaternion.copy(quaternion);
+    piece.scale.copy(scale);
+    const scaledTopTip = rest.topTip.clone().multiply(scale).applyQuaternion(quaternion);
+    piece.position.copy(fromTarget).sub(scaledTopTip);
     piece.visible = true;
     return;
   }
@@ -103,9 +210,9 @@ export function poseSkeletonPiece(
   const restLength = Math.max(localTo.distanceTo(localFrom), 1e-6);
   // For "anchor" pieces, the two assigned landmarks are just reference
   // points on the piece -- not necessarily its two extreme ends the way a
-  // limb's joints are (the gap between "centre_of_head" and
-  // "head_proximal" is a fraction of the skull's actual height, for
-  // instance). Sizing the piece to match *that* gap directly
+  // limb's joints are (the gap between "manubrium" and "left_shoulder"
+  // is nowhere near the clavicle's own real length, for instance).
+  // Sizing the piece to match *that* gap directly
   // would shrink or balloon it to something with no real relationship to
   // its actual size. But leaving it permanently frozen at 1 is its own
   // problem: a skeleton entered at infant proportions would still get an
@@ -116,9 +223,13 @@ export function poseSkeletonPiece(
   // two-landmark gap. It's an approximation (a real infant's head is
   // proportionally larger, not just uniformly smaller, than an adult's),
   // but it's far closer than never resizing at all, and needs no new
-  // landmark data. "rod" and "uniform" pieces ignore it entirely -- their
+  // landmark data. "rod" and "uniform" pieces ignore it, except for the case
+  // of using it as a reference with optional scaleBounds clamp -- their
   // own two landmarks already are that bone's real two ends.
-  const scaleFactor = stretch === "anchor" ? (bodyScale ?? 1) : targetLength / restLength;
+    let scaleFactor = stretch === "anchor" ? (bodyScale ?? 1) : targetLength / restLength;
+  if (scaleBounds && bodyScale !== undefined) {
+    scaleFactor = THREE.MathUtils.clamp(scaleFactor, bodyScale * scaleBounds[0], bodyScale * scaleBounds[1]);
+  }
 
   // A real long bone (upper arm, forearm, thigh, shin, spine) reads fine
   // stretched along just its one long axis -- it still looks like a bone,
@@ -159,7 +270,7 @@ export function poseSkeletonPiece(
   // rotation *about* that axis, i.e. exactly the twist correction needed,
   // leaving the primary alignment above untouched.
   if (twistTarget) {
-    const rotatedForward = NATIVE_FORWARD.clone().applyQuaternion(quaternion);
+    const rotatedForward = twistForward.clone().applyQuaternion(quaternion);
     const projRotated = rotatedForward.clone().addScaledVector(targetDir, -rotatedForward.dot(targetDir));
     const targetForwardRaw = new THREE.Vector3().subVectors(twistTarget, fromTarget);
     const projTarget = targetForwardRaw.clone().addScaledVector(targetDir, -targetForwardRaw.dot(targetDir));
@@ -178,7 +289,13 @@ export function poseSkeletonPiece(
   piece.scale.copy(scale);
   piece.quaternion.copy(quaternion);
 
-  const scaledLocalFrom = localFrom.clone().multiply(scale).applyQuaternion(quaternion);
-  piece.position.copy(fromTarget).sub(scaledLocalFrom);
+  // Pin the piece at a single end, normally anchoring to `from`, but for
+  // a "uniform" piece (the ribcage being the one) we pin with `to` instead
+  // Thus when scaleBounds clamps its size, it wont span both landmarks anymore,
+  // and the manubrium end is the one the clavicles attach to.
+  const anchorLocal = stretch === "uniform" ? localTo : localFrom;
+  const anchorTarget = stretch === "uniform" ? toTarget : fromTarget;
+  const scaledAnchor = anchorLocal.clone().multiply(scale).applyQuaternion(quaternion);
+  piece.position.copy(anchorTarget).sub(scaledAnchor);
   piece.visible = true;
 }

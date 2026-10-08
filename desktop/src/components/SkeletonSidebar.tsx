@@ -28,7 +28,9 @@ interface SkeletonSidebarProps {
 // Bones each group controls. Joints are shared between bones (e.g. the acetabulum
 // belongs to both the pelvis and the femur), so the ownership is listed explicitly.
 const GROUP_BONES: Record<string, string[]> = {
-  head_torso: ['sternum'],
+  head: ['sternum'],
+  spine_ribcage: ['sternum'],
+  sacrum: ['sternum'],
   left_arm: ['left_clavicle', 'left_humerus', 'left_forearm', 'left_hand'],
   right_arm: ['right_clavicle', 'right_humerus', 'right_forearm', 'right_hand'],
   left_pelvis: ['pelvis'],
