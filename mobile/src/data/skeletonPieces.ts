@@ -229,6 +229,18 @@ export interface SkeletonPieceSpec {
   * SKELETON_PIECES so it has already been posed.
   */
   toCarrier?: string;
+  /**
+   * Makes the piece keep its natural roll relative to the torso. A limb bone
+   * (or hand) is only aimed from one landmark to the next, which leaves its
+   * roll about its own length to the maths; for an arm that came out
+   * palm-down once the body was lying on its back, because the torso was
+   * rotated onto its back but the arm bones were not. With this set, the
+   * piece's roll is taken from the ribcage's own rotation (SK_Side, which
+   * must be posed earlier and visible), so a standing skeleton is unchanged
+   * and a lying one keeps its anatomical position (palms up, thumbs out).
+   * Falls back to the plain aim when the ribcage is not posed.
+   */
+  followsTorso?: boolean;
 
 }
 
@@ -254,14 +266,22 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   },
 
   { nodeName: "SK_RClavicle", from: "right_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Right clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
-  { nodeName: "SK_RArmUp", from: "right_shoulder", fromBone: "Upper arm (proximal)", to: "right_elbow", toBone: "Upper arm (distal)" },
-  { nodeName: "SK_RArmDown", from: "right_elbow", fromBone: "Forearm (proximal)", to: "right_wrist", toBone: "Forearm (distal)" },
-  { nodeName: "SK_HandR", from: "right_wrist", fromBone: "Hand", to: "right_fingertips", stretch: "anchor" },
+  { nodeName: "SK_RArmUp", from: "right_shoulder", fromBone: "Upper arm (proximal)", to: "right_elbow", toBone: "Upper arm (distal)", followsTorso: true },
+  { nodeName: "SK_RArmDown", from: "right_elbow", fromBone: "Forearm (proximal)", to: "right_wrist", toBone: "Forearm (distal)", followsTorso: true },
+  // The two hand meshes are deliberately crossed over (SK_HandR is posed on
+  // the LEFT landmarks, SK_HandL on the right). The displayed scene is a mirror
+  // image of the real body (see cfaLandmarkToWorld), and a rotation cannot undo
+  // that: with a left-hand mesh on the left side, "thumb up, fingers toward the
+  // feet" always leaves the palm facing away from the body, while the other
+  // roll puts the thumb down. The opposite-side mesh is the mirror of that
+  // hand, so it gives thumb up and palm toward the body. Remove the swap if the
+  // display is ever un-mirrored.
+  { nodeName: "SK_HandR", from: "left_wrist", fromBone: "Hand", to: "left_fingertips", stretch: "anchor", followsTorso: true },
 
   { nodeName: "SK_LClavicle", from: "left_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Left clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
-  { nodeName: "SK_LArmUp", from: "left_shoulder", fromBone: "Upper arm (proximal)", to: "left_elbow", toBone: "Upper arm (distal)" },
-  { nodeName: "SK_LArmDown", from: "left_elbow", fromBone: "Forearm (proximal)", to: "left_wrist", toBone: "Forearm (distal)" },
-  { nodeName: "SK_HandL", from: "left_wrist", fromBone: "Hand", to: "left_fingertips", stretch: "anchor" },
+  { nodeName: "SK_LArmUp", from: "left_shoulder", fromBone: "Upper arm (proximal)", to: "left_elbow", toBone: "Upper arm (distal)", followsTorso: true },
+  { nodeName: "SK_LArmDown", from: "left_elbow", fromBone: "Forearm (proximal)", to: "left_wrist", toBone: "Forearm (distal)", followsTorso: true },
+  { nodeName: "SK_HandL", from: "right_wrist", fromBone: "Hand", to: "right_fingertips", stretch: "anchor", followsTorso: true },
 
   { nodeName: "SK_RLegUp", from: "right_acetabulum", fromBone: "Thigh (proximal)", to: "right_knee", toBone: "Thigh (distal)" },
   { nodeName: "SK_RLegDown", from: "right_knee", fromBone: "Shin (proximal)", to: "right_ankle", toBone: "Shin (distal)" },
