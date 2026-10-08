@@ -6,7 +6,7 @@ import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
 import { ALL_CFA_POINTS, pieceLandmarkId, PointName } from "../data/cfaSchema";
-import { REST_LANDMARKS, SKELETON_PIECES } from "../data/skeletonPieces";
+import { REST_LANDMARKS, SKELETON_PIECES, BODY_SCALE_MEASURES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
@@ -614,13 +614,13 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     if (piecesRef.current.size === 0) return;
     const positions = landmarksToDisplayPositions(landmarks);
 
-    // One overall body-scale factor, derived from the spine (the piece
-    // whose two landmarks -- sacral_promontory to head_proximal -- already
-    // track true stature correctly), so "anchor" pieces (skull, hands,
+    // One overall body-scale factor, derived from a complete set of pre-
+    // defined landmark distances, so "anchor" pieces (skull, hands,
     // feet, clavicles) can resize toward it too instead of staying frozen
     // at adult size regardless of what's entered. See the scaleFactor
     // comment in poseSkeletonPiece for why this is an approximation, not
-    // an exact fix.
+    // an exact fix and see BODY_SCALE_MEASURES for the set of landmarks in
+    // skeletonPieces.ts.
     let bodyScale: number | undefined;
     let spineTargetLength: number | undefined;
     const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
@@ -630,9 +630,25 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     if (spineFromPos && spineToPos) {
       spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
     }
-    if (spinePiece && spineTargetLength !== undefined) {
-      const restLength = spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip);
-      if (restLength > 1e-6) bodyScale = spineTargetLength / restLength;
+    // Implementation of the ordered fallback list for setting the bodyScale
+    // -- see BODY_SCALE_MEASURES in skeltonPieces.ts
+    // Uses the mesh defined distances between select bones we determine the scale
+    // as the entered lengths from the coordinates divided by the meshes length for 
+    // those same distances (restVariable for the mesh points)
+    for (const { from, fromBone, to, toBone } of BODY_SCALE_MEASURES) {
+      const a = positions.get(pieceLandmarkId(from, fromBone));
+      const b = positions.get(pieceLandmarkId(to, toBone));
+      const restA = restLandmarksRef.current.get(from);
+      const restB = restLandmarksRef.current.get(to);
+      // Only calculate the distance for a complete set, working down the ordered list
+      if (!a || !b || !restA || !restB) continue;
+      const restLength = restA.distanceTo(restB);
+      // Standard min value set for distance to ensure points set in ref are functioning 
+      // as we anticipate and would like
+      if (restLength < 1e-6) continue;
+      bodyScale = new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)) / restLength;
+      // Value works so we break
+      break;
     }
 
     // Tracked so a `rigidWith` piece (see skeletonPieces.ts) can copy the

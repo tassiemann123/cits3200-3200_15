@@ -278,11 +278,40 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
  * skeleton mesh being used were found using vertices on Blender.
  * The conversion takes (X, Y, Z) and converts to (X, Z, -Y)
  * The values are scaled as the GLB uses model units not a standard unit of measure --
- * see the globalScale in SceneViewport
+ * see the globalScale in SceneViewport.
+ * REST_LANDMARKS have been set for every bone section to allow for better
+ * fallback systems to be implemented in the scaling with the data still coming from the
+ * mesh verticecs in Blender (thus change in mesh will require modification here)
  */
 export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>> = {
   head_proximal: [0, 3.32, 0],
   chin: [0, 2.92, 0.115],
   manubrium: [0, 2.74, 0.0279],
   sacral_promontory: [0, 1.87, -0.109],
+  left_ilium_superior: [0.242, 1.96, -0.0394],
+  right_ilium_superior: [-0.242, 1.96, -0.0394],
+  left_acetabulum: [0.144, 1.71, -0.0519],
+  right_acetabulum: [-0.144, 1.71, -0.0519],
+  left_knee: [0.143, 0.916, -0.0266],
+  right_knee: [-0.143, 0.916, -0.0266],
 };
+
+/**
+ * To allow for the best chance of an accurate scaling set for `bodyScale`, rather than
+ * rely on the sacrum to head distance, we set a variety of different distance scales and 
+ * choose the one with the complete set that appears first in an ordered list for the reliability
+ * of the distance measured in scaling for the rest of the body:
+ * the spine distance (sacrum to head which was used by itself at first),
+ * the torso (sacrum to manubrium),
+ * the femur (knee to acetabulum),
+ * the pelvis (left-right ilium superior) -> worst case measure as variability is high
+ * The bone labels pick which coordinate is used at a shared joint - particularly set to avoid
+ * bones toggled off causing a measure to become invalid (pelvis acetabulum vs thigh acetabulum).
+ */
+export const BODY_SCALE_MEASURES: { from: PointName; fromBone?: string; to: PointName; toBone?: string }[] = [
+  { from: "sacral_promontory", to: "head_proximal" },
+  { from: "sacral_promontory", to: "manubrium" },
+  { from: "left_acetabulum", fromBone: "Thigh (proximal)", to: "left_knee", toBone: "Thigh (distal)" },
+  { from: "right_acetabulum", fromBone: "Thigh (proximal)", to: "right_knee", toBone: "Thigh (distal)" },
+  { from: "left_ilium_superior", to: "right_ilium_superior" },
+];
