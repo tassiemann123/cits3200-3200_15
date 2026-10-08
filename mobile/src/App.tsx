@@ -271,9 +271,9 @@ useEffect(() => {
     };
   }, []);
 
-  const notify = (message: string) => {
+  const notify = (message: string, duration = message.includes("\n") ? 12000 : 2800) => {
     setToast(message);
-    window.setTimeout(() => setToast((current) => current === message ? null : current), 2800);
+    window.setTimeout(() => setToast((current) => current === message ? null : current), duration);
   };
 
   const patchPreferences = (patch: Partial<ViewerPreferences>) => {
@@ -580,7 +580,7 @@ useEffect(() => {
       const result = parseCoordinateCsv(await file.text());
 
       if (result.records.length === 0) {
-        notify(result.warnings[0] ?? "The CSV contains no usable coordinates");
+        notify(result.warnings[0] ?? "The CSV contains no usable coordinates", 8000);
         return;
       }
 
