@@ -29,6 +29,7 @@ import {
 } from "./lib/backendApi";
 import { toBackendLandmarks } from "./lib/backendCoordinates";
 import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv";
+import { uniqueRecordName } from "./lib/uniqueRecordName";
 import { exportCsv } from "./lib/csvExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
 import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel, WorkspaceGraveyard } from "./types";
@@ -602,9 +603,12 @@ useEffect(() => {
           name: importedGraveyardName || "Untitled graveyard",
         };
 
+        const usedNames = new Set(current.records
+          .filter((record) => record.graveyardId === graveyard.id)
+          .map((record) => record.name.trim().toLowerCase()));
         const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
           id: `skeleton-record-${crypto.randomUUID()}`,
-          name: record.name,
+          name: uniqueRecordName(record.name, usedNames),
           coordinates: record.coordinates,
           extraBoneCoordinates: record.extraBoneCoordinates,
           excludedBones: record.excludedBones,
