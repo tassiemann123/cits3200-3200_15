@@ -129,7 +129,7 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
   const graveyardRow = rows.find((row) => normaliseName(row[0] ?? "") === "graveyard_name");
   const graveyardName = graveyardRow?.[1]?.trim() || undefined;
   const headerIndex = rows.findIndex((row) => normaliseName(row[0] ?? "") === "skeleton_id");
-  if (headerIndex < 0) return { graveyardName, records: [], warnings: ["The CSV must contain skeleton_id, joint_name, x, y, and z columns."] };
+  if (headerIndex < 0) return { graveyardName, records: [], warnings: ["No skeleton_id header was found. Expected a header row with skeleton_id, joint_name, x, y, and z."] };
   const headers = rows[headerIndex].map(normaliseName);
   const find = (...names: string[]) => headers.findIndex((header) => names.includes(header));
   const skeletonIndex = find("skeleton_id", "skeleton", "record_name");
@@ -144,9 +144,13 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
   const presentIndexCol = find("present", "presence");
 
   if ([skeletonIndex, jointIndex, xIndex, yIndex, zIndex].some((index) => index < 0)) {
+    const missing = [
+      [skeletonIndex, "skeleton_id"], [jointIndex, "joint_name"],
+      [xIndex, "x"], [yIndex, "y"], [zIndex, "z"],
+    ].filter(([index]) => index === -1).map(([, name]) => name);
     return {
       records: [],
-      warnings: ["The CSV must contain skeleton_id, joint_name, x, y, and z columns."],
+      warnings: [`Missing required CSV column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`],
     };
   }
 
@@ -168,7 +172,7 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
       return;
     }
     if (!point) {
-      warnings.push(`Row ${rowNumber} has an unknown joint_name and was skipped.`);
+      warnings.push(`Row ${rowNumber} has an unknown joint_name "${jointName || "(blank)"}" and was skipped.`);
       return;
     }
 
@@ -202,7 +206,8 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
     const rawCoordinates = [row[xIndex]?.trim(), row[yIndex]?.trim(), row[zIndex]?.trim()];
     const coordinates = rawCoordinates.map((value) => value === "" || value === undefined ? Number.NaN : Number(value));
     if (!coordinates.every(Number.isFinite)) {
-      warnings.push(`Row ${rowNumber} has invalid X, Y, or Z values and was skipped.`);
+      const invalid = ["x", "y", "z"].filter((_, index) => !Number.isFinite(coordinates[index]));
+      warnings.push(`Row ${rowNumber} (${skeletonId}, ${jointName}) has missing or invalid ${invalid.join(", ")} coordinate${invalid.length === 1 ? "" : "s"} and was skipped.`);
       return;
     }
     const coordinate: CoordinateDraft = [coordinates[0], coordinates[1], coordinates[2]];

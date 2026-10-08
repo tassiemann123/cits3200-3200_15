@@ -62,6 +62,14 @@ console.log(JSON.stringify(csv));
     );
 
     expect(result.records[0].coordinates.head_proximal).toEqual([1, 2, 3]);
-    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings).toEqual([
+      'Row 3 has an unknown joint_name "Unknown" and was skipped.',
+      'Row 4 (BP1, Chin) has missing or invalid x coordinate and was skipped.',
+    ]);
+  });
+
+  it("identifies a missing required column", () => {
+    expect(parseCoordinateCsv("skeleton_id,joint_name,x,y\nBP1,Chin,1,2\n").warnings)
+      .toEqual(["Missing required CSV column: z."]);
   });
 });
