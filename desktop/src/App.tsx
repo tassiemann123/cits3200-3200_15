@@ -18,6 +18,7 @@ import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
 import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
 import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from './lib/coordinateCsv';
+import { uniqueRecordName } from './lib/uniqueRecordName';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -491,20 +492,6 @@ export default function App() {
           return;
         }
 
-        const duplicate = csv.records.find(record =>
-          project.individuals.some(
-            individual =>
-              individual.name === record.name &&
-              individual.graveyardId === currentGraveyardId,
-          ),
-        );
-
-        if (duplicate) {
-          throw new Error(
-            `A skeleton named "${duplicate.name}" already exists in this graveyard.`,
-          );
-        }
-
         const base = createBlankProject().individuals[0];
 
         if (!base) {
@@ -512,12 +499,17 @@ export default function App() {
         }
 
         const importWarnings = [...csv.warnings];
+        const usedNames = new Set(project.individuals
+          .filter(individual => individual.graveyardId === currentGraveyardId)
+          .map(individual => individual.name.trim().toLowerCase()));
         const importedIndividuals = csv.records.map(
           (record, index) => {
+            const name = uniqueRecordName(record.name, usedNames);
+            if (name !== record.name) importWarnings.push(`"${record.name}" was imported as "${name}". You can rename it after import.`);
             const person: Individual = {
               ...base,
               id: crypto.randomUUID(),
-              name: record.name,
+              name,
               accession: '',
               graveyardId: currentGraveyardId,
               color: paletteColor(project.individuals.length + index),
