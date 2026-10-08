@@ -70,11 +70,11 @@ export default function SkeletonSidebar({
     individuals.find(individual => individual.id === selectedId) ??
     individuals[0];
 
-  const filteredIndividuals = individuals.filter(individual =>
-    `${individual.name} ${individual.accession}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+  const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filteredIndividuals = individuals.filter(individual => {
+    const searchableText = `${individual.name} ${individual.accession}`.toLowerCase();
+    return searchTerms.every(term => searchableText.includes(term));
+  });
 
   // X / Y / Z inputs for one endpoint of one joint.
   const renderInputs = (
