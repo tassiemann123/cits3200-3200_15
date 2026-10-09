@@ -100,5 +100,19 @@ Planned: Python, using pandas for CSV/coordinate handling and a 3D library (to b
 
 ---
 
+## Attribution
+
+3D model: "Skeleton Pre-cut" by Maxime66410
+(https://sketchfab.com/3d-models/skeleton-pre-cut-c6aae66fa4674394beda981f46eee415),
+used under the Sketchfab Free Standard licence (https://sketchfab.com/licenses).
+Modified: materials converted for Three.js, and the pieces are repositioned,
+rotated and scaled by the app.
+
+The model file is not stored in this repository. Download it from the Sketchfab
+page above and place it in `mobile/public/models/skeleton_pre-cut.glb`. Do not
+re-upload or share the model file on its own.
+
+---
+
 ## Unit Coordinator
 Michael Wise, michael.wise@uwa.edu.au

@@ -10,12 +10,14 @@ interface SkeletonSidebarProps {
   onQueryChange: (query: string) => void;
   onSelect: (id: string) => void;
   onToggleVisibility: (id: string) => void;
+  onSetAllVisibility: (visible: boolean) => void;
   onExport: (id: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
   onImport: () => void;
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
+  onGroupPresenceChange: (groupId: string, present: boolean) => void;
   onCoordinateChange: (
     jointId: string,
     endpointIndex: number,
@@ -28,11 +30,8 @@ interface SkeletonSidebarProps {
 // Bones each group controls. Joints are shared between bones (e.g. the acetabulum
 // belongs to both the pelvis and the femur), so the ownership is listed explicitly.
 const GROUP_BONES: Record<string, string[]> = {
-  head_torso: ['sternum'],
   left_arm: ['left_clavicle', 'left_humerus', 'left_forearm', 'left_hand'],
   right_arm: ['right_clavicle', 'right_humerus', 'right_forearm', 'right_hand'],
-  left_pelvis: ['pelvis'],
-  right_pelvis: ['pelvis'],
   left_leg: ['left_femur', 'left_lower_leg', 'left_foot'],
   right_leg: ['right_femur', 'right_lower_leg', 'right_foot'],
 };
@@ -56,12 +55,14 @@ export default function SkeletonSidebar({
   onQueryChange,
   onSelect,
   onToggleVisibility,
+  onSetAllVisibility,
   onExport,
   onDelete,
   onAdd,
   onImport,
   onNameChange,
   onColorChange,
+  onGroupPresenceChange,
   onCoordinateChange,
   onBoneStatusChange,
 }: SkeletonSidebarProps) {
@@ -70,12 +71,13 @@ export default function SkeletonSidebar({
   const selected =
     individuals.find(individual => individual.id === selectedId) ??
     individuals[0];
+  const allVisible = individuals.length > 0 && individuals.every(individual => individual.visible);
 
-  const filteredIndividuals = individuals.filter(individual =>
-    `${individual.name} ${individual.accession}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+  const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filteredIndividuals = individuals.filter(individual => {
+    const searchableText = `${individual.name} ${individual.accession}`.toLowerCase();
+    return searchTerms.every(term => searchableText.includes(term));
+  });
 
   // X / Y / Z inputs for one endpoint of one joint.
   const renderInputs = (
@@ -113,15 +115,27 @@ export default function SkeletonSidebar({
         <div className="sidebar-section-header">
           <h2>Skeletons</h2>
 
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Add skeleton"
-            title="Add skeleton"
-            onClick={onAdd}
-          >
-            <Plus size={17} />
-          </button>
+          <div className="header-icon-group">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={allVisible ? 'Hide all skeletons' : 'Show all skeletons'}
+              title={allVisible ? 'Hide all skeletons' : 'Show all skeletons'}
+              disabled={individuals.length === 0}
+              onClick={() => onSetAllVisibility(!allVisible)}
+            >
+              {allVisible ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Add skeleton"
+              title="Add skeleton"
+              onClick={onAdd}
+            >
+              <Plus size={17} />
+            </button>
+          </div>
         </div>
 
         <label className="search-field">
@@ -253,15 +267,17 @@ export default function SkeletonSidebar({
                 .filter((joint): joint is Individual['joints'][number] => !!joint);
 
               const boneIds = GROUP_BONES[group.id] ?? [];
-              const status = getGroupStatus(selected, boneIds);
+              const separatePresence = ['head', 'spine_ribcage', 'sacrum', 'left_pelvis', 'right_pelvis'].includes(group.id);
+              const status = separatePresence
+                ? selected.absentGroups?.includes(group.id) ? 'absent' : 'present'
+                : getGroupStatus(selected, boneIds);
 
               const handleTogglePresence = () => {
                 const nextStatus: BoneStatus =
                   status === 'present' ? 'absent' : 'present';
 
-                boneIds.forEach(boneId =>
-                  onBoneStatusChange(boneId, nextStatus),
-                );
+                if (separatePresence) onGroupPresenceChange(group.id, nextStatus === 'present');
+                else boneIds.forEach(boneId => onBoneStatusChange(boneId, nextStatus));
 
                 setCollapsedGroups(groups =>
                   nextStatus === 'absent'

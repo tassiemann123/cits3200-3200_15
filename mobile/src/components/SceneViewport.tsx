@@ -28,6 +28,14 @@ interface SceneViewportProps {
   onCameraRotate?: (quaternion: [number, number, number, number]) => void;
 }
 
+// Left/right landmark pairs used as a last-resort facing reference for the
+// ribcage and spine, tried in order (legs, then arms) when no pelvis or
+// shoulder landmark is available. See the twist handling in SceneViewport.
+const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [PointName, PointName])[])[] = [
+  [["left_knee", "right_knee"], ["left_ankle", "right_ankle"], ["left_toes", "right_toes"]],
+  [["left_elbow", "right_elbow"], ["left_wrist", "right_wrist"], ["left_fingertips", "right_fingertips"]],
+];
+
 const DEFAULT_CAMERA = new THREE.Vector3(2.6, 1.4, 3.4);
 const DEFAULT_TARGET = new THREE.Vector3(0, 0.85, 0);
 // The bundled GLB isn't modeled to real-world scale (its raw geometry is
@@ -785,7 +793,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       return [p.x, p.y, p.z];
     };
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier, followsTorso }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -863,10 +871,55 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
               break;
             }
           }
+          // Last resorts, only reached when the pelvis and shoulder points
+          // gave nothing (e.g. both arms and both pelvis halves marked not
+          // present, which used to leave the ribcage facing backwards).
+          if (!left) {
+            // 1) Complete left/right pairs elsewhere on the body: legs first
+            // (more stable than arms, which can swing about), then arms.
+            // Every complete pair in the first group that has any is
+            // averaged for a steadier left direction.
+            for (const group of EXTRA_SIDE_PAIRS) {
+              const sum = new THREE.Vector3();
+              for (const [leftId, rightId] of group) {
+                const leftPos = positions.get(leftId);
+                const rightPos = positions.get(rightId);
+                if (!leftPos || !rightPos) continue;
+                const dir = perpendicular(new THREE.Vector3(...leftPos).sub(new THREE.Vector3(...rightPos)));
+                if (dir) sum.add(dir);
+              }
+              if (sum.lengthSq() > 1e-8) {
+                left = sum.normalize();
+                break;
+              }
+            }
+          }
           if (left) {
             const front = new THREE.Vector3().crossVectors(axisDir, left).normalize();
             const t = new THREE.Vector3(...fromPos).addScaledVector(front, 0.1);
             twistPos = [t.x, t.y, t.z];
+          } else {
+            // 2) No left/right points at all: the chin sits in front of the
+            // spine line, so face toward it. This is a direct front
+            // direction (no cross product), so the mirrored display axes do
+            // not matter here.
+            const chinPos = positions.get("chin");
+            if (chinPos) {
+              // Measure "in front of" against the whole spine line (sacrum to
+              // head) rather than this piece's own axis: the ribcage axis
+              // (sacrum to manubrium) leans forward, which can put the chin
+              // behind it.
+              const headPos = positions.get("head_proximal");
+              const spineAxis = headPos ? new THREE.Vector3(...headPos).sub(new THREE.Vector3(...fromPos)) : axisDir.clone();
+              spineAxis.normalize();
+              const chinOffset = new THREE.Vector3(...chinPos).sub(new THREE.Vector3(...fromPos));
+              chinOffset.addScaledVector(spineAxis, -chinOffset.dot(spineAxis));
+              const front = chinOffset.lengthSq() > 1e-8 ? chinOffset.normalize() : undefined;
+              if (front) {
+                const t = new THREE.Vector3(...fromPos).addScaledVector(front, 0.1);
+                twistPos = [t.x, t.y, t.z];
+              }
+            }
           }
         }
       }
@@ -924,15 +977,44 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // twist correction entirely and use only the aim rotation.
       const isClaviclePiece = nodeName === "SK_RClavicle" || nodeName === "SK_LClavicle";
 
+      // followsTorso: pose this piece as if the arm were moved relative to the
+      // body, then carry that with the ribcage's own rotation. Concretely: aim
+      // in the torso's frame (the aim that would be used if the body were
+      // standing in its rest pose), then turn the result by the ribcage
+      // rotation. A standing skeleton is therefore unchanged, and a lying one
+      // keeps the arm's natural roll relative to the body (palms up) instead
+      // of whatever the plain aim leaves. The roll is applied as a twist
+      // reference, the same way the other twist targets are. Left alone if
+      // the ribcage was not posed (see followsTorso in skeletonPieces.ts).
+      let torsoTwistTarget: THREE.Vector3 | undefined;
+      let torsoTwistForward: THREE.Vector3 | undefined;
+      const torsoTransform = followsTorso ? posedTransforms.get("SK_Side") : undefined;
+      if (torsoTransform) {
+        const torsoQ = torsoTransform.quaternion;
+        const aimDir = toVector.clone().sub(fromVector);
+        if (aimDir.lengthSq() > 1e-12) {
+          aimDir.normalize();
+          const restAxis = piece.rest.toTip.clone().sub(piece.rest.fromTip).normalize();
+          const candidates = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)];
+          candidates.sort((u, v) => Math.abs(u.dot(restAxis)) - Math.abs(v.dot(restAxis)));
+          const side = candidates[0];
+          const aimInTorso = aimDir.clone().applyQuaternion(torsoQ.clone().invert());
+          const localAim = new THREE.Quaternion().setFromUnitVectors(restAxis, aimInTorso);
+          const wantedSide = side.clone().applyQuaternion(localAim).applyQuaternion(torsoQ);
+          torsoTwistForward = side;
+          torsoTwistTarget = fromVector.clone().addScaledVector(wantedSide, 0.1);
+        }
+      }
+
       poseSkeletonPiece(
         piece.object,
         piece.rest,
         fromVector,
         toVector,
         stretch,
-        isClaviclePiece ? undefined : (twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined),
+        torsoTwistTarget ?? (isClaviclePiece ? undefined : (twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined)),
         bodyScale,
-        isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined),
+        torsoTwistForward ?? (isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined)),
         rigidWith ? posedTransforms.get(rigidWith) : undefined,
         orientationOverride,
         scaleBounds,

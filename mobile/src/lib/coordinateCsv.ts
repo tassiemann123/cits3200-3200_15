@@ -108,8 +108,8 @@ export function serialiseCoordinateCsv(record: SkeletonRecord, graveyardName: st
     // governed by the leg -- still exports normally when that group, not
     // its own, is marked not present.
     return boneLabels.flatMap((boneLabel, boneIndex) => {
-      if (record.excludedGroups.includes(groupForBone(point, boneIndex))) return [];
-      const present = !(record.excludedBones ?? []).includes(`${point}:${boneIndex}`);
+      const present = !record.excludedGroups.includes(groupForBone(point, boneIndex))
+        && !(record.excludedBones ?? []).includes(`${point}:${boneIndex}`);
       const coordinate = boneIndex === 0
         ? record.coordinates[point]
         : (record.extraBoneCoordinates?.[point]?.[boneIndex - 1] ?? record.coordinates[point]);
@@ -147,10 +147,10 @@ export function parseCoordinateCsv(text: string): CoordinateCsvParseResult {
     const missing = [
       [skeletonIndex, "skeleton_id"], [jointIndex, "joint_name"],
       [xIndex, "x"], [yIndex, "y"], [zIndex, "z"],
-    ].filter(([index]) => index === -1).map(([, name]) => name);
+    ].filter(([index]) => index === -1).map(([, name]) => String(name));
     return {
       records: [],
-      warnings: [`Missing required CSV column${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`],
+      warnings: [`CSV not imported. Required column${missing.length === 1 ? "" : "s"} missing: ${missing.map((name) => name.toUpperCase()).join(", ")}.`],
     };
   }
 

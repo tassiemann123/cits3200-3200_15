@@ -95,3 +95,11 @@ The page header, brand row, institutional heading, title and subtitle were remov
 New workspaces contain one blank skeleton record. As in mobile, bone presence initially defaults to present; geometry is gated by recorded landmarks and an explicit absent status always hides that bone. Old edited projects migrate intact; the untouched synthetic starter becomes a blank workspace, with the old storage entry retained. Examples remain opt-in.
 
 The `predev` and `prebuild` scripts copy `mobile/public/models/skeleton_pre-cut.glb` into the desktop local assets when it is available. A fresh checkout without the GLB still builds, but the anatomical 3D model will not appear; the viewer shows a missing-model message while coordinate editing remains available. For a model demo or a complete offline release, place the GLB in `mobile/public/models/` or `desktop/public/models/` before building and verify that `dist/models/skeleton_pre-cut.glb` exists. When supplied, it is cached with the offline shell. It retains the mobile asset attribution: Skeleton Pre-cut · Maxime66410 · Sketchfab Standard. GLB files remain excluded from Git, consistent with the mobile asset instructions and pending redistribution-rights confirmation. The desktop no longer uses procedurally generated stick/guide skeletons.
+
+## Attribution
+
+3D model: ["Skeleton Pre-cut" by Maxime66410](https://sketchfab.com/3d-models/skeleton-pre-cut-c6aae66fa4674394beda981f46eee415), used under the [Sketchfab Free Standard licence](https://sketchfab.com/licenses).
+
+Modified: materials converted for Three.js, and the pieces are repositioned, rotated and scaled by the app.
+
+The model file is not stored in this repository. Download it from the Sketchfab page above and place it in `mobile/public/models/skeleton_pre-cut.glb` (the desktop build copies it from there). Do not commit the model file or re-upload or share it on its own.
