@@ -20,6 +20,7 @@ import { paletteColor } from './lib/colors';
 import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
 import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from './lib/coordinateCsv';
 import { uniqueRecordName } from './lib/uniqueRecordName';
+import { availableGraveyardName } from './lib/graveyardName';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -1124,8 +1125,9 @@ export default function App() {
               onSubmit={event => {
                 event.preventDefault();
 
-                const name = newGraveyardName.trim();
-                if (!name) return;
+                const requestedName = newGraveyardName.trim();
+                if (!requestedName) return;
+                const name = availableGraveyardName(requestedName, graveyards);
 
                 const graveyard = {
                   id: crypto.randomUUID(),
@@ -1174,8 +1176,9 @@ export default function App() {
                 onSubmit={event => {
                   event.preventDefault();
 
-                  const name = editGraveyardName.trim();
-                  if (!name) return;
+                  const requestedName = editGraveyardName.trim();
+                  if (!requestedName) return;
+                  const name = availableGraveyardName(requestedName, graveyards, currentGraveyardId);
 
                   const updatedGraveyards = graveyards.map(graveyard =>
                     graveyard.id === currentGraveyardId
@@ -1192,7 +1195,7 @@ export default function App() {
                   }));
 
                   setModal(null);
-                  notify('Graveyard renamed.');
+                  notify(`Graveyard renamed to ${name}.`);
                 }}
               >
                 <label className="modal-field">
