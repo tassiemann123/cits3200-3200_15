@@ -906,7 +906,11 @@ export default function App() {
             setProject(previous => ({
               ...previous,
               updatedAt: new Date().toISOString(),
-              individuals: previous.individuals.map(individual => ({ ...individual, visible })),
+              individuals: previous.individuals.map(individual =>
+                individual.graveyardId === currentGraveyardId
+                  ? { ...individual, visible }
+                  : individual,
+              ),
             }))
           }
           onExport={id => {
