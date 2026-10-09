@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getRenderableBones, type Individual } from '../model';
 import { CFA_GROUPS } from '../data/cfaSchema';
 import { loadMobileModel, createAnatomicalSkeleton, disposeModel, surveyPointToScene, type ModelPieces } from '../lib/mobileModel';
+import OrientationAxes, { type OrientationAxesHandle } from './OrientationAxes';
 
 export interface SceneViewportProps {
   individuals: Individual[];
@@ -77,6 +78,7 @@ export default function SceneViewport(props: SceneViewportProps) {
   const { individuals, graveyardName, selectedId, selectedJointId, onExportReady, showGrid, showMarkers, view, frameKey, rotateKey, zoom } = props;
   const canvasHost = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
+  const orientationRef = useRef<OrientationAxesHandle>(null);
   const previousSacrumState = useRef<Map<string, boolean> | null>(null);
   const lastRotateKey = useRef(rotateKey);
   const propsRef = useRef(props);
@@ -191,6 +193,7 @@ export default function SceneViewport(props: SceneViewportProps) {
     controls.addEventListener('start', startDrag);
     controls.addEventListener('end', stopDrag);
     let animation = 0;
+    let lastOrientation: THREE.Quaternion | null = null;
     const exportImage = async () => {
       renderer.render(scene, camera);
 
@@ -211,6 +214,10 @@ export default function SceneViewport(props: SceneViewportProps) {
     const animate = () => {
       animation = requestAnimationFrame(animate);
       controls.update();
+      if (!lastOrientation || !camera.quaternion.equals(lastOrientation)) {
+        orientationRef.current?.setCameraQuaternion(camera.quaternion);
+        lastOrientation = camera.quaternion.clone();
+      }
       state.rings.forEach((ring) => ring.quaternion.copy(camera.quaternion));
       renderer.render(scene, camera);
     };
@@ -377,8 +384,6 @@ export default function SceneViewport(props: SceneViewportProps) {
     {fallback && <div className="model-message">3D rendering is unavailable in this browser. Coordinate editing remains available.</div>}
     {!templates && !fallback && <div className="model-message">{modelError || 'Loading anatomical reference…'}</div>}
 
-    <div aria-hidden="true" style={{ position: 'absolute', bottom: 57, left: 20, width: 50, height: 50, pointerEvents: 'none' }}>
-      <svg width="52" height="52" viewBox="0 0 52 52"><path d="M18 33V8" stroke="#738e69" strokeWidth="1.5"/><path d="M18 33L43 39" stroke="#ae9475" strokeWidth="1.5"/><path d="M18 33L4 43" stroke="#8e9c9b" strokeWidth="1.5"/><circle cx="18" cy="33" r="2.5" fill="#6e7f60"/><text x="15" y="7" fontSize="8" fill="#738e69">Z</text><text x="46" y="42" fontSize="8" fill="#ae9475">X</text><text x="0" y="51" fontSize="8" fill="#8e9c9b">Y</text></svg>
-    </div>
+    <OrientationAxes ref={orientationRef} />
   </div>;
 }
