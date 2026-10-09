@@ -10,6 +10,7 @@ interface SkeletonSidebarProps {
   onQueryChange: (query: string) => void;
   onSelect: (id: string) => void;
   onToggleVisibility: (id: string) => void;
+  onSetAllVisibility: (visible: boolean) => void;
   onExport: (id: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
@@ -54,6 +55,7 @@ export default function SkeletonSidebar({
   onQueryChange,
   onSelect,
   onToggleVisibility,
+  onSetAllVisibility,
   onExport,
   onDelete,
   onAdd,
@@ -69,6 +71,7 @@ export default function SkeletonSidebar({
   const selected =
     individuals.find(individual => individual.id === selectedId) ??
     individuals[0];
+  const allVisible = individuals.length > 0 && individuals.every(individual => individual.visible);
 
   const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const filteredIndividuals = individuals.filter(individual => {
@@ -112,15 +115,27 @@ export default function SkeletonSidebar({
         <div className="sidebar-section-header">
           <h2>Skeletons</h2>
 
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Add skeleton"
-            title="Add skeleton"
-            onClick={onAdd}
-          >
-            <Plus size={17} />
-          </button>
+          <div className="header-icon-group">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label={allVisible ? 'Hide all skeletons' : 'Show all skeletons'}
+              title={allVisible ? 'Hide all skeletons' : 'Show all skeletons'}
+              disabled={individuals.length === 0}
+              onClick={() => onSetAllVisibility(!allVisible)}
+            >
+              {allVisible ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Add skeleton"
+              title="Add skeleton"
+              onClick={onAdd}
+            >
+              <Plus size={17} />
+            </button>
+          </div>
         </div>
 
         <label className="search-field">

@@ -902,6 +902,13 @@ export default function App() {
               ),
             }))
           }
+          onSetAllVisibility={visible =>
+            setProject(previous => ({
+              ...previous,
+              updatedAt: new Date().toISOString(),
+              individuals: previous.individuals.map(individual => ({ ...individual, visible })),
+            }))
+          }
           onExport={id => {
             exportSkeletonCsv(id);
           }}
