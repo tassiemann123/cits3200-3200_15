@@ -10,9 +10,9 @@ const SIZE = 62;
 const CENTER = SIZE / 2;
 const ARM = 15;
 const AXES = [
-  { label: 'X', color: '#ae9475', direction: surveyPointToScene([1, 0, 0]) },
-  { label: 'Y', color: '#8e9c9b', direction: surveyPointToScene([0, 1, 0]) },
-  { label: 'Z', color: '#738e69', direction: surveyPointToScene([0, 0, 1]) },
+  { label: 'X', color: '#d4b187', direction: surveyPointToScene([1, 0, 0]) },
+  { label: 'Y', color: '#b2c5c5', direction: surveyPointToScene([0, 1, 0]) },
+  { label: 'Z', color: '#a2c48f', direction: surveyPointToScene([0, 0, 1]) },
 ];
 
 /** Shows the recorded coordinate axes from the current camera angle. */
@@ -25,7 +25,7 @@ const OrientationAxes = forwardRef<OrientationAxesHandle>(function OrientationAx
       const inverse = quaternion.clone().invert();
       AXES.forEach((axis, index) => {
         const direction = axis.direction.clone().applyQuaternion(inverse);
-        const opacity = direction.z >= 0 ? '1' : '0.4';
+        const opacity = direction.z >= 0 ? '1' : '0.55';
         lines.current[index]?.setAttribute('x2', String(CENTER + direction.x * ARM));
         lines.current[index]?.setAttribute('y2', String(CENTER - direction.y * ARM));
         lines.current[index]?.setAttribute('opacity', opacity);
@@ -39,7 +39,7 @@ const OrientationAxes = forwardRef<OrientationAxesHandle>(function OrientationAx
   return (
     <div aria-hidden="true" style={{ position: 'absolute', bottom: 53, left: 16, width: SIZE, height: SIZE, pointerEvents: 'none' }}>
       <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-        <circle cx={CENTER} cy={CENTER} r="2.5" fill="#6e7f60" />
+        <circle cx={CENTER} cy={CENTER} r="2.5" fill="#a2c48f" />
         {AXES.map((axis, index) => (
           <g key={axis.label} stroke={axis.color} fill={axis.color}>
             <line ref={element => { lines.current[index] = element; }} x1={CENTER} y1={CENTER} x2={CENTER} y2={CENTER} strokeWidth="1.5" strokeLinecap="round" />
