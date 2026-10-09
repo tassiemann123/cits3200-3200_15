@@ -1,8 +1,18 @@
 export const CFA_GROUPS = [
   {
-    id: "head_torso",
-    label: "Head & torso",
-    points: ["head_proximal", "chin", "manubrium", "sacral_promontory"],
+    id: "head",
+    label: "Head",
+    points: ["head_proximal", "chin"],
+  },
+  {
+    id: "spine_ribcage",
+    label: "Spine and Ribcage",
+    points: ["manubrium"],
+  },
+  {
+    id: "sacrum",
+    label: "Sacrum",
+    points: ["sacral_promontory"],
   },
   {
     id: "left_arm",
@@ -49,5 +59,5 @@ export function pointLabel(point: PointName): string {
 }
 
 export function groupForPoint(point: PointName): PointGroupId {
-  return CFA_GROUPS.find((group) => (group.points as readonly PointName[]).includes(point))?.id ?? "head_torso";
+  return CFA_GROUPS.find((group) => (group.points as readonly PointName[]).includes(point))?.id ?? "head";
 }

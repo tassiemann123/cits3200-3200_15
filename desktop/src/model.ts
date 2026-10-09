@@ -46,6 +46,7 @@ export interface Individual {
   notes: string;
   joints: Joint[];
   bones: Bone[];
+  absentGroups?: string[];
 }
 export interface Project {
   version: 1;
@@ -191,6 +192,16 @@ export function setBoneStatus(individual: Individual, boneId: string, status: Bo
   return { ...individual, bones: individual.bones.map((bone) => bone.id === boneId ? { ...bone, status } : bone) };
 }
 
+export function setGroupPresence(individual: Individual, groupId: string, present: boolean): Individual {
+  const absentGroups = individual.absentGroups ?? [];
+  return {
+    ...individual,
+    absentGroups: present
+      ? absentGroups.filter((id) => id !== groupId)
+      : [...new Set([...absentGroups, groupId])],
+  };
+}
+
 /** Scenarios change the left knee/femur example; all other observations survive. */
 export function applyScenario(individual: Individual, scenario: Scenario): Individual {
   if (!['articulated', 'disarticulated', 'missing-femur'].includes(scenario)) throw new Error('Unknown demonstration scenario.');
@@ -310,8 +321,14 @@ export function validateProject(input: unknown): Project {
     const color = string(person.color, 'Individual colour', 7);
     if (!/^#[a-fA-F0-9]{6}$/.test(color)) throw new Error('Individual colour must be a six-digit hex colour.');
     const graveyardId = person.graveyardId === undefined ? undefined : id(person.graveyardId, 'Graveyard ID');
-  return { id: id(person.id, 'Individual ID'), name: string(person.name, 'Individual name'), accession: string(person.accession, 'Accession'), color,
-    visible: bool(person.visible, 'Individual visibility'), notes: string(person.notes, 'Notes', 10000), graveyardId, joints, bones };
+    const absentGroups = person.absentGroups === undefined ? undefined : person.absentGroups;
+    if (absentGroups !== undefined && (!Array.isArray(absentGroups) || absentGroups.length > 9)) throw new Error('Invalid absent groups.');
+    const parsedAbsentGroups = absentGroups?.map((group) => id(group, 'Absent group'));
+    if (parsedAbsentGroups) unique(parsedAbsentGroups, 'Absent groups');
+    return { id: id(person.id, 'Individual ID'), name: string(person.name, 'Individual name'), accession: string(person.accession, 'Accession'), color,
+      visible: bool(person.visible, 'Individual visibility'), notes: string(person.notes, 'Notes', 10000),
+      ...(graveyardId ? { graveyardId } : {}), joints, bones,
+      ...(parsedAbsentGroups ? { absentGroups: parsedAbsentGroups } : {}) };
   });
   unique(individuals.map((person) => person.id), 'Individuals');
   return { version: 1, name, updatedAt, individuals, graveyards };

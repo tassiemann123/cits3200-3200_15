@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getRenderableBones, type Individual } from '../model';
+import { CFA_GROUPS } from '../data/cfaSchema';
 import { loadMobileModel, createAnatomicalSkeleton, disposeModel, surveyPointToScene, type ModelPieces } from '../lib/mobileModel';
 
 export interface SceneViewportProps {
@@ -76,6 +77,7 @@ export default function SceneViewport(props: SceneViewportProps) {
   const { individuals, graveyardName, selectedId, selectedJointId, onExportReady, showGrid, showMarkers, view, frameKey, rotateKey, zoom } = props;
   const canvasHost = useRef<HTMLDivElement>(null);
   const stateRef = useRef<SceneState | null>(null);
+  const previousSacrumState = useRef<Map<string, boolean> | null>(null);
   const lastRotateKey = useRef(rotateKey);
   const propsRef = useRef(props);
   propsRef.current = props;
@@ -234,6 +236,16 @@ export default function SceneViewport(props: SceneViewportProps) {
   useEffect(() => {
     const state = stateRef.current;
     if (!state) return;
+    const sacrumState = new Map(individuals.map(individual => [
+      individual.id,
+      individual.absentGroups?.includes('sacrum') ?? false,
+    ]));
+    const sacrumToggled = previousSacrumState.current !== null
+      && individuals.some(individual =>
+        previousSacrumState.current?.has(individual.id)
+        && previousSacrumState.current.get(individual.id) !== sacrumState.get(individual.id),
+      );
+    previousSacrumState.current = sacrumState;
     disposeContents(state.content);
     disposeContents(state.floor);
     state.targets = [];
@@ -260,8 +272,15 @@ export default function SceneViewport(props: SceneViewportProps) {
       
       if (showMarkers) individual.joints.forEach((joint) => {
         const unique = new Set<string>();
+        const groupId = CFA_GROUPS.find(group => (group.points as readonly string[]).includes(joint.id))?.id;
         joint.endpoints.forEach((endpoint) => {
-          if (!isCoordinate(endpoint.coordinate) || (endpoint.boneId && !boneIds.has(endpoint.boneId))) return;
+          const endpointGroupId = joint.id.endsWith('_acetabulum') && endpoint.boneId === 'pelvis'
+            ? groupId
+            : joint.id.endsWith('_acetabulum') && endpoint.boneId?.endsWith('_femur')
+              ? `${joint.id.startsWith('left_') ? 'left' : 'right'}_leg`
+              : groupId;
+          if (!isCoordinate(endpoint.coordinate) || (endpoint.boneId && !boneIds.has(endpoint.boneId))
+            || (endpointGroupId && individual.absentGroups?.includes(endpointGroupId))) return;
           const key = endpoint.coordinate.join(',');
           if (unique.has(key)) return;
           unique.add(key);
@@ -320,9 +339,11 @@ export default function SceneViewport(props: SceneViewportProps) {
     // fight the user's manual orbit/pan whenever they just select a joint
     // or toggle markers without anything actually moving.
     const boundsChanged = !state.bounds.equals(state.framedBounds);
-    if (!state.framed || (templates && !state.content.userData.modelFramed) || boundsChanged) {
+    if (!state.framed || (templates && !state.content.userData.modelFramed) || (boundsChanged && !sacrumToggled)) {
       state.content.userData.modelFramed = Boolean(templates);
       frameScene(state, propsRef.current.view, propsRef.current.zoom);
+    } else if (sacrumToggled) {
+      state.framedBounds.copy(state.bounds);
     }
   }, [individuals, selectedId, selectedJointId, showGrid, showMarkers, templates]);
 
