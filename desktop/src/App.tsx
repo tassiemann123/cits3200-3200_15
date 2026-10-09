@@ -1022,10 +1022,6 @@ export default function App() {
 
           <div className="scene-footer">
             <span>
-              {showMarkers ? 'Click a marker to inspect' : 'Joint markers are hidden'}
-            </span>
-
-            <span>
               Drag to orbit <b>·</b> Right-drag to pan <b>·</b> Scroll to zoom
             </span>
           </div>
