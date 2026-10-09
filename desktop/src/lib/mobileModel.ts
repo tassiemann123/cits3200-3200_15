@@ -28,6 +28,10 @@ const REST_LANDMARKS: Record<string, readonly [number, number, number]> = {
   left_ischium: [0.0872, 1.57, -0.0684],
   right_ischium: [-0.0872, 1.57, -0.0684],
 };
+const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [string, string])[])[] = [
+  [['left_knee', 'right_knee'], ['left_ankle', 'right_ankle'], ['left_toes', 'right_toes']],
+  [['left_elbow', 'right_elbow'], ['left_wrist', 'right_wrist'], ['left_fingertips', 'right_fingertips']],
+];
 const isMesh = (object: THREE.Object3D): object is THREE.Mesh => Boolean((object as THREE.Mesh).isMesh);
 
 function bakePieceWorldTransform(pieceNode: THREE.Object3D): THREE.Group {
@@ -402,6 +406,7 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
     };
     const pairs = [
       ['left_ilium_superior', 'right_ilium_superior'],
+      ['left_shoulder', 'right_shoulder'],
     ] as const;
     let left: THREE.Vector3 | undefined;
     for (const [leftId, rightId] of pairs) {
@@ -420,6 +425,22 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
         if (lateral) {
           left = id.startsWith('left_') ? lateral : lateral.negate();
           break;
+        }
+      }
+      if (!left) {
+        for (const group of EXTRA_SIDE_PAIRS) {
+          const sum = new THREE.Vector3();
+          for (const [leftId, rightId] of group) {
+            const leftPoint = landmark(leftId);
+            const rightPoint = landmark(rightId);
+            if (!leftPoint || !rightPoint) continue;
+            const direction = perpendicular(leftPoint.sub(rightPoint));
+            if (direction) sum.add(direction);
+          }
+          if (sum.lengthSq() > 1e-8) {
+            left = sum.normalize();
+            break;
+          }
         }
       }
     }
