@@ -9,7 +9,9 @@
     "preview": "vite preview --host 127.0.0.1 --port 4174",
     "test": "vitest run",
     "predev": "node scripts/prepare-model.mjs",
-    "prebuild": "node scripts/prepare-model.mjs"
+    "prebuild": "node scripts/prepare-model.mjs",
+    "electron": "npm run build && electron .",
+    "package:win": "npm run build && electron-packager . OsteoPlot --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/(src|scripts|release)\""
   },
   "dependencies": {
     "lucide-react": "1.28.0",
@@ -18,13 +20,16 @@
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@types/node": "26.1.2",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@types/three": "0.185.3",
     "@vitejs/plugin-react": "6.0.5",
+    "electron": "^44.7.0",
     "typescript": "7.0.2",
     "vite": "8.2.0",
     "vitest": "4.1.10"
-  }
+  },
+  "main": "electron/main.cjs"
 }
