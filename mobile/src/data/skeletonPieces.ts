@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG, 
+ * RUAN VAN ZYL
+ * 
+ * File Function:
+ * Data that maps the bundled skeleton mesh onto the CFA landmarks, the 
+ * mesh piece is posed (SKELETON_PIECES), how each landmark sits on the 
+ * default (rest) mesh (REST_LANDMARKS), and which measurements the 
+ * `bodyScale` is determined from (BODY_SCALE_MEASURES). The file is used
+ * in the posing code within SceneViewport.tsx  
+*/
+
 import type { PointName } from "./cfaSchema";
 
 /**
@@ -22,8 +35,11 @@ import type { PointName } from "./cfaSchema";
  * synthesises a second point for it to span from.
  */
 export interface SkeletonPieceSpec {
+  /** Name of the piece's node in the GLB "SK_Spine" */
   nodeName: string;
+  /** Proximal landmark -- see interface */
   from: PointName;
+  /** Distal landmark - equivalent to `from` for single piece */
   to: PointName;
   /**
    * "rod" (default) stretches the piece along its single long axis and
@@ -36,7 +52,7 @@ export interface SkeletonPieceSpec {
    * stretching one axis, but still rotates it to point between the
    * landmarks -- for a piece that's a chunky, rounded shape but has no
    * strong front/back identity of its own (the ribcage). -- anchors to 
-   * the pieces `to` end not `from`
+   * the pieces `to` end rather than `from`
    *
    * "anchor" also resizes evenly, but skips rotation entirely and keeps
    * whatever direction the piece was actually modelled facing -- for a
@@ -67,11 +83,12 @@ export interface SkeletonPieceSpec {
   * reference the same way a single midline landmark would.
   *
   * For the same reason, a listed set is only used when *every* landmark
-  * in it is present: with one side marked not present, the remaining
-  * landmark alone would twist the piece toward that side (seen as the
-  * torso turning to face the one remaining shoulder). If this set is
-  * incomplete, `twistFallback` is tried instead; if neither is complete,
-  * no twist is applied.
+  * in it is present: with one side marked not present, the twistFallback
+  * is applied, with no locations present no twist is applied.
+  * This is only not the case for piece's whose `twist` pair that has a 
+  * `twistFallback` option that face is taken from the left-to-right
+  * direction of the pair that is fallen to with complete data set. The
+  * midpoint method is the last resort for these pieces. 
   */
   twist?: PointName | PointName[];
   /**
@@ -98,6 +115,23 @@ export interface SkeletonPieceSpec {
    * both sides, not by eyeballing the raw mesh.
    */
   twistForward?: [number, number, number];
+    /**
+   * Which of a multi-bone joint's contributing bones this piece's `from`
+   * (or `to`) endpoint actually represents, by label (matching
+   * boneLabelsFor in cfaSchema.ts) -- e.g. the forearm piece's `from` at
+   * the elbow is genuinely the forearm's own end, not the upper arm's,
+   * even though they're both called "left_elbow". Without this, every
+   * piece touching a shared joint would collapse onto that joint's first
+   * entry, so two bones recorded as disarticulated (or one marked
+   * missing) would never actually show as separated in the 3D view, only
+   * in the exported data. Omitted for an ordinary single-bone landmark,
+   * where there's only one entry to read anyway.
+   */
+  fromBone?: string;
+  /**
+   * Refer to the description for `fromBone`, for the piece's `to` end
+   */
+  toBone?: string;
   /**
    * Another piece's nodeName this one is rigidly fused to and should
    * borrow the posed rotation and scale from, instead of computing its
@@ -116,30 +150,15 @@ export interface SkeletonPieceSpec {
    * lying-down pose). The referenced piece must appear earlier in
    * SKELETON_PIECES so it's already been posed.
    */
-  /**
-   * Which of a multi-bone joint's contributing bones this piece's `from`
-   * (or `to`) endpoint actually represents, by label (matching
-   * boneLabelsFor in cfaSchema.ts) -- e.g. the forearm piece's `from` at
-   * the elbow is genuinely the forearm's own end, not the upper arm's,
-   * even though they're both called "left_elbow". Without this, every
-   * piece touching a shared joint would collapse onto that joint's first
-   * entry, so two bones recorded as disarticulated (or one marked
-   * missing) would never actually show as separated in the 3D view, only
-   * in the exported data. Omitted for an ordinary single-bone landmark,
-   * where there's only one entry to read anyway.
-   */
-  fromBone?: string;
-  toBone?: string;
   rigidWith?: string;
   /**
    * The piece is only shown if at least one of these landmarks is present.
-   * The pelvis hangs from sacral_promontory, which belongs to the "Head &
-   * torso" group, not the pelvis groups, so marking both pelvis groups
-   * "not present" left the pelvis drawn at the sacrum (rotation borrowed
-   * from the spine) even though no pelvis data remained. Listing the pelvis
-   * landmarks here hides it exactly when none of them are left, while still
-   * allowing one side alone (the pelvis is one solid piece, so a single
-   * side keeps it visible, oriented from whatever is available).
+   * Connects a piece to the presence toggle for the bone group it belongs to:
+   * The pelvis hangs from sacral_promontory and lists its own landmarks, when
+   * both pelvis sides are not present the part hides, but if one side is known
+   * the bone is shown as it is one piece.
+   * The spine connects to the manubrium and is part of the spine and ribcage
+   * toggle rather than linking to the head or sacrum it spans between.
    */
   requiresAnyOf?: PointName[];
   /**
@@ -197,10 +216,7 @@ export interface SkeletonPieceSpec {
    * (head_prox - chin)/(head_prox - sacral)
    * With the values being the landmark coordinates from the mesh directly
    * :anchoring the skull's jaw at chin height -- previous method used 
-   * centre-of-head joint value that had been part of the original project csv
-   * 
-   * Modification to the value chosen for offset: The offset is now set as
-   * 0.276 based on calculations from the mesh vertex coordinates checked directly
+   * centre-of-head joint value that had been part of the original project csv.
    */
   offsetFromRatio?: number;
   /**
@@ -218,16 +234,16 @@ export interface SkeletonPieceSpec {
    */
   scaleBounds?: [number, number];
   /**
-  * If this piece's `to` landmark is missing, estimate it instead of hiding
-  * the piece: take that landmark's measured rest-pose position
-  * (REST_LANDMARKS) and carry it along with this other, already-posed
-  * piece's transform. Exact when the body matches the rest proportions,
-  * and needs no cross products (so it is unaffected by the display's
-  * handedness). The estimate is only used to pose this piece -- it is
-  * never added to the entered landmarks, so e.g. the skull still hides
-  * when the head is marked missing. The carrier must appear earlier in
-  * SKELETON_PIECES so it has already been posed.
-  */
+   * If this piece's `to` landmark is missing, estimate it instead of hiding
+   * the piece: take that landmark's measured rest-pose position
+   * (REST_LANDMARKS) and carry it along with this other, already-posed
+   * piece's transform. Exact when the body matches the rest proportions,
+   * and needs no cross products (so it is unaffected by the display's
+   * handedness). The estimate is only used to pose this piece -- it is
+   * never added to the entered landmarks, so e.g. the skull still hides
+   * when the head is marked missing. The carrier must appear earlier in
+   * SKELETON_PIECES so it has already been posed.
+   */
   toCarrier?: string;
   /**
    * Makes the piece keep its natural roll relative to the torso. A limb bone
@@ -241,9 +257,13 @@ export interface SkeletonPieceSpec {
    * Falls back to the plain aim when the ribcage is not posed.
    */
   followsTorso?: boolean;
-
 }
 
+/**
+ * How the mesh pieces are posed for each field -- see SkeletonPieceSpec
+ * Order matters for the referencing of variables such as `rigidWidth`
+ * which must appear before a piece that requires them.
+ */
 export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   { nodeName: "SK_Head", from: "head_proximal", to: "head_proximal", stretch: "anchor", twist: "chin", offsetFromRatio: 0.276 },
   { nodeName: "SK_Side", from: "sacral_promontory", to: "manubrium", toBone: "Sternum", stretch: "uniform", scaleBounds: [0.85, 1.15], twist: ["left_ilium_superior", "right_ilium_superior"], twistFallback: ["left_shoulder", "right_shoulder"] },
@@ -301,7 +321,7 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
  * see the globalScale in SceneViewport.
  * REST_LANDMARKS have been set for every bone section to allow for better
  * fallback systems to be implemented in the scaling with the data still coming from the
- * mesh verticecs in Blender (thus change in mesh will require modification here)
+ * mesh vertices in Blender (thus change in mesh will require modification here)
  */
 export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>> = {
   head_proximal: [0, 3.32, 0],
