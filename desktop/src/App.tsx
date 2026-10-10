@@ -241,6 +241,7 @@ export default function App() {
   const [toast, setToast] = useState(initial.error ?? '');
   const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | 'remote-list' | 'remote-confirm' | 'csv-warnings' | null>(null);
   const [csvWarnings, setCsvWarnings] = useState<string[]>([]);
+  const [csvDuplicates, setCsvDuplicates] = useState<{ id: string; original: string; message: string }[]>([]);
   const [csvImportSucceeded, setCsvImportSucceeded] = useState(false);
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
   const [deleteGraveyardId, setDeleteGraveyardId] = useState<string | null>(null);
@@ -539,6 +540,7 @@ export default function App() {
         }
 
         const currentProject = projectRef.current;
+        const duplicateImports: { id: string; original: string; message: string }[] = [];
         const usedNames = new Set(currentProject.individuals
           .filter(individual => individual.graveyardId === currentGraveyardId)
           .map(individual => individual.name.trim().toLowerCase()));
@@ -620,7 +622,11 @@ export default function App() {
               return null;
             }
             const name = uniqueRecordName(record.name, usedNames);
-            if (name !== record.name) importWarnings.push(`${fileName}: "${record.name}" was imported as "${name}". You can rename it after import.`);
+            if (name !== record.name) {
+              const duplicateMessage = `${fileName}: "${record.name}" was imported as "${name}". You can rename it after import.`;
+              importWarnings.push(duplicateMessage);
+              duplicateImports.push({ id: person.id, original: record.name, message: duplicateMessage });
+            }
             person.name = name;
             importedRows += matchedRows;
             return linkMatchingImportedEndpoints(person);
@@ -652,6 +658,7 @@ export default function App() {
 
         if (importWarnings.length > 0) {
           setCsvWarnings(importWarnings);
+          setCsvDuplicates(duplicateImports);
           setCsvImportSucceeded(true);
           setModal('csv-warnings');
         } else {
@@ -1142,10 +1149,35 @@ export default function App() {
             <>
               <p>{csvImportSucceeded ? 'The CSV was imported, but the following rows need attention:' : 'No skeletons were imported. Please fix the following problems and try again:'}</p>
               <ul className="csv-warning-list">
-                {csvWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+                {csvWarnings.map((warning, index) => (
+                  <li key={`${index}-${warning}`}>{warning}</li>
+                ))}
               </ul>
               <div className="button-row">
-                <button className="button primary" onClick={() => setModal(null)}>Close</button>
+                {csvImportSucceeded && csvDuplicates.length > 0 && (
+                  <button
+                    className="button"
+                    onClick={() => {
+                      const ids = new Set(csvDuplicates.map(item => item.id));
+                      setProject(previous => ({
+                        ...previous,
+                        updatedAt: new Date().toISOString(),
+                        individuals: previous.individuals.filter(item => !ids.has(item.id)),
+                      }));
+                      if (ids.has(selectedId)) {
+                        setSelectedId(project.individuals.find(item => !ids.has(item.id))?.id ?? '');
+                      }
+                      const remaining = csvWarnings.filter(warning => !csvDuplicates.some(item => item.message === warning));
+                      setCsvDuplicates([]);
+                      setCsvWarnings(remaining);
+                      notify('Duplicate skeletons were not imported.');
+                      if (remaining.length === 0) setModal(null);
+                    }}
+                  >
+                    Don&apos;t import
+                  </button>
+                )}
+                <button className="button primary" onClick={() => setModal(null)}>{csvImportSucceeded && csvDuplicates.length > 0 ? 'Import anyway' : 'Close'}</button>
               </div>
             </>
           )}
