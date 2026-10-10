@@ -234,7 +234,6 @@ export default function SkeletonSidebar({
           <Download size={14} />
           Import
         </button>
-        <small className="sidebar-drop-hint">or drop CSV files here</small>
       </div>
 
       {selected && (

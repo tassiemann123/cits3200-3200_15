@@ -226,6 +226,8 @@ export default function App() {
 
   const [editGraveyardName, setEditGraveyardName] = useState('');
   const [newGraveyardName, setNewGraveyardName] = useState('');
+  const newGraveyardNameTaken = graveyardNameExists(newGraveyardName, graveyards);
+  const editGraveyardNameTaken = graveyardNameExists(editGraveyardName, graveyards, currentGraveyardId);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saving');
   const [backendLink, setBackendLink] = useState<BackendLink | null>(restoreBackendLink);
   const [backendState, setBackendState] = useState<'local' | 'saving' | 'saved' | 'offline' | 'conflict'>('local');
@@ -1180,10 +1182,7 @@ export default function App() {
 
                 const requestedName = newGraveyardName.trim();
                 if (!requestedName) return;
-                if (graveyardNameExists(requestedName, graveyards)) {
-                  notify(`A graveyard named "${requestedName}" already exists.`);
-                  return;
-                }
+                if (newGraveyardNameTaken) return;
                 const name = requestedName;
 
                 const graveyard = {
@@ -1217,8 +1216,15 @@ export default function App() {
                   maxLength={80}
                   placeholder="e.g. LN24 East"
                   value={newGraveyardName}
+                  aria-invalid={newGraveyardNameTaken}
+                  aria-describedby={newGraveyardNameTaken ? 'new-graveyard-error' : undefined}
                   onChange={event => setNewGraveyardName(event.target.value)}
                 />
+                {newGraveyardNameTaken && (
+                  <span id="new-graveyard-error" className="field-error" role="alert">
+                    This graveyard already exists
+                  </span>
+                )}
               </label>
 
               <button className="button primary wide" type="submit">
@@ -1235,10 +1241,7 @@ export default function App() {
 
                   const requestedName = editGraveyardName.trim();
                   if (!requestedName) return;
-                  if (graveyardNameExists(requestedName, graveyards, currentGraveyardId)) {
-                    notify(`A graveyard named "${requestedName}" already exists.`);
-                    return;
-                  }
+                  if (editGraveyardNameTaken) return;
                   const name = requestedName;
 
                   const updatedGraveyards = graveyards.map(graveyard =>
@@ -1265,8 +1268,15 @@ export default function App() {
                     autoFocus
                     maxLength={80}
                     value={editGraveyardName}
+                    aria-invalid={editGraveyardNameTaken}
+                    aria-describedby={editGraveyardNameTaken ? 'edit-graveyard-error' : undefined}
                     onChange={event => setEditGraveyardName(event.target.value)}
                   />
+                  {editGraveyardNameTaken && (
+                    <span id="edit-graveyard-error" className="field-error" role="alert">
+                      This graveyard already exists
+                    </span>
+                  )}
                 </label>
 
                 <button className="button primary wide" type="submit">
