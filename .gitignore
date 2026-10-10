@@ -32,3 +32,4 @@ android/local.properties
 
 *.keystore
 keystore.properties
+release/

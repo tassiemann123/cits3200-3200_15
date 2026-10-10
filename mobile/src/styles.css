@@ -341,3 +341,7 @@ border: 1px solid rgba(142,178,206,.18); border-radius: 10px; background: rgba(1
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+.edit-name-button.delete-record-button { color: #fff; background: #b42318; border-color: #b42318; }
+.edit-name-button.delete-record-button:hover:not(:disabled) { background: #912018; border-color: #912018; }
+.delete-record-button:disabled { opacity: .5; cursor: default; }
