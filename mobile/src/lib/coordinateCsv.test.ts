@@ -24,11 +24,10 @@ describe("coordinate CSV transfer", () => {
       excludedGroups: ["left_arm"],
     }), "Test Graveyard");
 
-console.log(JSON.stringify(csv));
-
-      expect(csv).toBe(
-      "Graveyard Name,Test Graveyard\r\n\r\nskeleton_id,joint_name,bone,x,y,z,present\r\n\"Skeleton, A\",head_proximal,,1.25,2,-3,yes\r\n",
-    );
+    expect(csv).toContain('"Skeleton, A",head_proximal,,1.25,2,-3,yes');
+    expect(csv).toContain('"Skeleton, A",left_shoulder,Clavicle (distal) / shoulder blade,,,,no');
+    expect(csv).toContain('"Skeleton, A",left_shoulder,Upper arm (proximal),,,,no');
+    expect(csv).not.toContain('left_fingertips');
   });
 
   it("round-trips exported coordinates", () => {
@@ -62,6 +61,25 @@ console.log(JSON.stringify(csv));
     );
 
     expect(result.records[0].coordinates.head_proximal).toEqual([1, 2, 3]);
-    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings).toEqual([
+      'Row 3 has an unknown joint_name "Unknown" and was skipped.',
+      'Row 4 (BP1, Chin) has missing or invalid x coordinate and was skipped.',
+    ]);
+  });
+
+  it("identifies a missing required column", () => {
+    expect(parseCoordinateCsv("skeleton_id,joint_name,x,y\nBP1,Chin,1,2\n").warnings)
+      .toEqual(["CSV not imported. Required column missing: Z."]);
+  });
+
+  it("preserves a missing limb as absent bone rows after import", () => {
+    const csv = serialiseCoordinateCsv(record({
+      excludedGroups: ["left_arm"],
+      coordinates: { left_shoulder: [1, 2, 3] },
+    }), "Test Graveyard");
+    const imported = parseCoordinateCsv(csv);
+    expect(imported.records[0].excludedBones).toContain("left_shoulder:0");
+    expect(imported.records[0].excludedBones).toContain("left_shoulder:1");
+    expect(imported.records[0].coordinates.left_shoulder).toBeUndefined();
   });
 });

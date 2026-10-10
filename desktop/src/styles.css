@@ -184,6 +184,8 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:min(620px,calc(100vw - 40px));width:max-content;display:flex;align-items:center;gap:14px;background:#294a66;color:#fff;padding:12px 14px;border-radius:7px;font-size:10px;line-height:1.6;box-shadow:0 7px 25px #0005;z-index:90}
 .toast>button{color:#c5d4dd;display:grid;place-items:center;padding:0}
 .error-toast{background:#845c42}
+.csv-warning-list{margin:0 0 18px;padding-left:20px;max-height:42vh;overflow:auto;color:#4e555b;font-size:11px;line-height:1.6}
+.csv-warning-list li+li{margin-top:7px}
 
 .modal-backdrop{position:fixed;inset:0;background:#20262b55;backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal{position:relative;width:460px;max-width:100%;max-height:90vh;overflow:auto;background:#fff;border:1px solid #d5dde2;border-radius:10px;padding:28px;box-shadow:0 20px 70px #0003}

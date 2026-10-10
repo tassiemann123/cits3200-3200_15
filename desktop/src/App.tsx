@@ -5,6 +5,7 @@ import {
   createDemoProject,
   updateCoordinate,
   setBoneStatus,
+  setGroupPresence,
   linkMatchingImportedEndpoints,
   validateProject,
 } from './model';
@@ -18,6 +19,7 @@ import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
 import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
 import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from './lib/coordinateCsv';
+import { uniqueRecordName } from './lib/uniqueRecordName';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -234,7 +236,9 @@ export default function App() {
   projectRef.current = project;
   const [storageBlocked, setStorageBlocked] = useState(Boolean(initial.error));
   const [toast, setToast] = useState(initial.error ?? '');
-  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | 'remote-list' | 'remote-confirm' | null>(null);
+  const [modal, setModal] = useState<'export' | 'add' | 'import' | 'delete' | 'delete-graveyard' | 'new-graveyard' | 'edit-graveyard' | 'remote-list' | 'remote-confirm' | 'csv-warnings' | null>(null);
+  const [csvWarnings, setCsvWarnings] = useState<string[]>([]);
+  const [csvImportSucceeded, setCsvImportSucceeded] = useState(false);
   const [deleteSkeletonId, setDeleteSkeletonId] = useState<string | null>(null);
   const [deleteGraveyardId, setDeleteGraveyardId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
@@ -497,23 +501,10 @@ export default function App() {
         const csv = parseCoordinateCsv(await file.text());
 
         if (csv.records.length === 0) {
-          throw new Error(
-            csv.warnings[0] ?? 'The CSV does not contain any coordinate rows.',
-          );
-        }
-
-        const duplicate = csv.records.find(record =>
-          project.individuals.some(
-            individual =>
-              individual.name === record.name &&
-              individual.graveyardId === currentGraveyardId,
-          ),
-        );
-
-        if (duplicate) {
-          throw new Error(
-            `A skeleton named "${duplicate.name}" already exists in this graveyard.`,
-          );
+          setCsvWarnings(csv.warnings.length ? csv.warnings : ['The CSV does not contain any coordinate rows.']);
+          setCsvImportSucceeded(false);
+          setModal('csv-warnings');
+          return;
         }
 
         const base = createBlankProject().individuals[0];
@@ -522,12 +513,18 @@ export default function App() {
           throw new Error('Could not create a skeleton template.');
         }
 
-        const importedIndividuals: Individual[] = csv.records.map(
+        const importWarnings = [...csv.warnings];
+        const usedNames = new Set(project.individuals
+          .filter(individual => individual.graveyardId === currentGraveyardId)
+          .map(individual => individual.name.trim().toLowerCase()));
+        const importedIndividuals = csv.records.map(
           (record, index) => {
+            const name = uniqueRecordName(record.name, usedNames);
+            if (name !== record.name) importWarnings.push(`"${record.name}" was imported as "${name}". You can rename it after import.`);
             const person: Individual = {
               ...base,
               id: crypto.randomUUID(),
-              name: record.name,
+              name,
               accession: '',
               graveyardId: currentGraveyardId,
               color: paletteColor(project.individuals.length + index),
@@ -547,14 +544,19 @@ export default function App() {
               })),
             };
 
+            let matchedRows = 0;
             for (const row of record.rows) {
+              const rowLabel = row.lineNumber ? `Row ${row.lineNumber} (${record.name})` : `Skeleton "${record.name}"`;
               const currentJoint = person.joints.find(
                 item =>
                   item.id === row.jointName ||
                   item.label.toLowerCase() === row.jointName.toLowerCase(),
               );
 
-              if (!currentJoint) continue;
+              if (!currentJoint) {
+                importWarnings.push(`${rowLabel} has an unknown joint "${row.jointName}" and was skipped.`);
+                continue;
+              }
 
               let endpointIndex = 0;
 
@@ -565,11 +567,16 @@ export default function App() {
                   person.bones.find(item => item.id === endpoint.boneId)?.label.toLowerCase() === wanted,
                 );
                 if (match >= 0) endpointIndex = match;
+                else {
+                  importWarnings.push(`${rowLabel} has an unknown bone "${row.bone}" at ${row.jointName} and was skipped.`);
+                  continue;
+                }
               }
 
               const endpoint = currentJoint.endpoints[endpointIndex];
               if (!endpoint) continue;
 
+              matchedRows += 1;
               endpoint.coordinate = [row.x, row.y, row.z];
 
               const bone = endpoint.boneId
@@ -582,9 +589,20 @@ export default function App() {
               }
             }
 
+            if (matchedRows === 0) {
+              importWarnings.push(`Skeleton "${record.name}" has no recognised joint and bone rows; it was not imported.`);
+              return null;
+            }
             return linkMatchingImportedEndpoints(person);
           },
-        );
+        ).filter((individual): individual is Individual => individual !== null);
+
+        if (importedIndividuals.length === 0) {
+          setCsvWarnings(importWarnings);
+          setCsvImportSucceeded(false);
+          setModal('csv-warnings');
+          return;
+        }
 
         setProject(previous => ({
           ...previous,
@@ -602,12 +620,10 @@ export default function App() {
         setStorageBlocked(false);
         setFrameKey(value => value + 1);
 
-        if (csv.warnings.length > 0) {
-          notify(
-            `CSV imported with ${csv.warnings.length} warning${
-              csv.warnings.length === 1 ? '' : 's'
-            }. Some data may be missing or invalid.`,
-          );
+        if (importWarnings.length > 0) {
+          setCsvWarnings(importWarnings);
+          setCsvImportSucceeded(true);
+          setModal('csv-warnings');
         } else {
           notify(
             `CSV imported: ${importedIndividuals.length} skeleton${
@@ -914,6 +930,17 @@ export default function App() {
               ),
             }))
           }
+          onSetAllVisibility={visible =>
+            setProject(previous => ({
+              ...previous,
+              updatedAt: new Date().toISOString(),
+              individuals: previous.individuals.map(individual =>
+                individual.graveyardId === currentGraveyardId
+                  ? { ...individual, visible }
+                  : individual,
+              ),
+            }))
+          }
           onExport={id => {
             exportSkeletonCsv(id);
           }}
@@ -939,6 +966,9 @@ export default function App() {
           }
           onBoneStatusChange={(boneId, status) =>
             changeIndividual(individual => setBoneStatus(individual, boneId, status))
+          }
+          onGroupPresenceChange={(groupId, present) =>
+            changeIndividual(individual => setGroupPresence(individual, groupId, present))
           }
         />
 
@@ -1062,6 +1092,8 @@ export default function App() {
               ? 'Take your work with you.'
               : modal === 'remote-list'
                 ? 'Desktop workspaces on the backend'
+                : modal === 'csv-warnings'
+                  ? csvImportSucceeded ? 'CSV imported with warnings' : 'CSV could not be imported'
                 : modal === 'remote-confirm'
                   ? 'Open backend workspace?'
               : modal === 'add'
@@ -1081,6 +1113,17 @@ export default function App() {
             setDeleteSkeletonId(null);
           }}
         >
+          {modal === 'csv-warnings' && (
+            <>
+              <p>{csvImportSucceeded ? 'The CSV was imported, but the following rows need attention:' : 'No skeletons were imported. Please fix the following problems and try again:'}</p>
+              <ul className="csv-warning-list">
+                {csvWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+              </ul>
+              <div className="button-row">
+                <button className="button primary" onClick={() => setModal(null)}>Close</button>
+              </div>
+            </>
+          )}
           {modal === 'remote-list' && (
             <>
               <p>Select a desktop workspace. Mobile records are stored separately.</p>

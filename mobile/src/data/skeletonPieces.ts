@@ -229,6 +229,18 @@ export interface SkeletonPieceSpec {
   * SKELETON_PIECES so it has already been posed.
   */
   toCarrier?: string;
+  /**
+   * Makes the piece keep its natural roll relative to the torso. A limb bone
+   * (or hand) is only aimed from one landmark to the next, which leaves its
+   * roll about its own length to the maths; for an arm that came out
+   * palm-down once the body was lying on its back, because the torso was
+   * rotated onto its back but the arm bones were not. With this set, the
+   * piece's roll is taken from the ribcage's own rotation (SK_Side, which
+   * must be posed earlier and visible), so a standing skeleton is unchanged
+   * and a lying one keeps its anatomical position (palms up, thumbs out).
+   * Falls back to the plain aim when the ribcage is not posed.
+   */
+  followsTorso?: boolean;
 
 }
 
@@ -254,14 +266,22 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
   },
 
   { nodeName: "SK_RClavicle", from: "right_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Right clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
-  { nodeName: "SK_RArmUp", from: "right_shoulder", fromBone: "Upper arm (proximal)", to: "right_elbow", toBone: "Upper arm (distal)" },
-  { nodeName: "SK_RArmDown", from: "right_elbow", fromBone: "Forearm (proximal)", to: "right_wrist", toBone: "Forearm (distal)" },
-  { nodeName: "SK_HandR", from: "right_wrist", fromBone: "Hand", to: "right_fingertips", stretch: "anchor" },
+  { nodeName: "SK_RArmUp", from: "right_shoulder", fromBone: "Upper arm (proximal)", to: "right_elbow", toBone: "Upper arm (distal)", followsTorso: true },
+  { nodeName: "SK_RArmDown", from: "right_elbow", fromBone: "Forearm (proximal)", to: "right_wrist", toBone: "Forearm (distal)", followsTorso: true },
+  // The two hand meshes are deliberately crossed over (SK_HandR is posed on
+  // the LEFT landmarks, SK_HandL on the right). The displayed scene is a mirror
+  // image of the real body (see cfaLandmarkToWorld), and a rotation cannot undo
+  // that: with a left-hand mesh on the left side, "thumb up, fingers toward the
+  // feet" always leaves the palm facing away from the body, while the other
+  // roll puts the thumb down. The opposite-side mesh is the mirror of that
+  // hand, so it gives thumb up and palm toward the body. Remove the swap if the
+  // display is ever un-mirrored.
+  { nodeName: "SK_HandR", from: "left_wrist", fromBone: "Hand", to: "left_fingertips", stretch: "anchor", followsTorso: true },
 
   { nodeName: "SK_LClavicle", from: "left_shoulder", fromBone: "Clavicle (distal) / shoulder blade", to: "manubrium", toBone: "Left clavicle (proximal)", stretch: "anchor", twist: "head_proximal", twistForward: [0, 0, 1] },
-  { nodeName: "SK_LArmUp", from: "left_shoulder", fromBone: "Upper arm (proximal)", to: "left_elbow", toBone: "Upper arm (distal)" },
-  { nodeName: "SK_LArmDown", from: "left_elbow", fromBone: "Forearm (proximal)", to: "left_wrist", toBone: "Forearm (distal)" },
-  { nodeName: "SK_HandL", from: "left_wrist", fromBone: "Hand", to: "left_fingertips", stretch: "anchor" },
+  { nodeName: "SK_LArmUp", from: "left_shoulder", fromBone: "Upper arm (proximal)", to: "left_elbow", toBone: "Upper arm (distal)", followsTorso: true },
+  { nodeName: "SK_LArmDown", from: "left_elbow", fromBone: "Forearm (proximal)", to: "left_wrist", toBone: "Forearm (distal)", followsTorso: true },
+  { nodeName: "SK_HandL", from: "right_wrist", fromBone: "Hand", to: "right_fingertips", stretch: "anchor", followsTorso: true },
 
   { nodeName: "SK_RLegUp", from: "right_acetabulum", fromBone: "Thigh (proximal)", to: "right_knee", toBone: "Thigh (distal)" },
   { nodeName: "SK_RLegDown", from: "right_knee", fromBone: "Shin (proximal)", to: "right_ankle", toBone: "Shin (distal)" },
@@ -278,11 +298,42 @@ export const SKELETON_PIECES: SkeletonPieceSpec[] = [
  * skeleton mesh being used were found using vertices on Blender.
  * The conversion takes (X, Y, Z) and converts to (X, Z, -Y)
  * The values are scaled as the GLB uses model units not a standard unit of measure --
- * see the globalScale in SceneViewport
+ * see the globalScale in SceneViewport.
+ * REST_LANDMARKS have been set for every bone section to allow for better
+ * fallback systems to be implemented in the scaling with the data still coming from the
+ * mesh verticecs in Blender (thus change in mesh will require modification here)
  */
 export const REST_LANDMARKS: Partial<Record<PointName, [number, number, number]>> = {
   head_proximal: [0, 3.32, 0],
   chin: [0, 2.92, 0.115],
   manubrium: [0, 2.74, 0.0279],
   sacral_promontory: [0, 1.87, -0.109],
+  left_ilium_superior: [0.242, 1.96, -0.0394],
+  right_ilium_superior: [-0.242, 1.96, -0.0394],
+  left_acetabulum: [0.144, 1.71, -0.0519],
+  right_acetabulum: [-0.144, 1.71, -0.0519],
+  left_knee: [0.143, 0.916, -0.0266],
+  right_knee: [-0.143, 0.916, -0.0266],
+  left_ischium: [0.0872, 1.57, -0.0684],
+  right_ischium: [-0.0872, 1.57, -0.0684],
 };
+
+/**
+ * To allow for the best chance of an accurate scaling set for `bodyScale`, rather than
+ * rely on the sacrum to head distance, we set a variety of different distance scales and 
+ * choose the one with the complete set that appears first in an ordered list for the reliability
+ * of the distance measured in scaling for the rest of the body:
+ * the spine distance (sacrum to head which was used by itself at first),
+ * the torso (sacrum to manubrium),
+ * the femur (knee to acetabulum),
+ * the pelvis (left-right ilium superior) -> worst case measure as variability is high
+ * The bone labels pick which coordinate is used at a shared joint - particularly set to avoid
+ * bones toggled off causing a measure to become invalid (pelvis acetabulum vs thigh acetabulum).
+ */
+export const BODY_SCALE_MEASURES: { from: PointName; fromBone?: string; to: PointName; toBone?: string }[] = [
+  { from: "sacral_promontory", to: "head_proximal" },
+  { from: "sacral_promontory", to: "manubrium" },
+  { from: "left_acetabulum", fromBone: "Thigh (proximal)", to: "left_knee", toBone: "Thigh (distal)" },
+  { from: "right_acetabulum", fromBone: "Thigh (proximal)", to: "right_knee", toBone: "Thigh (distal)" },
+  { from: "left_ilium_superior", to: "right_ilium_superior" },
+];

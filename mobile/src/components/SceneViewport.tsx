@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, use, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -6,7 +6,7 @@ import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
 import { ALL_CFA_POINTS, pieceLandmarkId, PointName } from "../data/cfaSchema";
-import { REST_LANDMARKS, SKELETON_PIECES } from "../data/skeletonPieces";
+import { REST_LANDMARKS, SKELETON_PIECES, BODY_SCALE_MEASURES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
@@ -24,7 +24,17 @@ interface SceneViewportProps {
   showLandmarks: boolean;
   landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
+  /** Called after each redraw of the camera rotation as [x, y, z, w] */
+  onCameraRotate?: (quaternion: [number, number, number, number]) => void;
 }
+
+// Left/right landmark pairs used as a last-resort facing reference for the
+// ribcage and spine, tried in order (legs, then arms) when no pelvis or
+// shoulder landmark is available. See the twist handling in SceneViewport.
+const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [PointName, PointName])[])[] = [
+  [["left_knee", "right_knee"], ["left_ankle", "right_ankle"], ["left_toes", "right_toes"]],
+  [["left_elbow", "right_elbow"], ["left_wrist", "right_wrist"], ["left_fingertips", "right_fingertips"]],
+];
 
 const DEFAULT_CAMERA = new THREE.Vector3(2.6, 1.4, 3.4);
 const DEFAULT_TARGET = new THREE.Vector3(0, 0.85, 0);
@@ -181,6 +191,80 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
 }
 
 /**
+ * New type for storing the landmark pair names for the pelvis toggle -- see
+ * estimateSacralPromontory and SACRUM_ESTIMATE_PAIRS
+ */
+type PelvisLandmarkPair = [PointName, PointName];
+const ILIUM_SUPS: PelvisLandmarkPair = ["left_ilium_superior", "right_ilium_superior"];
+const ACETABS: PelvisLandmarkPair = ["left_acetabulum", "right_acetabulum"];
+const ISCHIS: PelvisLandmarkPair = ["left_ischium", "right_ischium"];
+
+/**
+ * Pairs for trying to generate the midline pelvis from the possible reference points 
+ * in order of best usage -- see estimateSacralPromontory.
+ */
+const SACRUM_ESTIMATE_PAIRS: [PelvisLandmarkPair, PelvisLandmarkPair][] = [
+  [ILIUM_SUPS, ACETABS],
+  [ILIUM_SUPS, ISCHIS],
+  [ACETABS, ISCHIS],
+];
+
+/**
+ * Function to ensure the rendering of all bones are still possible when the sacral
+ * is selected to be 'not present', current build requirements for the sacral are the 
+ * spine and manubrium (ribcage bone section) that get references off of the sacrals 
+ * location, so when it is missing they lose a reference and cannot be rendered, so 
+ * by using the same logic of estimating a position as was done for the head location 
+ * to render the spine properly, however we had to do that off of a different bone segment,
+ * here we can use the landmarks within the pelvis to create a reference position for the 
+ * sacral via a triangle system. We can then also get estimates from the mesh for where
+ * the sacral would be - use the mesh offset and pelvis rotation scaled by bodyScale, 
+ * thus provide a theorised location for the spine and manubrium referencing.
+ * 
+ * The best case is to have the main left-right reference off of the ilium superior pair
+ * as they are the same pair used in the orientationTriangle for the pelvis, but per 
+ * the nature of all of our rendering system we want as many fallbacks available to 
+ * allow missing bones as possible, setting the other pelvis pairs in decreasing width
+ * order as our fallbacks here.
+ */
+function estimateSacralPromontory(
+  positions: Map<string, Vec3>,
+  rest: Map<PointName, THREE.Vector3>,
+  bodyScale: number,
+): Vec3 | undefined {
+  const restSacrum = rest.get("sacral_promontory");
+  if (!restSacrum) return undefined;
+
+  for (const [[sideL, sideR], [refL, refR]] of SACRUM_ESTIMATE_PAIRS) {
+    const sideLeft = positions.get(sideL);
+    const sideRight = positions.get(sideR);
+    const refLeft = positions.get(refL);
+    const refRight = positions.get(refR);
+    const restSideLeft = rest.get(sideL);
+    const restSideRight = rest.get(sideR);
+    const restRefLeft = rest.get(refL);
+    const restRefRight = rest.get(refR);
+
+    if (!sideLeft || !sideRight || !refLeft || !refRight || !restSideLeft 
+      || !restSideRight || !restRefLeft || !restRefRight) continue;
+    const anchor = new THREE.Vector3(...refLeft).add(new THREE.Vector3(...refRight)).multiplyScalar(0.5);
+    const restAnchor = restRefLeft.clone().add(restRefRight).multiplyScalar(0.5);
+    // for input coordinates left and right swapped we can use the same mirroring 
+    // fix as the pelvis orientation -- see orientationTriangle
+    const rotation = computeTriangleQuaternion(
+      restSideLeft, restSideRight, restAnchor,
+      new THREE.Vector3(...sideRight), new THREE.Vector3(...sideLeft), anchor,
+    );
+    if (!rotation) continue;
+    const offset = restSacrum.clone().sub(restAnchor).multiplyScalar(bodyScale).applyQuaternion(rotation);
+    const p = anchor.add(offset);
+    return [p.x, p.y, p.z];
+  }
+return undefined; 
+}
+
+
+/**
  * Scaling function for the REST_LANDMARKS to bring it into the same space as the 
  * fully baked pieces geometry
  */
@@ -308,7 +392,7 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLand
 }
 
 export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>(function SceneViewport(
-  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange },
+  { modelUrl, modelName, showGrid, showLandmarks, landmarks, onLoadStateChange, onCameraRotate },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -324,6 +408,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
   const modelBoxRef = useRef<THREE.Box3 | null>(null);
   const overlayRef = useRef<THREE.Group | null>(null);
   const piecesRef = useRef<Map<string, { object: THREE.Object3D; rest: PieceRestInfo }>>(new Map());
+  const onCameraRotateRef = useRef(onCameraRotate);
+  useEffect(() => { onCameraRotateRef.current = onCameraRotate; }, [onCameraRotate]);
   const restLandmarksRef = useRef<Map<PointName, THREE.Vector3>>(new Map());
 
   const resetCamera = () => {
@@ -443,21 +529,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     floor.position.y = -0.09;
     scene.add(floor);
 
-    const pedestal = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.18, 1.28, 0.09, 72),
-      new THREE.MeshStandardMaterial({ color: "#2B333A", roughness: 0.72, metalness: 0.18 }),
-    );
-    pedestal.position.y = -0.045;
-    scene.add(pedestal);
-
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(1.17, 1.195, 96),
-      new THREE.MeshBasicMaterial({ color: "#C8A96B", transparent: true, opacity: 0.48, side: THREE.DoubleSide }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.006;
-    scene.add(ring);
-
     scene.add(new THREE.HemisphereLight("#F4F0E6", "#171B1F", 2.1));
     const keyLight = new THREE.DirectionalLight("#fff1d9", 3.1);
     keyLight.position.set(3.8, 6.5, 4.2);
@@ -497,7 +568,11 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // OrbitControls emits change events while damping settles.
       controls.update();
       renderer.render(scene, camera);
+      
+      const { x, y, z, w } = camera.quaternion;
+      onCameraRotateRef.current?.([x, y, z, w]);
     };
+
     invalidateRef.current = invalidate;
     controls.addEventListener("change", invalidate);
     document.addEventListener("visibilitychange", invalidate);
@@ -621,14 +696,45 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     if (piecesRef.current.size === 0) return;
     const positions = landmarksToDisplayPositions(landmarks);
 
-    // One overall body-scale factor, derived from the spine (the piece
-    // whose two landmarks -- sacral_promontory to head_proximal -- already
-    // track true stature correctly), so "anchor" pieces (skull, hands,
+    // One overall body-scale factor, derived from a complete set of pre-
+    // defined landmark distances, so "anchor" pieces (skull, hands,
     // feet, clavicles) can resize toward it too instead of staying frozen
     // at adult size regardless of what's entered. See the scaleFactor
     // comment in poseSkeletonPiece for why this is an approximation, not
-    // an exact fix.
+    // an exact fix and see BODY_SCALE_MEASURES for the set of landmarks in
+    // skeletonPieces.ts.
     let bodyScale: number | undefined;
+    
+    // Implementation of the ordered fallback list for setting the bodyScale
+    // -- see BODY_SCALE_MEASURES in skeltonPieces.ts
+    // Uses the mesh defined distances between select bones we determine the scale
+    // as the entered lengths from the coordinates divided by the meshes length for 
+    // those same distances (restVariable for the mesh points)
+    for (const { from, fromBone, to, toBone } of BODY_SCALE_MEASURES) {
+      const a = positions.get(pieceLandmarkId(from, fromBone));
+      const b = positions.get(pieceLandmarkId(to, toBone));
+      const restA = restLandmarksRef.current.get(from);
+      const restB = restLandmarksRef.current.get(to);
+      // Only calculate the distance for a complete set, working down the ordered list
+      if (!a || !b || !restA || !restB) continue;
+      const restLength = restA.distanceTo(restB);
+      // Standard min value set for distance to ensure points set in ref are functioning 
+      // as we anticipate and would like
+      if (restLength < 1e-6) continue;
+      bodyScale = new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)) / restLength;
+      // Value works so we break
+      break;
+    }
+
+    // Generating the estimate sacral location for cases where sacral is toggled
+    // `not present` but other pelvis landmarks are -- see estimateSacralPromontory.
+    // We dont add this to the actual landmarks map or pins but just use if for the
+    // posing map so the ribcage and spine can be rendered while the sacral is absent.
+    // Moved to run after the bodyScale to allow for its use in the estimates generation.
+    if (!positions.has("sacral_promontory")) {
+      const estimate = estimateSacralPromontory(positions, restLandmarksRef.current, bodyScale ?? 1);
+      if (estimate) positions.set("sacral_promontory", estimate);
+    }
     let spineTargetLength: number | undefined;
     const spineSpec = SKELETON_PIECES.find((spec) => spec.nodeName === "SK_Spine");
     const spinePiece = spineSpec ? piecesRef.current.get(spineSpec.nodeName) : undefined;
@@ -636,10 +742,6 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
     const spineToPos = spineSpec ? positions.get(spineSpec.to) : undefined;
     if (spineFromPos && spineToPos) {
       spineTargetLength = new THREE.Vector3(...spineFromPos).distanceTo(new THREE.Vector3(...spineToPos));
-    }
-    if (spinePiece && spineTargetLength !== undefined) {
-      const restLength = spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip);
-      if (restLength > 1e-6) bodyScale = spineTargetLength / restLength;
     }
 
     // Tracked so a `rigidWith` piece (see skeletonPieces.ts) can copy the
@@ -660,6 +762,24 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       const up = new THREE.Vector3(...spineToPos).sub(new THREE.Vector3(...spineFromPos));
       if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
     }
+    // Skull fallback: without the sacral promontory there is no spine, so no
+    // "up" direction, and the skull was left in its native orientation (it
+    // ended up looking away from the body). Fall back to the nearest other
+    // body landmark below the head: the manubrium, else the centre of
+    // whichever pelvis landmarks are present.
+    const headPosForUp = positions.get("head_proximal");
+    if (!bodyUpDirection && headPosForUp) {
+      const lowerPoints = positions.get("manubrium")
+        ? [positions.get("manubrium") as Vec3]
+        : (["left_acetabulum", "right_acetabulum", "left_ilium_superior", "right_ilium_superior", "left_ischium", "right_ischium"] as const)
+            .map((id) => positions.get(id)).filter((v): v is Vec3 => v !== undefined);
+      if (lowerPoints.length > 0) {
+        const base = centroid(lowerPoints);
+        const up = new THREE.Vector3(...headPosForUp).sub(new THREE.Vector3(...base));
+        if (up.lengthSq() > 1e-9) bodyUpDirection = up.normalize();
+      }
+    }
+    const skullOffsetLength = spineTargetLength ?? (spinePiece ? spinePiece.rest.fromTip.distanceTo(spinePiece.rest.toTip) : undefined);
 
     // Where `point` would be if it moved rigidly with the already-posed
     // `carrierName` piece -- see `toCarrier` in skeletonPieces.ts.
@@ -673,7 +793,7 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       return [p.x, p.y, p.z];
     };
 
-    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier }) => {
+    SKELETON_PIECES.forEach(({ nodeName, from, fromBone, to, toBone, stretch, twist, twistForward, twistFallback, rigidWith, offsetFromRatio, orientationTriangle, requiresAnyOf, scaleBounds, toCarrier, followsTorso }) => {
       const piece = piecesRef.current.get(nodeName);
       if (!piece) return;
       // A piece naming a specific bone (fromBone/toBone) reads that bone's
@@ -707,7 +827,102 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         return samples.every((pos): pos is Vec3 => pos !== undefined) ? centroid(samples) : undefined;
       };
       const twistLandmarks = twist ? (Array.isArray(twist) ? twist : [twist]) : [];
-      const twistPos = completeCentroid(twistLandmarks) ?? completeCentroid(twistFallback);
+      let twistPos = completeCentroid(twistLandmarks) ?? completeCentroid(twistFallback);
+      // Left/right-based facing for the ribcage and spine (pieces whose twist
+      // is a left/right pair plus a fallback pair). The centroid of a pair
+      // only gives the right facing if that pair happens to sit in front of
+      // the spine axis, which is not reliable (in the default skeleton the
+      // shoulders sit slightly BEHIND it, so dropping one pelvis half made the
+      // ribcage flip 180 degrees). The left-to-right direction is robust:
+      // take it from a complete pair, or failing that from any single left or
+      // right landmark (spine axis -> that point, known side), and derive the
+      // front as spine direction x left. The displayed axes are mirrored (see
+      // the pelvis MIRROR FIX), which is why front = spine direction x left
+      // in this scene.
+      const isSidePair = (points: readonly PointName[] | undefined) =>
+        !!points && points.length === 2 && points.every((id) => /^(left|right)_/.test(id));
+      if (twistFallback && isSidePair(twistLandmarks)) {
+        const axisDir = new THREE.Vector3(...toPos).sub(new THREE.Vector3(...fromPos));
+        if (axisDir.lengthSq() > 1e-9) {
+          axisDir.normalize();
+          const perpendicular = (v: THREE.Vector3) => {
+            v.addScaledVector(axisDir, -v.dot(axisDir));
+            return v.lengthSq() > 1e-8 ? v.normalize() : undefined;
+          };
+          let left: THREE.Vector3 | undefined;
+          for (const pair of [twistLandmarks, twistFallback] as readonly (readonly PointName[])[]) {
+            const leftId = pair.find((id) => id.startsWith("left_"));
+            const rightId = pair.find((id) => id.startsWith("right_"));
+            const leftPos = leftId ? positions.get(leftId) : undefined;
+            const rightPos = rightId ? positions.get(rightId) : undefined;
+            if (leftPos && rightPos) {
+              left = perpendicular(new THREE.Vector3(...leftPos).sub(new THREE.Vector3(...rightPos)));
+              if (left) break;
+            }
+          }
+          if (!left) {
+            const singles = [...twistLandmarks, ...twistFallback, "left_acetabulum", "right_acetabulum"] as PointName[];
+            for (const id of singles) {
+              const pos = positions.get(id);
+              if (!pos || !/^(left|right)_/.test(id)) continue;
+              const lateral = perpendicular(new THREE.Vector3(...pos).sub(new THREE.Vector3(...fromPos)));
+              if (!lateral) continue;
+              left = id.startsWith("left_") ? lateral : lateral.negate();
+              break;
+            }
+          }
+          // Last resorts, only reached when the pelvis and shoulder points
+          // gave nothing (e.g. both arms and both pelvis halves marked not
+          // present, which used to leave the ribcage facing backwards).
+          if (!left) {
+            // 1) Complete left/right pairs elsewhere on the body: legs first
+            // (more stable than arms, which can swing about), then arms.
+            // Every complete pair in the first group that has any is
+            // averaged for a steadier left direction.
+            for (const group of EXTRA_SIDE_PAIRS) {
+              const sum = new THREE.Vector3();
+              for (const [leftId, rightId] of group) {
+                const leftPos = positions.get(leftId);
+                const rightPos = positions.get(rightId);
+                if (!leftPos || !rightPos) continue;
+                const dir = perpendicular(new THREE.Vector3(...leftPos).sub(new THREE.Vector3(...rightPos)));
+                if (dir) sum.add(dir);
+              }
+              if (sum.lengthSq() > 1e-8) {
+                left = sum.normalize();
+                break;
+              }
+            }
+          }
+          if (left) {
+            const front = new THREE.Vector3().crossVectors(axisDir, left).normalize();
+            const t = new THREE.Vector3(...fromPos).addScaledVector(front, 0.1);
+            twistPos = [t.x, t.y, t.z];
+          } else {
+            // 2) No left/right points at all: the chin sits in front of the
+            // spine line, so face toward it. This is a direct front
+            // direction (no cross product), so the mirrored display axes do
+            // not matter here.
+            const chinPos = positions.get("chin");
+            if (chinPos) {
+              // Measure "in front of" against the whole spine line (sacrum to
+              // head) rather than this piece's own axis: the ribcage axis
+              // (sacrum to manubrium) leans forward, which can put the chin
+              // behind it.
+              const headPos = positions.get("head_proximal");
+              const spineAxis = headPos ? new THREE.Vector3(...headPos).sub(new THREE.Vector3(...fromPos)) : axisDir.clone();
+              spineAxis.normalize();
+              const chinOffset = new THREE.Vector3(...chinPos).sub(new THREE.Vector3(...fromPos));
+              chinOffset.addScaledVector(spineAxis, -chinOffset.dot(spineAxis));
+              const front = chinOffset.lengthSq() > 1e-8 ? chinOffset.normalize() : undefined;
+              if (front) {
+                const t = new THREE.Vector3(...fromPos).addScaledVector(front, 0.1);
+                twistPos = [t.x, t.y, t.z];
+              }
+            }
+          }
+        }
+      }
 
       const toVector = new THREE.Vector3(toPos[0], toPos[1], toPos[2]);
       // A piece with no real second landmark of its own (currently just
@@ -715,8 +930,8 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // synthesised here instead of reusing `from`'s (identical) position
       // -- see the `offsetFromRatio` comment in skeletonPieces.ts for why.
       const fromVector =
-        offsetFromRatio !== undefined && bodyUpDirection && spineTargetLength !== undefined
-          ? toVector.clone().addScaledVector(bodyUpDirection, -offsetFromRatio * spineTargetLength)
+        offsetFromRatio !== undefined && bodyUpDirection && skullOffsetLength !== undefined
+          ? toVector.clone().addScaledVector(bodyUpDirection, -offsetFromRatio * skullOffsetLength)
           : new THREE.Vector3(fromPos[0], fromPos[1], fromPos[2]);
 
       // Independently orients a single-landmark piece (currently just the
@@ -762,15 +977,44 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
       // twist correction entirely and use only the aim rotation.
       const isClaviclePiece = nodeName === "SK_RClavicle" || nodeName === "SK_LClavicle";
 
+      // followsTorso: pose this piece as if the arm were moved relative to the
+      // body, then carry that with the ribcage's own rotation. Concretely: aim
+      // in the torso's frame (the aim that would be used if the body were
+      // standing in its rest pose), then turn the result by the ribcage
+      // rotation. A standing skeleton is therefore unchanged, and a lying one
+      // keeps the arm's natural roll relative to the body (palms up) instead
+      // of whatever the plain aim leaves. The roll is applied as a twist
+      // reference, the same way the other twist targets are. Left alone if
+      // the ribcage was not posed (see followsTorso in skeletonPieces.ts).
+      let torsoTwistTarget: THREE.Vector3 | undefined;
+      let torsoTwistForward: THREE.Vector3 | undefined;
+      const torsoTransform = followsTorso ? posedTransforms.get("SK_Side") : undefined;
+      if (torsoTransform) {
+        const torsoQ = torsoTransform.quaternion;
+        const aimDir = toVector.clone().sub(fromVector);
+        if (aimDir.lengthSq() > 1e-12) {
+          aimDir.normalize();
+          const restAxis = piece.rest.toTip.clone().sub(piece.rest.fromTip).normalize();
+          const candidates = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)];
+          candidates.sort((u, v) => Math.abs(u.dot(restAxis)) - Math.abs(v.dot(restAxis)));
+          const side = candidates[0];
+          const aimInTorso = aimDir.clone().applyQuaternion(torsoQ.clone().invert());
+          const localAim = new THREE.Quaternion().setFromUnitVectors(restAxis, aimInTorso);
+          const wantedSide = side.clone().applyQuaternion(localAim).applyQuaternion(torsoQ);
+          torsoTwistForward = side;
+          torsoTwistTarget = fromVector.clone().addScaledVector(wantedSide, 0.1);
+        }
+      }
+
       poseSkeletonPiece(
         piece.object,
         piece.rest,
         fromVector,
         toVector,
         stretch,
-        isClaviclePiece ? undefined : (twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined),
+        torsoTwistTarget ?? (isClaviclePiece ? undefined : (twistPos ? new THREE.Vector3(twistPos[0], twistPos[1], twistPos[2]) : undefined)),
         bodyScale,
-        isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined),
+        torsoTwistForward ?? (isClaviclePiece ? undefined : (twistForward ? new THREE.Vector3(twistForward[0], twistForward[1], twistForward[2]) : undefined)),
         rigidWith ? posedTransforms.get(rigidWith) : undefined,
         orientationOverride,
         scaleBounds,

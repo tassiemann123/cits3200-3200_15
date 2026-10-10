@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bone,
   ClipboardList,
   Database,
   Focus,
@@ -30,10 +29,12 @@ import {
 } from "./lib/backendApi";
 import { toBackendLandmarks } from "./lib/backendCoordinates";
 import { parseCoordinateCsv, serialiseCoordinateCsv } from "./lib/coordinateCsv";
+import { uniqueRecordName } from "./lib/uniqueRecordName";
 import { exportCsv } from "./lib/csvExport";
 import { downloadFile, safeFilename } from "./lib/projectStorage";
 import type { CoordinateDraft, ModelLoadState, SkeletonRecord, ViewerModel, WorkspaceGraveyard } from "./types";
 import { useDeviceHeading } from "./lib/useDeviceHeading";
+import { OrientationCube, type OrientationCubeHandle } from "./components/OrientationCube";
 
 const SceneViewport = lazy(async () => {
   const module = await import("./components/SceneViewport");
@@ -216,6 +217,7 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendConnectionState>("checking");
   const viewportRef = useRef<SceneViewportHandle>(null);
+  const cubeRef = useRef<OrientationCubeHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importedObjectUrlRef = useRef<string | null>(null);
 
@@ -270,9 +272,9 @@ useEffect(() => {
     };
   }, []);
 
-  const notify = (message: string) => {
+  const notify = (message: string, duration = message.includes("\n") ? 12000 : 2800) => {
     setToast(message);
-    window.setTimeout(() => setToast((current) => current === message ? null : current), 2800);
+    window.setTimeout(() => setToast((current) => current === message ? null : current), duration);
   };
 
   const patchPreferences = (patch: Partial<ViewerPreferences>) => {
@@ -579,7 +581,7 @@ useEffect(() => {
       const result = parseCoordinateCsv(await file.text());
 
       if (result.records.length === 0) {
-        notify(result.warnings[0] ?? "The CSV contains no usable coordinates");
+        notify(result.warnings[0] ?? "The CSV contains no usable coordinates", 8000);
         return;
       }
 
@@ -601,9 +603,12 @@ useEffect(() => {
           name: importedGraveyardName || "Untitled graveyard",
         };
 
+        const usedNames = new Set(current.records
+          .filter((record) => record.graveyardId === graveyard.id)
+          .map((record) => record.name.trim().toLowerCase()));
         const importedRecords: SkeletonRecord[] = result.records.map((record) => ({
           id: `skeleton-record-${crypto.randomUUID()}`,
-          name: record.name,
+          name: uniqueRecordName(record.name, usedNames),
           coordinates: record.coordinates,
           extraBoneCoordinates: record.extraBoneCoordinates,
           excludedBones: record.excludedBones,
@@ -701,13 +706,17 @@ useEffect(() => {
               showLandmarks={showLandmarks}
               landmarks={backendCoordinates}
               onLoadStateChange={setModelLoadState}
+              onCameraRotate={(q) => cubeRef.current?.setCameraQuaternion(q)}
             />
           </Suspense>
           <div className="viewport-topbar">
-            <div className="active-model-label">
-              <Bone size={16} />
-              <span><strong>{model.name}</strong><small>{model.origin === "bundled" ? "BUNDLED REFERENCE" : "IMPORTED REFERENCE"}</small></span>
-            </div>
+            <button type="button" className="active-record-badge" onClick={() => showPanel("coordinates")}>
+              <ClipboardList size={15} />
+              <span>
+                <strong>{activeRecord.name.trim() || "Untitled skeleton"}</strong>
+                <small>{backendCoordinates.length} BACKEND-READY POINTS</small>
+              </span>
+            </button>
             <div className="viewport-tools">
               <button type="button" className={showGrid ? "active" : ""} onClick={() => setShowGrid((value) => !value)} title="Coordinate grid"><Grid3X3 size={18} /></button>
               <button type="button" className={showLandmarks ? "active" : ""} onClick={() => setShowLandmarks((value) => !value)} title="Landmark markers"><MapPin size={18} /></button>
@@ -716,22 +725,13 @@ useEffect(() => {
               <button type="button" onClick={() => void loadLyingDownDefault()} title="Load lying-down default skeleton"><Skull size={18} /></button>
             </div>
           </div>
-          <button type="button" className="active-record-badge" onClick={() => showPanel("coordinates")}>
-            <ClipboardList size={15} />
-            <span>
-              <strong>{activeRecord.name.trim() || "Untitled skeleton"}</strong>
-              <small>{backendCoordinates.length} BACKEND-READY POINTS</small>
-            </span>
-          </button>
           <CompassIndicator />
           <div className="viewport-zoom-tools" aria-label="Model zoom controls">
             <button type="button" onClick={() => viewportRef.current?.zoomBy(0.82)} title="Zoom in"><ZoomIn size={18} /></button>
             <button type="button" onClick={() => viewportRef.current?.zoomBy(1.22)} title="Zoom out"><ZoomOut size={18} /></button>
           </div>
           <div className="collection-badge"><span>REFERENCE MODEL</span><strong>{activeRecord.name} · {backendCoordinates.length} backend-ready points</strong></div>
-          <div className="orientation-cube" aria-hidden="true">
-            <span className="axis-y">Y↑</span><span className="axis-x">X→</span><span className="axis-z">Z↘</span>
-          </div>
+          <OrientationCube ref={cubeRef} />
           <div className="viewport-caption">
             <span className="pulse-dot" />
             <div><strong>{model.name}</strong><small>{model.subtitle}</small></div>

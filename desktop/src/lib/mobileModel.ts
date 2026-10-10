@@ -1,9 +1,37 @@
 // Geometry preparation reused from the mobile viewer. Keep rest-tip orientation consistent.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { poseSkeletonPiece, type PieceRestInfo } from './skeletonPose';
+import { computeTriangleQuaternion, poseSkeletonPiece, type PieceRestInfo } from './skeletonPose';
 import { getRenderableBones, type Individual } from '../model';
+import { CFA_GROUPS } from '../data/cfaSchema';
 
+// Keep these values synchronized with mobile/src/data/skeletonPieces.ts and
+// mobile/src/components/SceneViewport.tsx 
+const HEAD_OFFSET_RATIO = 0.276;
+const RIBCAGE_SCALE_BOUNDS: [number, number] = [0.85, 1.15];
+const PELVIS_REST_TRIANGLE = {
+  left: [0.126, 0.036, 0.047],
+  right: [-0.126, 0.036, 0.047],
+  anchor: [0, 0, 0],
+} as const;
+const REST_LANDMARKS: Record<string, readonly [number, number, number]> = {
+  head_proximal: [0, 3.32, 0],
+  chin: [0, 2.92, 0.115],
+  manubrium: [0, 2.74, 0.0279],
+  sacral_promontory: [0, 1.87, -0.109],
+  left_ilium_superior: [0.242, 1.96, -0.0394],
+  right_ilium_superior: [-0.242, 1.96, -0.0394],
+  left_acetabulum: [0.144, 1.71, -0.0519],
+  right_acetabulum: [-0.144, 1.71, -0.0519],
+  left_knee: [0.143, 0.916, -0.0266],
+  right_knee: [-0.143, 0.916, -0.0266],
+  left_ischium: [0.0872, 1.57, -0.0684],
+  right_ischium: [-0.0872, 1.57, -0.0684],
+};
+const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [string, string])[])[] = [
+  [['left_knee', 'right_knee'], ['left_ankle', 'right_ankle'], ['left_toes', 'right_toes']],
+  [['left_elbow', 'right_elbow'], ['left_wrist', 'right_wrist'], ['left_fingertips', 'right_fingertips']],
+];
 const isMesh = (object: THREE.Object3D): object is THREE.Mesh => Boolean((object as THREE.Mesh).isMesh);
 
 function bakePieceWorldTransform(pieceNode: THREE.Object3D): THREE.Group {
@@ -83,24 +111,12 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
   };
 }
 
-/**
- * Turns each piece's raw, direction-agnostic tip pair into a real
- * PieceRestInfo whose `fromTip`/`toTip` genuinely match its `from`/`to`
- * landmark (see the PieceRestInfo comment in lib/skeletonPose.ts for why
- * this can't just be guessed per-pose).
- *
- * This is resolved once, from the rest-pose model alone, by walking the
- * body outward from the spine: each piece's own two tips are compared
- * against the *already-resolved* neighbour it physically joins in the
- * rest pose (found via the shared landmark name in SKELETON_PIECES, e.g.
- * the forearm's "elbow" end and the upper arm's "elbow" end), and
- * whichever tip sits closer to that neighbour is this piece's `fromTip`.
- * A few pieces have no such name-sharing predecessor (the legs' hip end,
- * and the skull) -- those resolve against the nearest fixed rest-pose
- * landmark instead (the pelvis piece's own top, and the spine's top).
- */
-function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<string, PieceRestInfo> {
+function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, modelScale: number): Map<string, PieceRestInfo> {
   const resolved = new Map<string, PieceRestInfo>();
+  const restPoint = (name: string) => {
+    const position = REST_LANDMARKS[name];
+    return position ? new THREE.Vector3(...position).multiplyScalar(modelScale) : undefined;
+  };
 
   const withOrder = (raw: RawPieceGeometry, fromTip: THREE.Vector3, toTip: THREE.Vector3): PieceRestInfo => ({
     axisIndex: raw.axisIndex,
@@ -116,14 +132,11 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   if (!spineRaw) return resolved;
   const spineLower = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMin : spineRaw.tipMax;
   const spineUpper = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMax : spineRaw.tipMin;
-  resolved.set("SK_Spine", withOrder(spineRaw, spineLower, spineUpper));
-
-  const sideRaw = rawByName.get("SK_Side");
-  if (sideRaw) {
-    const sideLower = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMin : sideRaw.tipMax;
-    const sideUpper = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
-    resolved.set("SK_Side", withOrder(sideRaw, sideLower, sideUpper));
-  }
+  resolved.set("SK_Spine", withOrder(
+    spineRaw,
+    restPoint("sacral_promontory") ?? spineLower,
+    restPoint("head_proximal") ?? spineUpper,
+  ));
 
   // The pelvis is a single-landmark piece -- its only meaningful reference
   // point is its own top (see the single-target branch in
@@ -131,23 +144,33 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   // upper legs resolve against below.
   const coccyxRaw = rawByName.get("SK_Coccyx");
   if (coccyxRaw) {
-    resolved.set("SK_Coccyx", withOrder(coccyxRaw, coccyxRaw.topTip, coccyxRaw.topTip));
+    const pelvisAnchor = restPoint("sacral_promontory") ?? coccyxRaw.topTip;
+    resolved.set("SK_Coccyx", { ...withOrder(coccyxRaw, pelvisAnchor, pelvisAnchor), topTip: pelvisAnchor });
   }
 
-  function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined): void {
+  const sideRaw = rawByName.get("SK_Side");
+  const restSacrum = restPoint("sacral_promontory");
+  if (sideRaw && restSacrum) {
+    const meshTop = sideRaw.tipMin.y < sideRaw.tipMax.y ? sideRaw.tipMax : sideRaw.tipMin;
+    resolved.set("SK_Side", withOrder(sideRaw, restSacrum, restPoint("manubrium") ?? meshTop));
+  }
+
+  function resolveAgainst(nodeName: string, anchor: THREE.Vector3 | undefined, invert = false): void {
     const raw = rawByName.get(nodeName);
     if (!raw || !anchor) return;
     const dMin = raw.tipMin.distanceTo(anchor);
     const dMax = raw.tipMax.distanceTo(anchor);
-    const fromTip = dMin < dMax ? raw.tipMin : raw.tipMax;
-    const toTip = dMin < dMax ? raw.tipMax : raw.tipMin;
+    const nearTip = dMin < dMax ? raw.tipMin : raw.tipMax;
+    const farTip = dMin < dMax ? raw.tipMax : raw.tipMin;
+    const fromTip = invert ? farTip : nearTip;
+    const toTip = invert ? nearTip : farTip;
     resolved.set(nodeName, withOrder(raw, fromTip, toTip));
   }
 
-  resolveAgainst("SK_RClavicle", resolved.get("SK_Spine")?.toTip);
-  resolveAgainst("SK_LClavicle", resolved.get("SK_Spine")?.toTip);
-  resolveAgainst("SK_RArmUp", resolved.get("SK_RClavicle")?.toTip);
-  resolveAgainst("SK_LArmUp", resolved.get("SK_LClavicle")?.toTip);
+  resolveAgainst("SK_RClavicle", restPoint("manubrium"), true);
+  resolveAgainst("SK_LClavicle", restPoint("manubrium"), true);
+  resolveAgainst("SK_RArmUp", resolved.get("SK_RClavicle")?.fromTip);
+  resolveAgainst("SK_LArmUp", resolved.get("SK_LClavicle")?.fromTip);
   resolveAgainst("SK_RArmDown", resolved.get("SK_RArmUp")?.toTip);
   resolveAgainst("SK_LArmDown", resolved.get("SK_LArmUp")?.toTip);
   resolveAgainst("SK_HandR", resolved.get("SK_RArmDown")?.toTip);
@@ -158,7 +181,7 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>): Map<str
   resolveAgainst("SK_LLegDown", resolved.get("SK_LLegUp")?.toTip);
   resolveAgainst("SK_RFoot", resolved.get("SK_RLegDown")?.toTip);
   resolveAgainst("SK_LFoot", resolved.get("SK_LLegDown")?.toTip);
-  resolveAgainst("SK_Head", resolved.get("SK_Spine")?.toTip);
+  resolveAgainst("SK_Head", restPoint("chin") ?? resolved.get("SK_Spine")?.toTip);
 
   return resolved;
 }
@@ -209,7 +232,7 @@ export async function loadMobileModel(): Promise<ModelPieces> {
     object.traverse(child => { if (isMesh(child)) child.geometry.scale(scale, scale, scale); });
     raw.set(name, computeRawPieceGeometry(object));
   });
-  const rests = resolvePieceRestInfo(raw);
+  const rests = resolvePieceRestInfo(raw, scale);
   const result: ModelPieces = new Map();
   baked.forEach((object, name) => { const rest = rests.get(name); if (rest) result.set(name, { object, rest }); });
   if (result.size !== NAMES.length) { disposeModel(result); throw new Error('The mobile reference model is missing required bone pieces.'); }
@@ -224,77 +247,126 @@ const MODEL_TO_SCENE_ROTATION = Math.PI / 2;
 export const surveyPointToScene = (p: readonly number[]) =>
   toModel(p).applyAxisAngle(new THREE.Vector3(1, 0, 0), MODEL_TO_SCENE_ROTATION);
 
-// Same value as `offsetFromRatio` for SK_Head in the mobile skeletonPieces.ts.
-const HEAD_OFFSET_RATIO = 0.143;
-
 // --- Pelvis orientation from the two ASIS points + sacral promontory (same idea as mobile's orientationTriangle) ---
 // Rest triangle, authored as [x = left, front, up] in the pelvis mesh's own frame.
 // Copy these from `orientationTriangle` in the mobile skeletonPieces.ts if they change there.
-const PELVIS_REST_TRIANGLE = {
-  left: [0.19, 0.03, 0.041],
-  right: [-0.19, 0.03, 0.041],
-  anchor: [0, 0, 0],
-} as const;
 const pelvisRestToModel = (r: readonly number[]) => new THREE.Vector3(r[0], r[2], r[1]);
-
-/** Orthonormal frame from three points: x = right->left, y/z from the anchor's offset off that line. */
-function frameFromTriangle(left: THREE.Vector3, right: THREE.Vector3, anchor: THREE.Vector3): THREE.Matrix4 | undefined {
-  const xAxis = new THREE.Vector3().subVectors(left, right);
-  if (xAxis.lengthSq() < 1e-10) return undefined;
-  xAxis.normalize();
-  const midpoint = new THREE.Vector3().addVectors(left, right).multiplyScalar(0.5);
-  const towardAnchor = new THREE.Vector3().subVectors(anchor, midpoint);
-  const inPlane = towardAnchor.addScaledVector(xAxis, -towardAnchor.dot(xAxis));
-  if (inPlane.lengthSq() < 1e-10) return undefined;
-  inPlane.normalize();
-  const zAxis = new THREE.Vector3().crossVectors(xAxis, inPlane).normalize();
-  const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
-  return new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
-}
-
-/** Rotation taking the rest triangle's frame to the entered triangle's frame. */
-function computeTriangleQuaternion(
-  restLeft: THREE.Vector3, restRight: THREE.Vector3, restAnchor: THREE.Vector3,
-  curLeft: THREE.Vector3, curRight: THREE.Vector3, curAnchor: THREE.Vector3,
-): THREE.Quaternion | undefined {
-  const restFrame = frameFromTriangle(restLeft, restRight, restAnchor);
-  const curFrame = frameFromTriangle(curLeft, curRight, curAnchor);
-  if (!restFrame || !curFrame) return undefined;
-  const restQuat = new THREE.Quaternion().setFromRotationMatrix(restFrame);
-  const curQuat = new THREE.Quaternion().setFromRotationMatrix(curFrame);
-  return curQuat.multiply(restQuat.invert());
-}
 
 /** Pose the actual mobile meshes from each contributing bone's own coordinates. */
 export function createAnatomicalSkeleton(individual: Individual, templates: ModelPieces, selectedJointId?: string): THREE.Group {
   const root = new THREE.Group();
   root.rotation.x = MODEL_TO_SCENE_ROTATION; // Mobile meshes are Y-up; the desktop scene is Z-up.
   const bones = new Map(getRenderableBones(individual).map(b => [b.id, b]));
+  const absentGroups = individual.absentGroups ?? [];
 
   // Landmarks (head, chin, sacral promontory, shoulders...) are read from the
   // joint's first endpoint, regardless of bone inventory.
   const landmark = (jointId: string) => {
-    const value = individual.joints.find(j => j.id === jointId)?.endpoints[0]?.coordinate;
-    return complete(value) ? toModel(value) : undefined;
+    const joint = individual.joints.find(j => j.id === jointId);
+    const pointGroup = CFA_GROUPS.find(group => (group.points as readonly string[]).includes(jointId))?.id;
+    for (const [index, endpoint] of joint?.endpoints.entries() ?? []) {
+      const groupId = jointId.endsWith('_acetabulum') && index === 1
+        ? `${jointId.startsWith('left_') ? 'left' : 'right'}_leg`
+        : pointGroup;
+      if ((groupId === 'sacrum' && absentGroups.includes(groupId))
+        || (endpoint.boneId && !bones.has(endpoint.boneId))) continue;
+      if (complete(endpoint.coordinate)) return toModel(endpoint.coordinate);
+    }
+    return undefined;
   };
 
   // Head, spine and ribcage used to hang off the old "spine" bone.
   // The sternum bone ("Head & torso" group) now controls them.
-  const torsoPresent = individual.bones.find(b => b.id === 'sternum')?.status === 'present';
-
-  const selectedBones = new Set(individual.joints.find(j => j.id === selectedJointId)?.endpoints.map(e => e.boneId));
+  const sternumPresent = individual.bones.find(b => b.id === 'sternum')?.status === 'present';
+  const headPresent = sternumPresent && !absentGroups.includes('head');
+  const torsoPresent = sternumPresent && !absentGroups.includes('spine_ribcage');
   const spineRest = templates.get('SK_Spine')!.rest;
-
-  // bodyScale is this skeleton's size relative to the template. It comes from the
-  // raw recorded head and sacral coordinates, so it does not change when the
-  // torso is hidden.
   const headRaw = landmark('head_proximal');
   const sacrumRaw = landmark('sacral_promontory');
-  const bodyScale = headRaw && sacrumRaw
-    ? Math.min(2, Math.max(.25, headRaw.distanceTo(sacrumRaw) / spineRest.fromTip.distanceTo(spineRest.toTip)))
+  const recordedLandmark = (jointId: string) => {
+    const coordinate = individual.joints.find(j => j.id === jointId)?.endpoints[0]?.coordinate;
+    return complete(coordinate) ? toModel(coordinate) : undefined;
+  };
+  const headForScale = recordedLandmark('head_proximal');
+  const sacrumForScale = recordedLandmark('sacral_promontory');
+  const manubriumForScale = recordedLandmark('manubrium');
+  const manubrium = landmark('manubrium');
+  const modelScale = spineRest.fromTip.distanceTo(spineRest.toTip)
+    / new THREE.Vector3(...REST_LANDMARKS.sacral_promontory).distanceTo(new THREE.Vector3(...REST_LANDMARKS.head_proximal));
+  const restLandmark = (id: string) => {
+    const value = REST_LANDMARKS[id];
+    return value ? new THREE.Vector3(...value).multiplyScalar(modelScale) : undefined;
+  };
+  const restLength = (from: string, to: string) => {
+    const a = restLandmark(from);
+    const b = restLandmark(to);
+    return a && b ? a.distanceTo(b) : undefined;
+  };
+  const scaleMeasures: [number | undefined, number | undefined][] = [
+    [headForScale && sacrumForScale ? headForScale.distanceTo(sacrumForScale) : undefined, spineRest.fromTip.distanceTo(spineRest.toTip)],
+    [manubriumForScale && sacrumForScale ? manubriumForScale.distanceTo(sacrumForScale) : undefined, restLength('sacral_promontory', 'manubrium')],
+  ];
+  for (const side of ['left', 'right']) {
+    const femur = bones.get(`${side}_femur`);
+    scaleMeasures.push([
+      femur ? toModel(femur.from).distanceTo(toModel(femur.to)) : undefined,
+      restLength(`${side}_acetabulum`, `${side}_knee`),
+    ]);
+  }
+  const leftIlium = landmark('left_ilium_superior');
+  const rightIlium = landmark('right_ilium_superior');
+  scaleMeasures.push([
+    leftIlium && rightIlium ? leftIlium.distanceTo(rightIlium) : undefined,
+    restLength('left_ilium_superior', 'right_ilium_superior'),
+  ]);
+  const selectedScaleMeasure = scaleMeasures.find(([actual, expected]) => actual !== undefined && expected !== undefined && expected > 1e-6);
+  const resolvedBodyScale = selectedScaleMeasure
+    ? selectedScaleMeasure[0]! / selectedScaleMeasure[1]!
     : 1;
 
-  const add = (name: string, owner: string, from: THREE.Vector3 | undefined, to: THREE.Vector3 | undefined, stretch: 'rod' | 'uniform' | 'anchor' = 'rod', twist?: THREE.Vector3) => {
+  const estimateSacrum = (): THREE.Vector3 | undefined => {
+    const restSacrum = restLandmark('sacral_promontory');
+    if (!restSacrum) return undefined;
+    const pairs = [
+      [['left_ilium_superior', 'right_ilium_superior'], ['left_acetabulum', 'right_acetabulum']],
+      [['left_ilium_superior', 'right_ilium_superior'], ['left_ischium', 'right_ischium']],
+      [['left_acetabulum', 'right_acetabulum'], ['left_ischium', 'right_ischium']],
+    ] as const;
+    for (const [[sideLeftId, sideRightId], [referenceLeftId, referenceRightId]] of pairs) {
+      const sideLeft = landmark(sideLeftId);
+      const sideRight = landmark(sideRightId);
+      const referenceLeft = landmark(referenceLeftId);
+      const referenceRight = landmark(referenceRightId);
+      const restSideLeft = restLandmark(sideLeftId);
+      const restSideRight = restLandmark(sideRightId);
+      const restReferenceLeft = restLandmark(referenceLeftId);
+      const restReferenceRight = restLandmark(referenceRightId);
+      if (!sideLeft || !sideRight || !referenceLeft || !referenceRight
+        || !restSideLeft || !restSideRight || !restReferenceLeft || !restReferenceRight) continue;
+      const anchor = referenceLeft.clone().add(referenceRight).multiplyScalar(0.5);
+      const restAnchor = restReferenceLeft.clone().add(restReferenceRight).multiplyScalar(0.5);
+      const rotation = computeTriangleQuaternion(
+        restSideLeft, restSideRight, restAnchor,
+        sideRight, sideLeft, anchor,
+      );
+      if (!rotation) continue;
+      return anchor.add(restSacrum.sub(restAnchor).multiplyScalar(resolvedBodyScale).applyQuaternion(rotation));
+    }
+    return undefined;
+  };
+  const sacrum = sacrumRaw ?? estimateSacrum();
+
+  const add = (
+    name: string,
+    from: THREE.Vector3 | undefined,
+    to: THREE.Vector3 | undefined,
+    stretch: 'rod' | 'uniform' | 'anchor' = 'rod',
+    twist?: THREE.Vector3,
+    twistForward?: THREE.Vector3,
+    orientationOverride?: THREE.Quaternion,
+    scaleBounds?: [number, number],
+    visible = true,
+  ) => {
     const template = templates.get(name);
     if (!template || !from || !to) return;
     const piece = template.object.clone(true);
@@ -312,87 +384,204 @@ export function createAnatomicalSkeleton(individual: Individual, templates: Mode
       });
       child.material = Array.isArray(child.material) ? materials : materials[0];
     });
-    poseSkeletonPiece(piece, template.rest, from, to, stretch, twist, bodyScale);
-    if (from.distanceToSquared(to) < 1e-8) {
-      piece.scale.setScalar(bodyScale);
-      piece.position.copy(from).sub(template.rest.topTip.clone().multiplyScalar(bodyScale));
-    }
+    poseSkeletonPiece(
+      piece, template.rest, from, to, stretch, twist, resolvedBodyScale,
+      twistForward, undefined, orientationOverride, scaleBounds,
+    );
+    piece.visible = visible;
     root.add(piece);
   };
 
-  const head = torsoPresent ? headRaw : undefined;
-  const sacrum = sacrumRaw;
+  const head = headRaw;
 
-  // Shoulder midpoint: twist target for both the spine and the ribcage (as in mobile).
-  const leftShoulder = landmark('left_shoulder');
-  const rightShoulder = landmark('right_shoulder');
-  const shoulderMid = leftShoulder && rightShoulder
-    ? leftShoulder.clone().lerp(rightShoulder, .5)
-    : leftShoulder ?? rightShoulder;
+  // The mobile view derives torso facing from left/right axes, not pair
+  // midpoints, which can sit behind the torso and make it face backwards.
+  const torsoTwistTarget = (from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 | undefined => {
+    const axis = to.clone().sub(from);
+    if (axis.lengthSq() < 1e-9) return undefined;
+    axis.normalize();
+    const perpendicular = (vector: THREE.Vector3) => {
+      vector.addScaledVector(axis, -vector.dot(axis));
+      return vector.lengthSq() > 1e-8 ? vector.normalize() : undefined;
+    };
+    const pairs = [
+      ['left_ilium_superior', 'right_ilium_superior'],
+      ['left_shoulder', 'right_shoulder'],
+    ] as const;
+    let left: THREE.Vector3 | undefined;
+    for (const [leftId, rightId] of pairs) {
+      const leftPoint = landmark(leftId);
+      const rightPoint = landmark(rightId);
+      if (leftPoint && rightPoint) {
+        left = perpendicular(leftPoint.sub(rightPoint));
+        if (left) break;
+      }
+    }
+    if (!left) {
+      for (const id of [...pairs.flat(), 'left_acetabulum', 'right_acetabulum']) {
+        const point = landmark(id);
+        if (!point) continue;
+        const lateral = perpendicular(point.sub(from));
+        if (lateral) {
+          left = id.startsWith('left_') ? lateral : lateral.negate();
+          break;
+        }
+      }
+      if (!left) {
+        for (const group of EXTRA_SIDE_PAIRS) {
+          const sum = new THREE.Vector3();
+          for (const [leftId, rightId] of group) {
+            const leftPoint = landmark(leftId);
+            const rightPoint = landmark(rightId);
+            if (!leftPoint || !rightPoint) continue;
+            const direction = perpendicular(leftPoint.sub(rightPoint));
+            if (direction) sum.add(direction);
+          }
+          if (sum.lengthSq() > 1e-8) {
+            left = sum.normalize();
+            break;
+          }
+        }
+      }
+    }
+    if (left) {
+      return from.clone().add(new THREE.Vector3().crossVectors(axis, left).normalize().multiplyScalar(0.1));
+    }
 
-  // Spine: sacral promontory up to the top of the head, twisted toward the shoulders (as in mobile).
+    const chin = landmark('chin');
+    if (!chin) return undefined;
+    const bodyAxis = headRaw ? headRaw.clone().sub(from).normalize() : axis;
+    const chinOffset = chin.sub(from);
+    chinOffset.addScaledVector(bodyAxis, -chinOffset.dot(bodyAxis));
+    return chinOffset.lengthSq() > 1e-8
+      ? from.clone().add(chinOffset.normalize().multiplyScalar(0.1))
+      : undefined;
+  };
+
+  let ribcagePiece: THREE.Object3D | undefined;
+  if (sacrum && manubrium) {
+    const beforeRibcage = root.children.length;
+    add(
+      'SK_Side', sacrum, manubrium, 'uniform',
+      torsoTwistTarget(sacrum, manubrium),
+      undefined, undefined, RIBCAGE_SCALE_BOUNDS,
+      torsoPresent,
+    );
+    if (root.children.length > beforeRibcage) ribcagePiece = root.children[root.children.length - 1];
+  }
+
+  // Mobile poses the ribcage before the spine; it carries head_proximal
+  // with the ribcage when the head landmark is not recorded.
+  let carriedHead: THREE.Vector3 | undefined;
+  if (!headRaw && ribcagePiece) {
+    ribcagePiece.updateMatrix();
+    carriedHead = spineRest.toTip.clone().applyMatrix4(ribcagePiece.matrix);
+  }
+  const spineHead = headRaw ?? carriedHead;
   const beforeSpine = root.children.length;
-  if (torsoPresent && head && sacrum) add('SK_Spine', 'sternum', sacrum, head, 'rod', shoulderMid);
+  if (sacrum && spineHead) {
+    add('SK_Spine', sacrum, spineHead, 'rod', torsoTwistTarget(sacrum, spineHead), undefined, undefined, undefined, torsoPresent && Boolean(manubrium));
+  }
   const spinePiece = root.children.length > beforeSpine ? root.children[root.children.length - 1] : undefined;
 
-  const bodyUp = torsoPresent && head && sacrum ? head.clone().sub(sacrum).normalize() : undefined;
-  const spineLength = torsoPresent && head && sacrum ? sacrum.distanceTo(head) : undefined;
-
-  // Head: same as mobile's SK_Head spec (stretch "anchor", offsetFromRatio 0.143, twist "chin").
-  // The base sits HEAD_OFFSET_RATIO of the spine length below head_proximal along body-up,
-  // and the chin is passed as the twist target so poseSkeletonPiece turns the face toward it.
-  // With no spine direction it is placed at head_proximal unrotated (mobile's single-landmark branch).
-  if (head) {
-    const headFrom = bodyUp && spineLength !== undefined
-      ? head.clone().addScaledVector(bodyUp, -HEAD_OFFSET_RATIO * spineLength)
-      : head;
-    add('SK_Head', 'sternum', headFrom, head, 'anchor', landmark('chin'));
-  }
-
-  // Pelvis: needs both acetabula and the sacral promontory (see getRenderableBones).
-  // Oriented from the two ASIS points + sacral promontory, falling back to the spine's rotation.
-  if (bones.has('pelvis')) {
-    const before = root.children.length;
-    add('SK_Coccyx', 'pelvis', sacrum, sacrum, 'anchor');
-    if (root.children.length > before && sacrum) {
-      const pelvis = root.children[root.children.length - 1];
-      const leftAsis = landmark('left_ilium_superior');
-      const rightAsis = landmark('right_ilium_superior');
-      const triangleQuat = leftAsis && rightAsis
-        ? computeTriangleQuaternion(
-            pelvisRestToModel(PELVIS_REST_TRIANGLE.left),
-            pelvisRestToModel(PELVIS_REST_TRIANGLE.right),
-            pelvisRestToModel(PELVIS_REST_TRIANGLE.anchor),
-            rightAsis, leftAsis, sacrum, // swap if the pelvis comes out back-to-front
-          )
-        : undefined;
-      const q = triangleQuat ?? (spinePiece ? spinePiece.quaternion.clone() : new THREE.Quaternion());
-      pelvis.quaternion.copy(q);
-      pelvis.scale.setScalar(bodyScale);
-      pelvis.position.copy(sacrum).sub(
-        templates.get('SK_Coccyx')!.rest.topTip.clone().multiplyScalar(bodyScale).applyQuaternion(q),
-      );
+  let bodyUp = head && sacrum ? head.clone().sub(sacrum) : undefined;
+  if ((!bodyUp || bodyUp.lengthSq() < 1e-9) && head) {
+    const lowerPoints = manubrium
+      ? [manubrium]
+      : ['left_acetabulum', 'right_acetabulum', 'left_ilium_superior', 'right_ilium_superior', 'left_ischium', 'right_ischium']
+          .map(landmark).filter((point): point is THREE.Vector3 => point !== undefined);
+    if (lowerPoints.length > 0) {
+      const base = lowerPoints.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(lowerPoints.length);
+      bodyUp = head.clone().sub(base);
     }
   }
+  if (bodyUp && bodyUp.lengthSq() > 1e-9) bodyUp.normalize();
+  else bodyUp = undefined;
+  const spineLength = head && sacrum ? sacrum.distanceTo(head) : spineRest.fromTip.distanceTo(spineRest.toTip);
 
-  // Ribcage: sacrum -> manubrium, twisted toward the shoulder midpoint (as in mobile).
-  // Without a manubrium it aims at the shoulder midpoint with no twist.
-  const manubrium = landmark('manubrium');
-  const ribTop = manubrium ?? shoulderMid;
-  if (torsoPresent && sacrum && ribTop) {
-    add('SK_Side', 'sternum', sacrum, ribTop, 'uniform', manubrium ? shoulderMid : undefined);
+  if (head) {
+    const headFrom = bodyUp
+      ? head.clone().addScaledVector(bodyUp, -HEAD_OFFSET_RATIO * spineLength)
+      : head;
+    add('SK_Head', headFrom, head, 'anchor', landmark('chin'), undefined, undefined, undefined, headPresent);
   }
 
-  // Clavicles now run from the manubrium to each shoulder, as recorded.
+  // Orient the pelvis from the same measured triangle as the mobile view.
+  const pelvisPresent = individual.bones.find(b => b.id === 'pelvis')?.status === 'present'
+    && (!absentGroups.includes('left_pelvis') || !absentGroups.includes('right_pelvis'));
+  const hasPelvisLandmark = [
+    'left_ilium_superior', 'right_ilium_superior',
+    'left_ischium', 'right_ischium',
+    'left_acetabulum', 'right_acetabulum',
+  ].some(id => landmark(id) !== undefined);
+  if (pelvisPresent && hasPelvisLandmark && sacrum) {
+    const leftAsis = landmark('left_ilium_superior');
+    const rightAsis = landmark('right_ilium_superior');
+    const triangleQuat = leftAsis && rightAsis
+      ? computeTriangleQuaternion(
+          pelvisRestToModel(PELVIS_REST_TRIANGLE.left),
+          pelvisRestToModel(PELVIS_REST_TRIANGLE.right),
+          pelvisRestToModel(PELVIS_REST_TRIANGLE.anchor),
+          rightAsis, leftAsis, sacrum,
+        )
+      : undefined;
+    add('SK_Coccyx', sacrum, sacrum, 'anchor', undefined, undefined, triangleQuat ?? spinePiece?.quaternion, undefined, pelvisPresent);
+  }
+
+  const addFollowingTorso = (
+    name: string,
+    from: THREE.Vector3,
+    to: THREE.Vector3,
+    stretch: 'rod' | 'uniform' | 'anchor',
+  ) => {
+    const template = templates.get(name);
+    if (!template) return;
+    let twist: THREE.Vector3 | undefined;
+    let twistForward: THREE.Vector3 | undefined;
+    if (ribcagePiece) {
+      const aim = to.clone().sub(from);
+      if (aim.lengthSq() > 1e-12) {
+        aim.normalize();
+        const restAxis = template.rest.toTip.clone().sub(template.rest.fromTip).normalize();
+        const candidates = [new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)];
+        candidates.sort((a, b) => Math.abs(a.dot(restAxis)) - Math.abs(b.dot(restAxis)));
+        const side = candidates[0];
+        const torsoQuaternion = ribcagePiece.quaternion;
+        const localAim = new THREE.Quaternion().setFromUnitVectors(
+          restAxis,
+          aim.clone().applyQuaternion(torsoQuaternion.clone().invert()),
+        );
+        twistForward = side;
+        twist = from.clone().addScaledVector(
+          side.clone().applyQuaternion(localAim).applyQuaternion(torsoQuaternion),
+          0.1,
+        );
+      }
+    }
+    add(name, from, to, stretch, twist, twistForward);
+  };
+
   for (const [side, prefix] of [['left', 'L'], ['right', 'R']]) {
     const pairs: [string, string, 'rod' | 'anchor'][] = [
       [`${side}_clavicle`, `SK_${prefix}Clavicle`, 'anchor'],
       [`${side}_humerus`, `SK_${prefix}ArmUp`, 'rod'], [`${side}_forearm`, `SK_${prefix}ArmDown`, 'rod'],
-      [`${side}_hand`, `SK_Hand${prefix}`, 'anchor'], [`${side}_femur`, `SK_${prefix}LegUp`, 'rod'],
+      [`${side}_hand`, `SK_Hand${prefix === 'L' ? 'R' : 'L'}`, 'anchor'], [`${side}_femur`, `SK_${prefix}LegUp`, 'rod'],
       [`${side}_lower_leg`, `SK_${prefix}LegDown`, 'rod'], [`${side}_foot`, `SK_${prefix}Foot`, 'anchor'],
     ];
-    for (const [owner, name, stretch] of pairs) { const bone = bones.get(owner); if (bone && bone.to !== undefined) add(name, owner, toModel(bone.from), toModel(bone.to), stretch); }
+    for (const [owner, name, stretch] of pairs) {
+      const bone = bones.get(owner);
+      if (!bone || bone.to === undefined) continue;
+      const from = toModel(bone.from);
+      const to = toModel(bone.to);
+      if (name.endsWith('Clavicle')) {
+        add(name, to, from, stretch);
+      } else if (name.includes('Arm') || name.includes('Hand')) {
+        addFollowingTorso(name, from, to, stretch);
+      } else {
+        add(name, from, to, stretch);
+      }
+    }
   }
-  void selectedBones;
+  void selectedJointId;
   return root;
 }
