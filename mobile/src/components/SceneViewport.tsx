@@ -1,26 +1,47 @@
-import { forwardRef, use, useEffect, useImperativeHandle, useRef, useState } from "react";
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG, 
+ * RUAN VAN ZYL
+ * 
+ * File Function:
+ * Generates the 3D skeleton viewport, loads the GLB, poses the mesh pieces
+ * after every coordinate change and includes the viewing feature support
+ * for camera, grid and landmark pins. The landmark associations are in 
+ * skeletonPieces.ts and the maths for posing in skeletonPose.ts.
+ */
+
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import type { Landmark, ModelLoadState, Vec3 } from "../types";
 import { CFA_CONNECTIONS } from "../data/cfaConnections";
-import { ALL_CFA_POINTS, pieceLandmarkId, PointName } from "../data/cfaSchema";
+import { ALL_CFA_POINTS, pieceLandmarkId, type PointName } from "../data/cfaSchema";
 import { REST_LANDMARKS, SKELETON_PIECES, BODY_SCALE_MEASURES } from "../data/skeletonPieces";
 import { landmarksToDisplayPositions, centroid } from "../lib/coordinates";
 import { poseSkeletonPiece, computeTriangleQuaternion, type PieceRestInfo } from "../lib/skeletonPose";
 
+/**
+ * Controls for the camera positioning in the viewport
+ */
 export interface SceneViewportHandle {
+  /** Reset the camera to a default position and re-run posing */
   resetView: () => void;
+  /** Frame camera to the skeleton */
   focusModel: () => void;
+  /** Multiply camera distance by factor to target position */
   zoomBy: (factor: number) => void;
+  /** Store current view as a PNG file - only if renderer is ready */
   capturePng: () => Promise<Blob | null>;
 }
 
 interface SceneViewportProps {
+  /** GLB models URL for loading */
   modelUrl: string;
   modelName: string;
   showGrid: boolean;
+  /** Feature to show the location of the coordinate landmarks */
   showLandmarks: boolean;
   landmarks: Landmark[];
   onLoadStateChange: (state: ModelLoadState) => void;
@@ -28,64 +49,28 @@ interface SceneViewportProps {
   onCameraRotate?: (quaternion: [number, number, number, number]) => void;
 }
 
-// Left/right landmark pairs used as a last-resort facing reference for the
-// ribcage and spine, tried in order (legs, then arms) when no pelvis or
-// shoulder landmark is available. See the twist handling in SceneViewport.
+/** 
+ * Left/right landmark pairs used as a last-resort facing reference for the
+ * ribcage and spine, tried in order (legs, then arms) when no pelvis or
+ * shoulder landmark is available. See the twist handling in SceneViewport.
+*/
 const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [PointName, PointName])[])[] = [
   [["left_knee", "right_knee"], ["left_ankle", "right_ankle"], ["left_toes", "right_toes"]],
   [["left_elbow", "right_elbow"], ["left_wrist", "right_wrist"], ["left_fingertips", "right_fingertips"]],
 ];
-
+/** Starting camera position [=] metres */
 const DEFAULT_CAMERA = new THREE.Vector3(2.6, 1.4, 3.4);
+/** Starting camera orbit target [=] metres */
 const DEFAULT_TARGET = new THREE.Vector3(0, 0.85, 0);
 // The bundled GLB isn't modeled to real-world scale (its raw geometry is
-// only ~1.2 units tall with no compensating node transform), so it's scaled
+// only ~3.3 units tall with no compensating node transform), so it's scaled
 // to a plausible average adult height in real metres instead of an
 // arbitrary cosmetic number. This makes it a meaningful size reference once
 // entered coordinates are also plotted in real metres -- a taller or
 // shorter skeleton than this will visibly read as taller or shorter.
 const DISPLAY_HEIGHT = 1.7;
 
-/**
- * The clavicle/scapula pieces used to get a *twist* correction here on
- * top of their aim rotation (either the plain declared `twist:
- * head_proximal` / `twistForward: [0, 0, 1]` from skeletonPieces.ts, or
- * several since-abandoned dynamic replacements for it -- a guessed
- * cardinal direction, two different PCA-derived forward vectors, and
- * borrowing SK_Side's own posed rotation outright). Every one of those
- * produced basically the same result, which is what exposed the real
- * problem: a twist is a pure rotation *around* the piece's own
- * already-aimed fromTip->toTip axis, so it can never change that
- * vector's own component *along* that same axis. This piece's actual
- * flat-face normal sits at a fixed, mesh-measured ~31 degrees from its
- * own fromTip->toTip axis, but both a seated reference pose and the
- * bundled lying-down default need that angle to instead be 75-85
- * degrees for the blade to really face behind the ribcage -- a gap no
- * twistForward choice can close, confirmed by comparing each attempt's
- * actual posed mesh geometry, not just a rendered screenshot (which is
- * also why they all looked identical despite being numerically
- * different quaternions). Borrowing SK_Side's rotation directly did not
- * work either: it's derived from landmarks spanning the whole
- * ribcage/spine, which doesn't track the local orientation needed right
- * at the shoulder once the torso isn't one single rigid rotation
- * end-to-end (confirmed by a ~163 degree gap to the known-good
- * lying-down quaternion). The combined clavicle+scapula mesh also has
- * no separate scapula geometry to pose independently (checked directly
- * in the GLB), so nothing here can locally correct just the blade.
- *
- * The fix: stop resolving a twist for these two pieces at all, and use
- * only the 2-DOF aim rotation (see `isClaviclePiece` below). Measured at
- * ~16 degrees from the old hand-tuned lying-down quaternion -- close
- * enough that the aim alone carries nearly all of the real orientation
- * signal here -- and confirmed visually across multiple camera angles
- * for the bundled lying-down default (unchanged from before), a seated
- * reference pose (scapulae now sit flush against the ribcage from the
- * front, back, and side instead of winging up or facing front), and a
- * real client record (no regression). Simply not resolving a twist at
- * all also can't reintroduce a per-pose sign problem the way every
- * twist attempt above did.
- */
-
+/** Clears the GPU geometry and materials of everything under `root` */
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((object) => {
     if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
@@ -175,6 +160,7 @@ interface RawPieceGeometry {
   topTip: THREE.Vector3;
 }
 
+/** Finds the longest axus and the vertex tips at both ends for a piece */
 function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
   const box = new THREE.Box3().setFromObject(baked);
   const size = box.getSize(new THREE.Vector3());
@@ -191,7 +177,7 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
 }
 
 /**
- * New type for storing the landmark pair names for the pelvis toggle -- see
+ * New type for storing the landmark pair names -- see
  * estimateSacralPromontory and SACRUM_ESTIMATE_PAIRS
  */
 type PelvisLandmarkPair = [PointName, PointName];
@@ -296,7 +282,7 @@ function scaleRestLandmarks(globalScale: number): Map<PointName, THREE.Vector3> 
 function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLandmarks: Map<PointName, THREE.Vector3>): Map<string, PieceRestInfo> {
   // Lookup for the measured and scaled resting pose landmark coordinates 
   // -- see REST_LANDMARKS and the scaleRestLandmarks function below.
-  // This function tus works as a helper to store clones and prevent access
+  // This function works as a helper to store clones and prevent access
   // to the main table. 
   const restPoint = (name: PointName) => restLandmarks.get(name)?.clone();
 
@@ -309,9 +295,8 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLand
     topTip: raw.topTip,
   });
 
-  // The spine is the one piece we can orient outright: in the rest pose
-  // (standing upright) its sacral (from) end is simply the lower of its
-  // own two tips, its manubrium (to) end the higher.
+  // The spine spans the sacral to head, if either is not present in 
+  // REST_LANDMARKS, fall back to it own end tips and use estimate landmarks.
   const spineRaw = rawByName.get("SK_Spine");
   if (!spineRaw) return resolved;
   const spineLower = spineRaw.tipMin.y < spineRaw.tipMax.y ? spineRaw.tipMin : spineRaw.tipMax;
@@ -329,14 +314,11 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, restLand
     resolved.set("SK_Coccyx", { ...withOrder(coccyxRaw, pelvisAnchor, pelvisAnchor), topTip: pelvisAnchor });
   }
 
-  // The ribcages "from" landmark is the sacral, but the mesh itself has its
-  // lowest vertices well above the sacral as the lumbar spine is between the
-  // ribcage lower tip and sacral top tip. Using sacral as the top essentially 
-  // removed the lumbar region and ballooned the chest out to fill the gap, with 
-  // uniform scaling in the other directions (width and depth). The code now uses 
-  // the landmark measured sacral and manubrium values directly.
-  // Nothing joined onto the ribcage lower tip so the change doesn't affect 
-  // other bones.
+  // The ribcage spans the measured sacral promontory to manubrium. Its own
+  // lowest vertices sit well above the sacrum (the lumbar spine is between),
+  // so using them as fromTip would squeeze out that gap and inflate the
+  // whole chest to fill it. The fromTip is therefore a point off the mesh,
+  // which is fine here: nothing joins onto the ribcage's lower edge.
   const sideRaw = rawByName.get("SK_Side");
   const restSacrum = restPoint("sacral_promontory");
   if (sideRaw && restSacrum) {
@@ -973,8 +955,43 @@ export const SceneViewport = forwardRef<SceneViewportHandle, SceneViewportProps>
         }
       }
 
-      // See the doc comment above for why these two pieces skip the
-      // twist correction entirely and use only the aim rotation.
+      // The clavicle/scapula pieces used to get a *twist* correction here on
+      // top of their aim rotation (either the plain declared `twist:
+      // head_proximal` / `twistForward: [0, 0, 1]` from skeletonPieces.ts, or
+      // several since-abandoned dynamic replacements for it -- a guessed
+      // cardinal direction, two different PCA-derived forward vectors, and
+      // borrowing SK_Side's own posed rotation outright). Every one of those
+      // produced basically the same result, which is what exposed the real
+      // problem: a twist is a pure rotation *around* the piece's own
+      // already-aimed fromTip->toTip axis, so it can never change that
+      // vector's own component *along* that same axis. This piece's actual
+      // flat-face normal sits at a fixed, mesh-measured ~31 degrees from its
+      // own fromTip->toTip axis, but both a seated reference pose and the
+      // bundled lying-down default need that angle to instead be 75-85
+      // degrees for the blade to really face behind the ribcage -- a gap no
+      // twistForward choice can close, confirmed by comparing each attempt's
+      // actual posed mesh geometry, not just a rendered screenshot (which is
+      // also why they all looked identical despite being numerically
+      // different quaternions). Borrowing SK_Side's rotation directly did not
+      // work either: it's derived from landmarks spanning the whole
+      // ribcage/spine, which doesn't track the local orientation needed right
+      // at the shoulder once the torso isn't one single rigid rotation
+      // end-to-end (confirmed by a ~163 degree gap to the known-good
+      // lying-down quaternion). The combined clavicle+scapula mesh also has
+      // no separate scapula geometry to pose independently (checked directly
+      // in the GLB), so nothing here can locally correct just the blade.
+      //
+      // The fix: stop resolving a twist for these two pieces at all, and use
+      // only the 2-DOF aim rotation (see `isClaviclePiece` below). Measured at
+      // ~16 degrees from the old hand-tuned lying-down quaternion -- close
+      // enough that the aim alone carries nearly all of the real orientation
+      // signal here -- and confirmed visually across multiple camera angles
+      // for the bundled lying-down default (unchanged from before), a seated
+      // reference pose (scapulae now sit flush against the ribcage from the
+      // front, back, and side instead of winging up or facing front), and a
+      // real client record (no regression). Simply not resolving a twist at
+      // all also can't reintroduce a per-pose sign problem the way every
+      // twist attempt above did.
       const isClaviclePiece = nodeName === "SK_RClavicle" || nodeName === "SK_LClavicle";
 
       // followsTorso: pose this piece as if the arm were moved relative to the
