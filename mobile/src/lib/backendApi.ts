@@ -133,6 +133,14 @@ export async function checkBackendConnection(): Promise<void> {
   await request<BackendGraveyard[]>("/graveyards/");
 }
 
+export async function deleteSkeleton(skeletonId: string): Promise<void> {
+  try {
+    await request(`/skeletons/${encodeURIComponent(skeletonId)}`, { method: "DELETE" });
+  } catch (error) {
+    if (!(error instanceof BackendApiError && error.status === 404)) throw error;
+  }
+}
+
 export async function ensureWorkspaceGraveyard(
   workspaceName: string,
   savedGraveyardId?: string,
