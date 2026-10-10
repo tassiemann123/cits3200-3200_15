@@ -67,11 +67,21 @@ export default function SkeletonSidebar({
   onBoneStatusChange,
 }: SkeletonSidebarProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+  const [duplicateNameId, setDuplicateNameId] = useState<string | null>(null);
 
   const selected =
     individuals.find(individual => individual.id === selectedId) ??
     individuals[0];
   const allVisible = individuals.length > 0 && individuals.every(individual => individual.visible);
+
+  const hasDuplicateName =
+    selected !== undefined &&
+    individuals.some(
+      individual =>
+        individual.id !== selected.id &&
+        individual.name.trim().toLowerCase() ===
+          selected.name.trim().toLowerCase(),
+    );
 
   const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const filteredIndividuals = individuals.filter(individual => {
@@ -242,8 +252,25 @@ export default function SkeletonSidebar({
               className="text-input"
               type="text"
               value={selected.name}
-              onChange={event => onNameChange(event.target.value)}
+              onChange={event => {
+                const name = event.target.value;
+                const hasDuplicate =
+                  individuals.some(
+                    individual =>
+                      individual.id !== selected.id &&
+                      individual.name.trim().toLowerCase() ===
+                        name.trim().toLowerCase(),
+                  );
+
+                setDuplicateNameId(hasDuplicate ? selected.id : null);
+                onNameChange(name);
+              }}
             />
+            {duplicateNameId === selected.id && hasDuplicateName && (
+              <span className="field-error" role="alert">
+                This name already exists within this graveyard.
+              </span>
+            )}
           </label>
 
           <label className="field-label">
