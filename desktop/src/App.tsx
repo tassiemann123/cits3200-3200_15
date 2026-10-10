@@ -540,6 +540,7 @@ export default function App() {
         }
 
         const currentProject = projectRef.current;
+        const duplicateImports: { id: string; original: string; message: string }[] = [];
         const usedNames = new Set(currentProject.individuals
           .filter(individual => individual.graveyardId === currentGraveyardId)
           .map(individual => individual.name.trim().toLowerCase()));
@@ -621,7 +622,11 @@ export default function App() {
               return null;
             }
             const name = uniqueRecordName(record.name, usedNames);
-            if (name !== record.name) importWarnings.push(`${fileName}: "${record.name}" was imported as "${name}". You can rename it after import.`);
+            if (name !== record.name) {
+              const duplicateMessage = `${fileName}: "${record.name}" was imported as "${name}". You can rename it after import.`;
+              importWarnings.push(duplicateMessage);
+              duplicateImports.push({ id: person.id, original: record.name, message: duplicateMessage });
+            }
             person.name = name;
             importedRows += matchedRows;
             return linkMatchingImportedEndpoints(person);
