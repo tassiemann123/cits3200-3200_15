@@ -244,6 +244,7 @@ export default function App() {
   const [deleteGraveyardId, setDeleteGraveyardId] = useState<string | null>(null);
   const [pendingProject, setPendingProject] = useState<Project | null>(null);
   const [newName, setNewName] = useState('');
+  const [newNameError, setNewNameError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const graveyardExportRef = useRef<(() => void) | null>(null);
 
@@ -261,6 +262,19 @@ export default function App() {
 
   const visibleCount = currentIndividuals.filter(individual => individual.visible).length;
   const notify = (message: string) => setToast(message);
+  const hasDuplicateSkeletonName = (
+    name: string,
+    excludeId?: string,
+  ) => {
+    const normalisedName = name.trim().toLowerCase();
+
+    return project.individuals.some(
+      individual =>
+        individual.graveyardId === currentGraveyardId &&
+        individual.id !== excludeId &&
+        individual.name.trim().toLowerCase() === normalisedName,
+    );
+  };
 
   const updateBackendLink = (link: BackendLink | null) => {
     setBackendLink(link);
@@ -741,8 +755,22 @@ export default function App() {
 
   // Add a new blank skeleton to the current graveyard.
   const addIndividual = () => {
-    if (!newName.trim()) return;
+    const name = newName.trim();
 
+    if (!name) return;
+
+    const duplicate = project.individuals.some(
+      individual =>
+        individual.graveyardId === currentGraveyardId &&
+        individual.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+
+    if (duplicate) {
+      setNewNameError(
+        'A skeleton with this name already exists in this graveyard.',
+      );
+      return;
+    }
     if (project.individuals.length >= 100) {
       notify('This prototype supports up to 100 individuals per workspace.');
       return;
@@ -927,9 +955,12 @@ export default function App() {
           }}
           onAdd={() => setModal('add')}
           onImport={() => fileRef.current?.click()}
-          onNameChange={name =>
-            changeIndividual(individual => ({ ...individual, name }))
-          }
+          onNameChange={name => {
+            changeIndividual(individual => ({
+              ...individual,
+              name,
+            }));
+          }}
           onColorChange={color =>
             changeIndividual(individual => ({ ...individual, color }))
           }
@@ -1330,6 +1361,15 @@ export default function App() {
             <form
               onSubmit={event => {
                 event.preventDefault();
+
+                if (hasDuplicateSkeletonName(newName)) {
+                  setNewNameError(
+                    'A skeleton with this name already exists in this graveyard.',
+                  );
+                  return;
+                }
+
+                setNewNameError('');
                 addIndividual();
               }}
             >
@@ -1343,9 +1383,24 @@ export default function App() {
                   maxLength={80}
                   placeholder="e.g. IND-003"
                   value={newName}
-                  onChange={event => setNewName(event.target.value)}
+                  onChange={event => {
+                    setNewName(event.target.value);
+                    setNewNameError('');
+                  }}
                 />
               </label>
+
+              {newNameError && (
+                <p
+                  style={{
+                    color: '#dc2626',
+                    fontSize: '10px',
+                  }}
+                  role="alert"
+                >
+                  {newNameError}
+                </p>
+              )}
 
               <button className="button primary wide" type="submit">
                 Create skeleton
