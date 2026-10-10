@@ -63,6 +63,7 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .app-main{display:grid;grid-template-columns:370px minmax(0,1fr);flex:1;min-height:0}
 
 .skeleton-sidebar{background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.skeleton-sidebar.drag-over{box-shadow:inset 0 0 0 2px var(--blue);background:#f5f9fb}
 
 .sidebar-section{padding:17px 15px 14px;min-height:0}
 .sidebar-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
@@ -70,6 +71,7 @@ button:active:not(:disabled){transform:translateY(.5px)}
 .icon-button{width:28px;height:28px;padding:0;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
 .icon-button:hover{background:var(--pale);color:var(--blue)}
 .sidebar-import-button{width:100%;height:32px;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;color:#355c7d;margin-top:8px}
+.sidebar-drop-hint{display:block;margin-top:6px;text-align:center;color:var(--muted);font-size:11px}
 
 .search-field{height:34px;border:1px solid var(--line);border-radius:6px;background:#fafaf9;display:flex;align-items:center;gap:7px;padding:0 9px;color:#8b959c;margin-bottom:13px}
 .search-field:focus-within{border-color:#aebbc4;background:#fff}

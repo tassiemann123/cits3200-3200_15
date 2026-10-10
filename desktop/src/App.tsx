@@ -18,9 +18,9 @@ import PopupModal from './components/PopupModal';
 import { registerOffline } from './offline';
 import { paletteColor } from './lib/colors';
 import { BackendApiError, listRemoteWorkspaces, loadRemoteWorkspace, saveRemoteWorkspace, type RemoteWorkspaceSummary } from './backendApi';
-import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRow } from './lib/coordinateCsv';
+import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRecord, type CoordinateCsvRow } from './lib/coordinateCsv';
 import { uniqueRecordName } from './lib/uniqueRecordName';
-import { availableGraveyardName } from './lib/graveyardName';
+import { graveyardNameExists } from './lib/graveyardName';
 
 const STORAGE_KEY = 'osteo.desktop.project.v2';
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
@@ -482,13 +482,35 @@ export default function App() {
   }, []);
 
   // Import and export project files.
-  const importFile = async (file: File) => {
-    try {
-      if (file.name.toLowerCase().endsWith('.csv')) {
-        const csv = parseCoordinateCsv(await file.text());
+  const importFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const allCsv = files.every(file => file.name.toLowerCase().endsWith('.csv'));
+    if (files.length > 1 && !allCsv) {
+      notify('Select CSV files only when importing more than one file.');
+      return;
+    }
 
-        if (csv.records.length === 0) {
-          setCsvWarnings(csv.warnings.length ? csv.warnings : ['The CSV does not contain any coordinate rows.']);
+    try {
+      if (allCsv) {
+        const importWarnings: string[] = [];
+        const records: { fileName: string; record: CoordinateCsvRecord }[] = [];
+        for (const file of files) {
+          try {
+            const csv = parseCoordinateCsv(await file.text());
+            importWarnings.push(...csv.warnings.map(warning =>
+              files.length > 1 ? `${file.name}: ${warning}` : warning,
+            ));
+            if (csv.records.length === 0 && csv.warnings.length === 0) {
+              importWarnings.push(`${file.name}: The CSV does not contain any coordinate rows.`);
+            }
+            records.push(...csv.records.map(record => ({ fileName: file.name, record })));
+          } catch {
+            importWarnings.push(`${file.name}: The CSV could not be read.`);
+          }
+        }
+
+        if (records.length === 0) {
+          setCsvWarnings(importWarnings);
           setCsvImportSucceeded(false);
           setModal('csv-warnings');
           return;
@@ -500,21 +522,20 @@ export default function App() {
           throw new Error('Could not create a skeleton template.');
         }
 
-        const importWarnings = [...csv.warnings];
-        const usedNames = new Set(project.individuals
+        const currentProject = projectRef.current;
+        const usedNames = new Set(currentProject.individuals
           .filter(individual => individual.graveyardId === currentGraveyardId)
           .map(individual => individual.name.trim().toLowerCase()));
-        const importedIndividuals = csv.records.map(
-          (record, index) => {
-            const name = uniqueRecordName(record.name, usedNames);
-            if (name !== record.name) importWarnings.push(`"${record.name}" was imported as "${name}". You can rename it after import.`);
+        let importedRows = 0;
+        const importedIndividuals = records.map(
+          ({ fileName, record }, index) => {
             const person: Individual = {
               ...base,
               id: crypto.randomUUID(),
-              name,
+              name: record.name,
               accession: '',
               graveyardId: currentGraveyardId,
-              color: paletteColor(project.individuals.length + index),
+              color: paletteColor(currentProject.individuals.length + index),
               visible: true,
               notes: '',
               joints: base.joints.map(currentJoint => ({
@@ -533,7 +554,9 @@ export default function App() {
 
             let matchedRows = 0;
             for (const row of record.rows) {
-              const rowLabel = row.lineNumber ? `Row ${row.lineNumber} (${record.name})` : `Skeleton "${record.name}"`;
+              const rowLabel = row.lineNumber
+                ? `${files.length > 1 ? `${fileName}, ` : ''}Row ${row.lineNumber} (${record.name})`
+                : `Skeleton "${record.name}"`;
               const currentJoint = person.joints.find(
                 item =>
                   item.id === row.jointName ||
@@ -577,9 +600,13 @@ export default function App() {
             }
 
             if (matchedRows === 0) {
-              importWarnings.push(`Skeleton "${record.name}" has no recognised joint and bone rows; it was not imported.`);
+              importWarnings.push(`${fileName}: Skeleton "${record.name}" has no recognised joint and bone rows; it was not imported.`);
               return null;
             }
+            const name = uniqueRecordName(record.name, usedNames);
+            if (name !== record.name) importWarnings.push(`${fileName}: "${record.name}" was imported as "${name}". You can rename it after import.`);
+            person.name = name;
+            importedRows += matchedRows;
             return linkMatchingImportedEndpoints(person);
           },
         ).filter((individual): individual is Individual => individual !== null);
@@ -615,17 +642,14 @@ export default function App() {
           notify(
             `CSV imported: ${importedIndividuals.length} skeleton${
               importedIndividuals.length === 1 ? '' : 's'
-            } and ${csv.records.reduce(
-              (total, record) => total + record.rows.length,
-              0,
-            )} coordinate rows.`,
+            } from ${files.length} file${files.length === 1 ? '' : 's'} and ${importedRows} coordinate rows.`,
           );
         }
 
         return;
       }
 
-      const next = validateProject(JSON.parse(await file.text()));
+      const next = validateProject(JSON.parse(await files[0].text()));
       setPendingProject(next);
       setModal('import');
     } catch (error) {
@@ -923,6 +947,7 @@ export default function App() {
           }}
           onAdd={() => setModal('add')}
           onImport={() => fileRef.current?.click()}
+          onImportFiles={files => { void importFiles(files); }}
           onNameChange={name =>
             changeIndividual(individual => ({ ...individual, name }))
           }
@@ -1031,12 +1056,13 @@ export default function App() {
       <input
         ref={fileRef}
         type="file"
+        multiple
         accept=".json,.csv,application/json,text/csv"
         className="sr-only"
-        aria-label="Import JSON or CSV file"
+        aria-label="Import JSON or CSV files"
         onChange={event => {
-          const file = event.target.files?.[0];
-          if (file) void importFile(file);
+          const files = Array.from(event.target.files ?? []);
+          if (files.length) void importFiles(files);
           event.currentTarget.value = '';
         }}
       />
@@ -1123,7 +1149,11 @@ export default function App() {
 
                 const requestedName = newGraveyardName.trim();
                 if (!requestedName) return;
-                const name = availableGraveyardName(requestedName, graveyards);
+                if (graveyardNameExists(requestedName, graveyards)) {
+                  notify(`A graveyard named "${requestedName}" already exists.`);
+                  return;
+                }
+                const name = requestedName;
 
                 const graveyard = {
                   id: crypto.randomUUID(),
@@ -1174,7 +1204,11 @@ export default function App() {
 
                   const requestedName = editGraveyardName.trim();
                   if (!requestedName) return;
-                  const name = availableGraveyardName(requestedName, graveyards, currentGraveyardId);
+                  if (graveyardNameExists(requestedName, graveyards, currentGraveyardId)) {
+                    notify(`A graveyard named "${requestedName}" already exists.`);
+                    return;
+                  }
+                  const name = requestedName;
 
                   const updatedGraveyards = graveyards.map(graveyard =>
                     graveyard.id === currentGraveyardId

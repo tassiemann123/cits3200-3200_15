@@ -15,6 +15,7 @@ interface SkeletonSidebarProps {
   onDelete: (id: string) => void;
   onAdd: () => void;
   onImport: () => void;
+  onImportFiles: (files: File[]) => void;
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
   onGroupPresenceChange: (groupId: string, present: boolean) => void;
@@ -60,6 +61,7 @@ export default function SkeletonSidebar({
   onDelete,
   onAdd,
   onImport,
+  onImportFiles,
   onNameChange,
   onColorChange,
   onGroupPresenceChange,
@@ -67,6 +69,7 @@ export default function SkeletonSidebar({
   onBoneStatusChange,
 }: SkeletonSidebarProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+  const [draggingFiles, setDraggingFiles] = useState(false);
 
   const selected =
     individuals.find(individual => individual.id === selectedId) ??
@@ -110,7 +113,24 @@ export default function SkeletonSidebar({
     ));
 
   return (
-    <aside className="skeleton-sidebar">
+    <aside
+      className={`skeleton-sidebar${draggingFiles ? ' drag-over' : ''}`}
+      onDragOver={event => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        setDraggingFiles(true);
+      }}
+      onDragLeave={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDraggingFiles(false);
+      }}
+      onDrop={event => {
+        event.preventDefault();
+        setDraggingFiles(false);
+        const files = Array.from(event.dataTransfer.files);
+        if (files.length) onImportFiles(files);
+      }}
+    >
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <h2>Skeletons</h2>
@@ -204,6 +224,7 @@ export default function SkeletonSidebar({
           <Download size={14} />
           Import
         </button>
+        <small className="sidebar-drop-hint">or drop CSV files here</small>
       </div>
 
       {selected && (
