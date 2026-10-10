@@ -1122,39 +1122,34 @@ export default function App() {
             <>
               <p>{csvImportSucceeded ? 'The CSV was imported, but the following rows need attention:' : 'No skeletons were imported. Please fix the following problems and try again:'}</p>
               <ul className="csv-warning-list">
-                {csvWarnings.map((warning, index) => {
-                  const duplicate = csvImportSucceeded ? csvDuplicates.find(item => item.message === warning) : undefined;
-                  return (
-                    <li key={`${index}-${warning}`}>
-                      {warning}
-                      {duplicate && (
-                        <button
-                          className="button"
-                          style={{ marginLeft: 8 }}
-                          onClick={() => {
-                            setProject(previous => ({
-                              ...previous,
-                              updatedAt: new Date().toISOString(),
-                              individuals: previous.individuals.filter(item => item.id !== duplicate.id),
-                            }));
-                            if (selectedId === duplicate.id) {
-                              setSelectedId(project.individuals.find(item => item.id !== duplicate.id)?.id ?? '');
-                            }
-                            setCsvDuplicates(previous => previous.filter(item => item.id !== duplicate.id));
-                            const remaining = csvWarnings.filter(item => item !== duplicate.message);
-                            setCsvWarnings(remaining);
-                            notify(`"${duplicate.original}" was not imported.`);
-                            if (remaining.length === 0) setModal(null);
-                          }}
-                        >
-                          Don&apos;t import
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                {csvWarnings.map((warning, index) => (
+                  <li key={`${index}-${warning}`}>{warning}</li>
+                ))}
               </ul>
               <div className="button-row">
+                {csvImportSucceeded && csvDuplicates.length > 0 && (
+                  <button
+                    className="button"
+                    onClick={() => {
+                      const ids = new Set(csvDuplicates.map(item => item.id));
+                      setProject(previous => ({
+                        ...previous,
+                        updatedAt: new Date().toISOString(),
+                        individuals: previous.individuals.filter(item => !ids.has(item.id)),
+                      }));
+                      if (ids.has(selectedId)) {
+                        setSelectedId(project.individuals.find(item => !ids.has(item.id))?.id ?? '');
+                      }
+                      const remaining = csvWarnings.filter(warning => !csvDuplicates.some(item => item.message === warning));
+                      setCsvDuplicates([]);
+                      setCsvWarnings(remaining);
+                      notify('Duplicate skeletons were not imported.');
+                      if (remaining.length === 0) setModal(null);
+                    }}
+                  >
+                    Don&apos;t import
+                  </button>
+                )}
                 <button className="button primary" onClick={() => setModal(null)}>{csvImportSucceeded && csvDuplicates.length > 0 ? 'Import anyway' : 'Close'}</button>
               </div>
             </>
