@@ -329,7 +329,7 @@ useEffect(() => {
       ? `Delete "${name}" and its ${targets.length} skeleton record(s)?`
       : `Delete skeleton "${name}"?`;
     const remote = targets.some(record => record.backendId);
-    if (!window.confirm(`${message}\nThis cannot be undone.${remote ? " Saved backend copies will also be deleted." : ""}\nIf no records remain, a new blank record will be created.`)) return;
+    if (!window.confirm(`${message}\n \nThis cannot be undone.${remote ? " Saved backend copies will also be deleted." : ""}\nIf no records remain, a new blank record will be created.`)) return;
     deletingRef.current = true;
     setDeleting(true);
     try {
