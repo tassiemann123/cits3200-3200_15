@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CoordinateInput } from "./CoordinateInput";
-import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
+import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
 import { ALL_CFA_POINTS, boneLabelsFor, CFA_GROUPS, groupForBone, pointLabel, type PointGroupId, type PointName } from "../data/cfaSchema";
 import type { BackendConnectionState } from "../lib/backendApi";
 import type { CoordinateDraft, SkeletonRecord, WorkspaceGraveyard } from "../types";
@@ -282,10 +282,9 @@ export function CoordinatePanel({
                 <button type="button" className="edit-name-button confirm" onClick={saveGraveyardName} disabled={!graveyardNameDraft.trim()} title="Save graveyard name" aria-label="Save graveyard name">
                   <Check size={16} />
                 </button>
-                <button type="button" className="edit-name-button" onClick={cancelRenamingGraveyard} title="Cancel renaming" aria-label="Cancel renaming">
-                  <X size={16} />
+                <button type="button" className="edit-name-button delete-record-button" disabled={deleting || backendStatus === "syncing"} onClick={onDeleteGraveyard} title="Delete graveyard" aria-label="Delete graveyard">
+                  <Trash2 size={16} />
                 </button>
-                <button type="button" className="delete-record-button" disabled={deleting || backendStatus === "syncing"} onClick={onDeleteGraveyard}>Delete</button>
               </>
             ) : (
               <>
@@ -336,10 +335,9 @@ export function CoordinatePanel({
                 <button type="button" className="edit-name-button confirm" onClick={saveRecordName} disabled={!recordNameDraft.trim()} title="Save skeleton record name" aria-label="Save skeleton record name">
                   <Check size={16} />
                 </button>
-                <button type="button" className="edit-name-button" onClick={cancelRenamingRecord} title="Cancel renaming" aria-label="Cancel renaming">
-                  <X size={16} />
+                <button type="button" className="edit-name-button delete-record-button" disabled={deleting || backendStatus === "syncing" || !records.length} onClick={onDeleteRecord} title="Delete skeleton" aria-label="Delete skeleton">
+                  <Trash2 size={16} />
                 </button>
-                <button type="button" className="delete-record-button" disabled={deleting || backendStatus === "syncing" || !records.length} onClick={onDeleteRecord}>Delete</button>
               </>
             ) : (
               <>
