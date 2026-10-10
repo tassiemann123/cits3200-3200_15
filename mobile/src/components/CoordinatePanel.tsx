@@ -13,6 +13,9 @@ interface CoordinatePanelProps {
   onSelectGraveyard: (graveyardId: string) => void;
   onCreateGraveyard: () => void;
   onRenameGraveyard: (name: string) => void;
+  onDeleteGraveyard: () => void;
+  onDeleteRecord: () => void;
+  deleting: boolean;
   onSelectRecord: (recordId: string) => void;
   onCreateRecord: () => void;
   onRenameRecord: (name: string) => void;
@@ -62,6 +65,9 @@ export function CoordinatePanel({
   onSelectGraveyard,
   onCreateGraveyard,
   onRenameGraveyard,
+  onDeleteGraveyard,
+  onDeleteRecord,
+  deleting,
   onSelectRecord,
   onCreateRecord,
   onRenameRecord,
@@ -86,6 +92,11 @@ export function CoordinatePanel({
   const [recordNameDraft, setRecordNameDraft] = useState("");
   
   const selectedGraveyard = graveyards.find((graveyard) => graveyard.id === selectedGraveyardId);
+
+  useEffect(() => {
+    setIsRenamingGraveyard(false);
+    setIsRenamingRecord(false);
+  }, [selectedGraveyardId, activeRecord.id]);
 
   const startRenamingGraveyard = () => {
     setGraveyardNameDraft(selectedGraveyard?.name ?? "");
@@ -274,6 +285,7 @@ export function CoordinatePanel({
                 <button type="button" className="edit-name-button" onClick={cancelRenamingGraveyard} title="Cancel renaming" aria-label="Cancel renaming">
                   <X size={16} />
                 </button>
+                <button type="button" className="delete-record-button" disabled={deleting || backendStatus === "syncing"} onClick={onDeleteGraveyard}>Delete</button>
               </>
             ) : (
               <>
@@ -327,6 +339,7 @@ export function CoordinatePanel({
                 <button type="button" className="edit-name-button" onClick={cancelRenamingRecord} title="Cancel renaming" aria-label="Cancel renaming">
                   <X size={16} />
                 </button>
+                <button type="button" className="delete-record-button" disabled={deleting || backendStatus === "syncing" || !records.length} onClick={onDeleteRecord}>Delete</button>
               </>
             ) : (
               <>
