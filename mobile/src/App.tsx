@@ -22,6 +22,7 @@ import { CFA_GROUPS, type PointGroupId, type PointName } from "./data/cfaSchema"
 import {
   backendSkeletonToRecord,
   checkBackendConnection,
+  deleteSkeleton,
   ensureWorkspaceGraveyard,
   loadGraveyardSkeletons,
   syncSkeletonRecord,
@@ -220,6 +221,8 @@ export function App() {
   const cubeRef = useRef<OrientationCubeHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importedObjectUrlRef = useRef<string | null>(null);
+  const deletingRef = useRef(false);
+  const [deleting, setDeleting] = useState(false);
 
   const selectedGraveyardId = preferences.selectedGraveyardId;
 
@@ -315,8 +318,56 @@ useEffect(() => {
     }));
   };
 
+  const deleteSelected = async (kind: "graveyard" | "skeleton") => {
+    if (backendStatus === "syncing" || deletingRef.current) return;
+    const graveyard = preferences.graveyards.find(item => item.id === selectedGraveyardId);
+    if (!graveyard) return;
+    const targets = kind === "graveyard" ? graveyardRecords : graveyardRecords.filter(record => record.id === activeRecord.id);
+    if (kind === "skeleton" && targets.length === 0) return;
+    const name = kind === "graveyard" ? graveyard.name : activeRecord.name;
+    const message = kind === "graveyard"
+      ? `Delete "${name}" and its ${targets.length} skeleton record(s)?`
+      : `Delete skeleton "${name}"?`;
+    const remote = targets.some(record => record.backendId);
+    if (!window.confirm(`${message}\nThis cannot be undone.${remote ? " Saved backend copies will also be deleted." : ""}\nIf no records remain, a new blank record will be created.`)) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    try {
+      // Delete only this selection's skeletons: the remote workspace can be shared
+      // by several local graveyards.
+      for (const record of targets) {
+        if (record.backendId) await deleteSkeleton(record.backendId);
+        setPreferences(current => ({
+          ...current,
+          records: current.records.filter(item => item.id !== record.id),
+        }));
+      }
+      setPreferences(current => {
+        let graveyards = kind === "graveyard"
+          ? current.graveyards.filter(item => item.id !== graveyard.id)
+          : current.graveyards;
+        if (!graveyards.length) graveyards = [{ id: `graveyard-${crypto.randomUUID()}`, name: "Graveyard 1" }];
+        const selectedId = graveyards.some(item => item.id === current.selectedGraveyardId)
+          ? current.selectedGraveyardId : graveyards[0].id;
+        let records = current.records;
+        let nextRecord = records.find(item => item.graveyardId === selectedId);
+        if (!nextRecord) {
+          nextRecord = createRecord(1, selectedId);
+          records = [...records, nextRecord];
+        }
+        return { ...current, graveyards, records, selectedGraveyardId: selectedId, activeRecordId: nextRecord.id };
+      });
+      notify(`${name} deleted`);
+    } catch {
+      notify("Deletion could not finish. Check your connection and try again. Records already deleted were removed; remaining records are kept.", 8000);
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
+    }
+  };
+
   const persistAndSync = async () => {
-    if (backendStatus === "syncing") return;
+    if (backendStatus === "syncing" || deletingRef.current) return;
 
     const snapshot = preferences;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -366,7 +417,7 @@ useEffect(() => {
   };
 
   const loadFromBackend = async () => {
-    if (backendStatus === "syncing") return;
+    if (backendStatus === "syncing" || deletingRef.current) return;
     setBackendStatus("syncing");
 
     try {
@@ -682,7 +733,7 @@ useEffect(() => {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" inert={deleting} aria-busy={deleting}>
       <input
         ref={fileInputRef}
         className="model-file-input"
@@ -763,6 +814,9 @@ useEffect(() => {
                 onSelectGraveyard={selectGraveyard}
                 onCreateGraveyard={addGraveyard}
                 onRenameGraveyard={renameSelectedGraveyard}
+                onDeleteGraveyard={() => void deleteSelected("graveyard")}
+                onDeleteRecord={() => void deleteSelected("skeleton")}
+                deleting={deleting}
                 onSelectRecord={(activeRecordId) => patchPreferences({ activeRecordId })}
                 onCreateRecord={addRecord}
                 onRenameRecord={(name) => patchActiveRecord((record) => ({ ...record, name }))}
