@@ -1,3 +1,15 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG, 
+ * RUAN VAN ZYL
+ * 
+ * File Function:
+ * Posing maths for the mesh pieces, to place, rotate, and scale a piece
+ * between its landmarks (poseSkeletonPiece) and orienting a piece from
+ * three landmarks (computeTriangleQuaternion). The landmarks used are 
+ * in skeletonPieces.ts, the loop that calls this is in SceneViewport.tsx 
+ */
+
 import * as THREE from "three";
 
 /**
@@ -5,35 +17,21 @@ import * as THREE from "three";
  * when the model loads (see computeRawPieceGeometry + resolvePieceRestInfo
  * in SceneViewport.tsx) and reused on every re-pose.
  *
- * `fromTip`/`toTip` are NOT bounding-box corners -- they're the averaged
- * position of the piece's own real vertices that sit at each extreme of
- * its longest axis. A box corner is frequently a point in thin air next to
- * the mesh, not on it: bones aren't symmetric prisms, so the box's overall
- * centre-line often misses a tapered or off-centre joint entirely. Two
- * adjoining pieces (say, an upper arm and a forearm) are each posed so
- * their own idea of the elbow lands on the exact same target coordinate,
- * but if that idea is a corner floating outside the mesh, the two pieces'
- * actual surfaces still end up visibly apart even though the maths lines
- * up perfectly on paper. Using the real, nearby vertices instead keeps
- * both pieces' visible surfaces meeting where the joint actually is.
+ * The spine, ribcage and pelvis use measured landmark positions instead
+ * of vertex centroids (the pelvis's `topTip` is the measured sacral
+ * promontory) -- see REST_LANDMARKS in skeletonPieces.ts and
+ * resolvePieceRestInfo in SceneViewport.tsx.
  *
- * The spine and ribcage specifically use measured landmark positions
- * instead -- see REST_LANDMARKS in ScenePieces.ts
- * 
  * Which of the two tips is `fromTip` (matching this piece's `from`
  * landmark, e.g. the wrist end of a hand) versus `toTip` (its `to`
  * landmark, e.g. the fingertip end) is resolved once, from the model's own
  * rest-pose geometry, by resolvePieceRestInfo -- never re-guessed per pose.
- * An earlier version of this code picked whichever assignment needed the
- * smaller rotation away from the *current* pose, which works only as long
- * as the requested pose stays close to the model's resting position. A
- * pose that genuinely differs a lot (an arm raised overhead instead of
- * hanging at the side) could then get the two tips backwards -- e.g. a
- * hand's fingertip end anchored at the wrist target instead of its wrist
- * end, leaving the hand pointing the wrong way entirely. Resolving each
- * piece's own tip identities once, from its fixed neighbour-to-neighbour
- * adjacency in the rest pose, is correct for every pose, not just ones
- * similar to rest.
+ * Choosing per pose (whichever assignment needs the smaller rotation)
+ * only works near the rest pose: an arm raised overhead could get its tips
+ * backwards, anchoring a hand's fingertip end at the wrist. Resolving each
+ * piece's tips from its fixed rest-pose neighbours is correct for every
+ * pose.
+ *
  *
  * `topTip` is the same kind of real-vertex centroid, but always taken from
  * the piece's highest points (world +Y) regardless of which axis is
@@ -41,7 +39,7 @@ import * as THREE from "three";
  * where there are no two ends to choose between.
  */
 export interface PieceRestInfo {
-  axisIndex: 0 | 1 | 2;
+  axisIndex: 0 | 1 | 2; // x | y | z the longest rest pose of the piece
   fromTip: THREE.Vector3;
   toTip: THREE.Vector3;
   topTip: THREE.Vector3;

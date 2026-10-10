@@ -9,7 +9,7 @@
  * default (rest) mesh (REST_LANDMARKS), and which measurements the 
  * `bodyScale` is determined from (BODY_SCALE_MEASURES). The file is used
  * in the posing code within SceneViewport.tsx  
-*/
+ */
 
 import type { PointName } from "./cfaSchema";
 
