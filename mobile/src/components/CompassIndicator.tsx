@@ -1,10 +1,14 @@
-/**
- * CompassIndicator.tsx file for the circular compass on the android application main page
- * Design goal is a circle with a red arrow/line indicator for magnetic north as detected in the
- * useDeviceHeading.ts file, the circle will then have touch interaction to open a further location
- * panel for the GPS coordinates and heading+GPS accuracy
- * 
- * Styling will be done to match the darker view style chosen by other team for the main page
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The circular compass on the main 3D view: a red needle pointing to
+ * magnetic north from the live heading in useDeviceHeading.ts. Tapping it
+ * opens a panel with the GPS position and the heading and GPS accuracy.
+ * Styled to match the viewport's dark overlay theme. Display only -- not
+ * connected to the coordinates or the skeleton.
  */
 
 import { useState } from "react";

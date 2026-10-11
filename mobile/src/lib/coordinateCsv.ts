@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The live CSV format for skeleton coordinates: writes a record out
+ * (serialiseCoordinateCsv) and reads one back in (parseCoordinateCsv),
+ * including per-bone rows at multi-bone joints and the present column.
+ * Coordinates are in CFA axes (z = depth, larger = deeper) -- see
+ * cfaLandmarkToWorld in coordinates.ts.
+ */
+
 import { ALL_CFA_POINTS, boneLabelsFor, groupForBone, pointLabel, type PointName } from "../data/cfaSchema";
 import type { CoordinateDraft, SkeletonCoordinates, SkeletonRecord } from "../types";
 

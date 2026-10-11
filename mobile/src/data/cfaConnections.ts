@@ -1,3 +1,13 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Which pairs of CFA landmarks are joined by a line in the 3D view's
+ * landmark overlay (CFA_CONNECTIONS).
+ */
+
 import type { PointName } from "./cfaSchema";
 
 /**

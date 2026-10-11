@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * LEGACY -- not used by the app (only by its tests). Reads the vertical
+ * value as elevation (larger = higher) via surveyToWorld, the OPPOSITE
+ * of the live import/entry paths (cfaLandmarkToWorld: z = depth, larger
+ * = deeper). Do not reconnect without resolving the vertical convention
+ * -- see the handover document's section on axis conventions. The live
+ * CSV import is coordinateCsv.ts.
+ */
+
 import type { Landmark, ParseResult, Segment, SkeletonLayer } from "../types";
 import { paletteColor } from "./colors";
 import { surveyToWorld } from "./coordinates";

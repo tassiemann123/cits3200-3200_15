@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The CFA landmark schema used throughout the app: every landmark name
+ * (PointName), the bone groups behind the presence toggles (CFA_GROUPS),
+ * which joints have one coordinate per contributing bone
+ * (POINT_BONE_LABELS), and the id scheme for those bone-specific
+ * coordinates (boneLandmarkId / pieceLandmarkId).
+ */
+
 export const CFA_GROUPS = [
   { 
     id: "head",

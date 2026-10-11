@@ -1,3 +1,15 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Root component of the mobile app. Holds the workspace state (graveyards,
+ * skeleton records, the active record and viewer preferences), saves it to
+ * local storage, syncs records with the backend, handles CSV import/export,
+ * and lays out the 3D viewport alongside the Coordinates and Details panels.
+ */
+
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   ClipboardList,
