@@ -1,3 +1,17 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Data model for the desktop application: Project, Individual, Joint, Bone and
+ * Endpoint types, plus the pure functions that change them (coordinate updates,
+ * joint linking, bone status, group presence). Also holds validateProject, which
+ * checks imported data, and toCoordinateCsv, which writes the shared CSV.
+ *
+ * All update functions return a new object and never change their input.
+ */
+
 /**
  * A deliberately schematic prototype, not a validated anatomical reconstruction.
  * Bone and joint naming follows the shared mobile/desktop CSV:
@@ -11,8 +25,11 @@
  * measurement is created.
  */
 export type Vec3 = [number, number, number];
+/** A coordinate where any axis can still be blank. */
 export type Coordinate = [number | null, number | null, number | null];
+/** Whether a bone is recorded as present, absent or not yet recorded. */
 export type BoneStatus = 'present' | 'absent' | 'unrecorded';
+/** One recorded point on a joint, owned by a bone (or by none for a landmark). */
 export interface Endpoint {
   /** Owning bone. Undefined for landmark endpoints (blank bone column in the CSV). */
   boneId?: string;
@@ -20,6 +37,7 @@ export interface Endpoint {
   label: string;
   coordinate: Coordinate;
 }
+/** A named landmark with one to three endpoints and a flag for whether they are linked. */
 export interface Joint {
   id: string;
   label: string;
@@ -27,7 +45,9 @@ export interface Joint {
   endpoints: Endpoint[];
   linked: boolean;
 }
+/** Points to the endpoint of a joint that a bone starts or ends at. */
 export interface BoneRef { jointId: string; endpointIndex: number }
+/** A bone in the inventory, with its status and its two end points. */
 export interface Bone {
   id: string;
   label: string;
@@ -36,6 +56,7 @@ export interface Bone {
   /** Omitted for bones with no shaft to draw (the sternum). */
   to?: BoneRef;
 }
+/** One skeleton: its joints, bones, colour, visibility and graveyard. */
 export interface Individual {
   id: string;
   name: string;
@@ -48,6 +69,7 @@ export interface Individual {
   bones: Bone[];
   absentGroups?: string[];
 }
+/** The whole workspace: graveyards and all skeletons. */
 export interface Project {
   version: 1;
   name: string;
@@ -55,14 +77,19 @@ export interface Project {
   individuals: Individual[];
   graveyards?: { id: string; name: string }[];
 }
+/** Preset states of the demo skeleton used by the tests. */
 export type Scenario = 'articulated' | 'disarticulated' | 'missing-femur';
+/** A bone with both ends recorded, ready to draw. */
 export type RenderableBone = { id: string; label: string; from: Vec3; to: Vec3; status: BoneStatus };
 
+/** Deep copy so updates never change the original. */
 const copy = <T>(value: T): T => structuredClone(value);
+/** True if all three axes are real numbers. */
 const complete = (value: Coordinate | undefined): value is Vec3 => !!value && value.every((axis) => typeof axis === 'number' && Number.isFinite(axis));
 
 type Owner = [boneId: string | undefined, endpointLabel: string];
 
+/** Builds a full demo skeleton with the standard joints and bones, shifted along X. */
 function makeIndividual(id: string, color: string, offsetX: number): Individual {
   const joints: Joint[] = [];
   const bones: Bone[] = [];
@@ -135,6 +162,7 @@ function makeIndividual(id: string, color: string, offsetX: number): Individual 
     notes: 'Synthetic demonstration coordinates. Not the BP002 field record.', joints, bones };
 }
 
+/** Project with two demo skeletons. */
 export function createDemoProject(): Project {
   const first = makeIndividual('IND-001', '#6a8d77', -1.4);
   const second = makeIndividual('IND-002', '#b6925c', 1.4);
@@ -220,6 +248,7 @@ export function applyScenario(individual: Individual, scenario: Scenario): Indiv
   return next;
 }
 
+/** Returns the present bones that have both ends recorded. */
 export function getRenderableBones(individual: Individual): RenderableBone[] {
   const endpoint = (ref: BoneRef) => individual.joints.find((j) => j.id === ref.jointId)?.endpoints[ref.endpointIndex]?.coordinate;
   return individual.bones.flatMap((bone) => {
@@ -235,27 +264,33 @@ export function getRenderableBones(individual: Individual): RenderableBone[] {
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** Validation helper: value must be a plain object. */
 function object(value: unknown, context: string): Record<string, unknown> {
   if (!isObject(value)) throw new Error(`${context}: expected an object.`);
   return value;
 }
+/** Validation helper: value must be a string no longer than max. */
 function string(value: unknown, context: string, max = 250): string {
   if (typeof value !== 'string' || value.length > max) throw new Error(`${context}: expected text (maximum ${max} characters).`);
   return value;
 }
+/** Validation helper: value must be a valid id string. */
 function id(value: unknown, context: string): string {
   const result = string(value, context, 80);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(result)) throw new Error(`${context}: invalid identifier.`);
   return result;
 }
+/** Validation helper: value must be an array no longer than max. */
 function array(value: unknown, context: string, max: number): unknown[] {
   if (!Array.isArray(value) || value.length > max || value.length === 0) throw new Error(`${context}: expected 1–${max} entries.`);
   return value;
 }
+/** Validation helper: value must be a boolean. */
 function bool(value: unknown, context: string): boolean {
   if (typeof value !== 'boolean') throw new Error(`${context}: expected true or false.`);
   return value;
 }
+/** Validation helper: all values must be different. */
 function unique(values: string[], context: string): void {
   if (new Set(values).size !== values.length) throw new Error(`${context}: duplicate identifier.`);
 }

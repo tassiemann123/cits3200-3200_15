@@ -1,3 +1,19 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The 3D view. Sets up the three.js renderer, camera, lights and orbit controls,
+ * rebuilds the scene when the skeletons change (posed anatomical pieces, optional
+ * coordinate markers, floor and grid), picks markers by click, frames the camera
+ * for each view and exports the scene as a PNG.
+ *
+ * Careful: effects here are order dependent. The scene rebuild effect frames the
+ * camera only when the combined bounds actually change, so selecting a joint does
+ * not fight the user's own orbit.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -6,6 +22,7 @@ import { CFA_GROUPS } from '../data/cfaSchema';
 import { loadMobileModel, createAnatomicalSkeleton, disposeModel, surveyPointToScene, type ModelPieces } from '../lib/mobileModel';
 import OrientationAxes, { type OrientationAxesHandle } from './OrientationAxes';
 
+/** Props for SceneViewport. */
 export interface SceneViewportProps {
   individuals: Individual[];
   graveyardName: string;
@@ -21,7 +38,9 @@ export interface SceneViewportProps {
   zoom: number;
 }
 
+/** Identifies which joint of which skeleton a clickable marker stands for. */
 type JointTarget = { individualId: string; jointId: string };
+/** three.js objects created once on mount and shared between effects. */
 type SceneState = {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -37,10 +56,13 @@ type SceneState = {
   baseDistance: number;
 };
 
+/** Converts survey coordinates to scene space. */
 const point = surveyPointToScene;
+/** True if a coordinate has three real numbers. */
 const isCoordinate = (p: readonly (number | null)[]): p is number[] =>
   p.length === 3 && p.every((n) => typeof n === 'number' && Number.isFinite(n));
 
+/** Frees the geometry and materials in a group, then empties it. Shared geometry is left alone. */
 function disposeContents(group: THREE.Group) {
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -51,6 +73,7 @@ function disposeContents(group: THREE.Group) {
   group.clear();
 }
 
+/** Moves the camera to fit all skeletons for the given view and zoom. */
 function frameScene(state: SceneState, view: SceneViewportProps['view'], zoom: number) {
   if (state.bounds.isEmpty()) return;
   const center = state.bounds.getCenter(new THREE.Vector3());

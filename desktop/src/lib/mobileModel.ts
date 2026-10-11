@@ -1,3 +1,18 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Loads the bundled skeleton_pre-cut.glb and poses its separate bone pieces from
+ * the entered coordinates. Geometry preparation is reused from the mobile
+ * viewer, so the rest-pose values below must be kept in sync with
+ * mobile/src/data/skeletonPieces.ts and mobile/src/components/SceneViewport.tsx.
+ *
+ * Careful: REST_LANDMARKS, PELVIS_REST_TRIANGLE and HEAD_OFFSET_RATIO are tied to
+ * the model file. Changing the model means re-measuring them.
+ */
+
 // Geometry preparation reused from the mobile viewer. Keep rest-tip orientation consistent.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -8,12 +23,15 @@ import { CFA_GROUPS } from '../data/cfaSchema';
 // Keep these values synchronized with mobile/src/data/skeletonPieces.ts and
 // mobile/src/components/SceneViewport.tsx 
 const HEAD_OFFSET_RATIO = 0.276;
+/** Smallest and largest ribcage scale, relative to overall body scale. */
 const RIBCAGE_SCALE_BOUNDS: [number, number] = [0.85, 1.15];
+/** Left hip, right hip and sacrum points of the pelvis mesh in its rest pose, used to work out its rotation. */
 const PELVIS_REST_TRIANGLE = {
   left: [0.126, 0.036, 0.047],
   right: [-0.126, 0.036, 0.047],
   anchor: [0, 0, 0],
 } as const;
+/** Landmark positions measured on the model in its rest pose. */
 const REST_LANDMARKS: Record<string, readonly [number, number, number]> = {
   head_proximal: [0, 3.32, 0],
   chin: [0, 2.92, 0.115],
@@ -28,12 +46,15 @@ const REST_LANDMARKS: Record<string, readonly [number, number, number]> = {
   left_ischium: [0.0872, 1.57, -0.0684],
   right_ischium: [-0.0872, 1.57, -0.0684],
 };
+/** Left/right landmark pairs used to find which way the torso faces when the usual ones are missing. */
 const EXTRA_SIDE_PAIRS: readonly (readonly (readonly [string, string])[])[] = [
   [['left_knee', 'right_knee'], ['left_ankle', 'right_ankle'], ['left_toes', 'right_toes']],
   [['left_elbow', 'right_elbow'], ['left_wrist', 'right_wrist'], ['left_fingertips', 'right_fingertips']],
 ];
+/** Type guard for three.js meshes. */
 const isMesh = (object: THREE.Object3D): object is THREE.Mesh => Boolean((object as THREE.Mesh).isMesh);
 
+/** Copies a piece's meshes with their world transform applied, so each piece starts untransformed. */
 function bakePieceWorldTransform(pieceNode: THREE.Object3D): THREE.Group {
   const baked = new THREE.Group();
   baked.name = pieceNode.name;
@@ -96,6 +117,7 @@ interface RawPieceGeometry {
   topTip: THREE.Vector3;
 }
 
+/** Finds a piece's longest axis and the two real-vertex tips at its ends. */
 function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
   const box = new THREE.Box3().setFromObject(baked);
   const size = box.getSize(new THREE.Vector3());
@@ -111,6 +133,7 @@ function computeRawPieceGeometry(baked: THREE.Object3D): RawPieceGeometry {
   };
 }
 
+/** Decides, once, which tip of each piece is its `from` end and which is its `to` end, by following the pieces' neighbour order in the rest pose. */
 function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, modelScale: number): Map<string, PieceRestInfo> {
   const resolved = new Map<string, PieceRestInfo>();
   const restPoint = (name: string) => {
@@ -187,9 +210,12 @@ function resolvePieceRestInfo(rawByName: Map<string, RawPieceGeometry>, modelSca
 }
 
 
+/** Loaded bone pieces by name, each with its rest-pose information. */
 export type ModelPieces = Map<string, { object: THREE.Group; rest: PieceRestInfo }>;
+/** Names of the 18 pieces inside the GLB that the app needs. */
 const NAMES = ['SK_Head', 'SK_Spine', 'SK_Side', 'SK_Coccyx', ...['L', 'R'].flatMap(s => [`SK_${s}Clavicle`, `SK_${s}ArmUp`, `SK_${s}ArmDown`, `SK_Hand${s}`, `SK_${s}LegUp`, `SK_${s}LegDown`, `SK_${s}Foot`])];
 
+/** Frees the geometry and materials of every loaded piece. */
 export function disposeModel(pieces: ModelPieces) {
   pieces.forEach(({ object }) => object.traverse(child => {
     if (!(isMesh(child))) return;
@@ -198,6 +224,7 @@ export function disposeModel(pieces: ModelPieces) {
   }));
 }
 
+/** Loads the GLB, bakes and scales the pieces to a 1.7 high body, and returns them. Throws if a required piece is missing. */
 export async function loadMobileModel(): Promise<ModelPieces> {
   const gltf = await new GLTFLoader().loadAsync(new URL('models/skeleton_pre-cut.glb', new URL(import.meta.env.BASE_URL, document.baseURI)).href);
   gltf.scene.updateMatrixWorld(true);
@@ -239,8 +266,11 @@ export async function loadMobileModel(): Promise<ModelPieces> {
   return result;
 }
 
+/** True if a coordinate has three real numbers. */
 const complete = (p: (number | null)[] | undefined): p is number[] => !!p && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n));
+/** Converts survey coordinates (x, y, z up) to the model's Y-up frame. */
 const toModel = (p: readonly number[]) => new THREE.Vector3(p[0], -p[2], p[1]);
+/** Rotation that turns the Y-up model into the Z-up desktop scene. */
 const MODEL_TO_SCENE_ROTATION = Math.PI / 2;
 
 /** Convert survey coordinates into the same Z-up scene frame as the anatomical mesh. */

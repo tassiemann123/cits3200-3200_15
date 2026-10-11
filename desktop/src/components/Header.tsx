@@ -1,5 +1,17 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Top bar of the app. Graveyard selector, manage and new graveyard buttons,
+ * open from backend, save workspace and export, with the current backend sync
+ * state shown next to the save button.
+ */
+
 import { Upload, Pencil, Plus, Save, FolderOpen } from 'lucide-react';
 
+/** Props for the Header component. */
 interface HeaderProps {
   graveyards: { id: string; name: string }[];
   currentGraveyardId: string;
@@ -12,6 +24,7 @@ interface HeaderProps {
   onExport: () => void;
 }
 
+/** Renders the top bar. */
 export default function Header({
   graveyards,
   currentGraveyardId,

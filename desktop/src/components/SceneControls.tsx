@@ -1,5 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Toolbar for the 3D view: view buttons (perspective, front, top, bottom),
+ * rotate 90 degrees, grid and recorded marker toggles, and fit all skeletons.
+ */
+
 import type { Individual } from '../model';
 
+/** Props for SceneControls. */
 interface SceneControlsProps {
   view: 'perspective' | 'front' | 'top' | 'bottom';
   showGrid: boolean;
@@ -11,6 +22,7 @@ interface SceneControlsProps {
   onFit: () => void;
 }
 
+/** Renders the view toolbar. */
 export default function SceneControls({
   view,
   showGrid,

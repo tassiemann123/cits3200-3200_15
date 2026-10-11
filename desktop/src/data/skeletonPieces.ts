@@ -1,3 +1,14 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Maps each named piece of the bundled skeleton_pre-cut.glb to the CFA landmarks
+ * that position it, with per piece settings such as stretch mode, twist landmark
+ * and scale limits. Keep in sync with mobile/src/data/skeletonPieces.ts.
+ */
+
 import type { PointName } from "./cfaSchema";
 
 /**

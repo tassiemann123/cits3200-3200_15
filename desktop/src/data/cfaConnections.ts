@@ -1,3 +1,14 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Lists which pairs of CFA landmarks are treated as connected bones. This is a
+ * first pass based on the point names, so have someone with anatomical knowledge
+ * (Dr Flavel) confirm the chains before relying on them.
+ */
+
 import type { PointName } from "./cfaSchema";
 
 /**

@@ -1,8 +1,20 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Left panel. Searchable skeleton list with visibility, export and delete, colour
+ * and name editing, drag and drop CSV import, and the landmark coordinate inputs
+ * grouped by CFA group, with presence toggles for bones and groups.
+ */
+
 import { useState } from 'react';
 import { Eye, EyeOff, Plus, Search, Trash2, Check, X, Download, Upload } from 'lucide-react';
 import type { Individual, BoneStatus, Endpoint } from '../model';
 import { CFA_GROUPS } from '../data/cfaSchema';
 
+/** Props for SkeletonSidebar. All changes go back to App through callbacks. */
 interface SkeletonSidebarProps {
   individuals: Individual[];
   selectedId: string;
@@ -49,6 +61,7 @@ function getGroupStatus(individual: Individual, boneIds: string[]): BoneStatus {
   return 'unrecorded';
 }
 
+/** Renders the skeleton list and the coordinate editor. */
 export default function SkeletonSidebar({
   individuals,
   selectedId,
