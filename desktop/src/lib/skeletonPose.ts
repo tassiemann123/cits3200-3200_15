@@ -1,3 +1,18 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Pure three.js maths for posing one rigid bone piece between two or three
+ * landmarks: aligning its long axis, scaling it, correcting its twist and pinning
+ * it at one end. Also builds the rotation of the pelvis from three landmarks.
+ *
+ * Careful: the comments in this file explain why several choices were made (tip
+ * vertices rather than bounding-box corners, tips resolved once from the rest
+ * pose). Read them before changing the maths.
+ */
+
 import * as THREE from "three";
 
 /**

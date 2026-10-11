@@ -1,3 +1,21 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Root component of the desktop application. Owns the project state (graveyards,
+ * skeletons, selected joint, view options) and wires it to the header, sidebar,
+ * 3D viewport and modals.
+ *
+ * Handles saving to localStorage and the backend (with revision conflict
+ * checks), opening remote workspaces, multi-file CSV import with duplicate
+ * detection, JSON/CSV/PNG export, and add/delete of skeletons and graveyards.
+ *
+ * Careful: the localStorage keys below are shared with saved user data, so
+ * changing them orphans existing workspaces.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, FileJson, Plus, Table2, Trash2, X, ImageDown } from 'lucide-react';
 import {
@@ -22,12 +40,18 @@ import { parseCoordinateCsv, serialiseCoordinateCsv, type CoordinateCsvRecord, t
 import { uniqueRecordName } from './lib/uniqueRecordName';
 import { graveyardNameExists } from './lib/graveyardName';
 
+/** localStorage key for the saved project (v2 format). */
 const STORAGE_KEY = 'osteo.desktop.project.v2';
+/** localStorage key for the list of graveyards. */
 const GRAVEYARD_STORAGE_KEY = 'osteo.desktop.graveyards.v1';
+/** localStorage key for the currently selected graveyard. */
 const CURRENT_GRAVEYARD_STORAGE_KEY = 'osteo.desktop.currentGraveyard.v1';
+/** localStorage key for the link between this device's project and its backend workspace. */
 const BACKEND_LINK_KEY = 'osteo.desktop.backendLink.v1';
+/** Identifies the backend workspace this project syncs to and the last revision seen (used to detect conflicts). */
 type BackendLink = { workspaceId: string; revision: number };
 
+/** Reads the saved backend link, returning null if it is missing or malformed. */
 function restoreBackendLink(): BackendLink | null {
   try {
     if (!localStorage.getItem(STORAGE_KEY)) return null;
@@ -138,6 +162,7 @@ function download(contents: string, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Main application component. */
 export default function App() {
   // Main project and UI state.
   const [initial] = useState(restoreProject);
@@ -265,6 +290,7 @@ export default function App() {
 
   const visibleCount = currentIndividuals.filter(individual => individual.visible).length;
   const notify = (message: string) => setToast(message);
+  /** True if another skeleton in the current graveyard already uses this name (case-insensitive). */
   const hasDuplicateSkeletonName = (
     name: string,
     excludeId?: string,
@@ -279,6 +305,7 @@ export default function App() {
     );
   };
 
+  /** Stores or clears the backend link in state and localStorage. */
   const updateBackendLink = (link: BackendLink | null) => {
     setBackendLink(link);
     try {
@@ -287,6 +314,7 @@ export default function App() {
     } catch { notify('Backend link could not be saved on this device.'); }
   };
 
+  /** Saves the project locally, then syncs it to the backend if online. Reports 404 (workspace removed) and 409 (changed elsewhere) separately. */
   const saveWorkspace = async () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
@@ -326,6 +354,7 @@ export default function App() {
     }
   };
 
+  /** Fetches the workspaces stored on the backend and opens the picker. */
   const openBackendList = async () => {
     try {
       const workspaces = await listRemoteWorkspaces();
@@ -336,6 +365,7 @@ export default function App() {
     }
   };
 
+  /** Loads the selected backend workspace, replaces the local project with it and links to it. */
   const openRemoteWorkspace = async () => {
     if (!selectedRemote) return;
     try {
@@ -684,6 +714,7 @@ export default function App() {
     }
   };
 
+  /** Downloads the whole workspace as a dated JSON backup. */
   const exportJson = () => {
     download(
       JSON.stringify(project, null, 2),
@@ -695,6 +726,7 @@ export default function App() {
     notify('Workspace exported. Both coordinate sets and bone inventory are included.');
   };
 
+  /** Downloads every skeleton in the shared CSV format. */
   const exportCsv = () => {
     const records = project.individuals.map(person => ({
       name: person.name,
@@ -734,6 +766,7 @@ export default function App() {
     notify('Coordinate CSV exported.');
   };
 
+  /** Downloads one skeleton in the shared CSV format. */
   const exportSkeletonCsv = (individualId: string) => {
     const individual = project.individuals.find(
       item => item.id === individualId,

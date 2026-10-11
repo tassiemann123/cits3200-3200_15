@@ -1,3 +1,15 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Defines the CFA landmark groups (head and torso, arms, legs, pelvis and so on)
+ * and the landmark names in each. Everything that lists landmarks reads from
+ * here, so adding a landmark means adding it to this file first.
+ */
+
+/** Landmark groups in the order they appear in the sidebar. */
 export const CFA_GROUPS = [
   {
     id: "head",
@@ -46,11 +58,15 @@ export const CFA_GROUPS = [
   },
 ] as const;
 
+/** Id of a landmark group. */
 export type PointGroupId = (typeof CFA_GROUPS)[number]["id"];
+/** Name of a single landmark. */
 export type PointName = (typeof CFA_GROUPS)[number]["points"][number];
 
+/** Every landmark name in one flat list. */
 export const ALL_CFA_POINTS = CFA_GROUPS.flatMap((group) => group.points) as PointName[];
 
+/** Human readable label for a landmark name. */
 export function pointLabel(point: PointName): string {
   return point
     .split("_")
@@ -58,6 +74,7 @@ export function pointLabel(point: PointName): string {
     .join(" ");
 }
 
+/** Returns the group a landmark belongs to. */
 export function groupForPoint(point: PointName): PointGroupId {
   return CFA_GROUPS.find((group) => (group.points as readonly PointName[]).includes(point))?.id ?? "head";
 }

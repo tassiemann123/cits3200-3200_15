@@ -1,3 +1,14 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Registers the service worker that caches the app for offline use and checks
+ * that the cache really contains the files needed. A service worker that
+ * registers is not enough on its own to prove the app works offline.
+ */
+
 /** A successful registration alone does not mean the app is cached for offline use. */
 export function registerOffline(
   onReady: () => void,

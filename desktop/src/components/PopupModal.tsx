@@ -1,12 +1,26 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Accessible modal dialog used by every popup in the app. On open it focuses the
+ * first input (or button), Tab and Shift+Tab stay inside the dialog, and focus
+ * returns to the previous element on close. Clicking the backdrop or the X button
+ * calls onClose.
+ */
+
 import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
+/** Props for PopupModal. */
 interface PopupModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
 }
 
+/** Renders a titled modal around its children. */
 export default function PopupModal({ title, onClose, children }: PopupModalProps) {
   const ref = useRef<HTMLDivElement>(null);
 

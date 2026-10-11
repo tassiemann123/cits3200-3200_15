@@ -1,7 +1,22 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Client for the FastAPI backend. Lists, loads and saves desktop workspaces.
+ * Every request times out after 7 seconds, failures are raised as BackendApiError
+ * (with the HTTP status when there is one), and loaded projects are passed through
+ * validateProject so a bad response cannot corrupt local state. Saves send the
+ * last known revision so the backend can reject conflicting updates.
+ */
+
 import { validateProject, type Project } from './model';
 
+/** Milliseconds before a backend request is aborted. */
 const TIMEOUT_MS = 7_000;
 
+/** Backend workspace entry as shown in the open list. */
 export interface RemoteWorkspaceSummary {
   workspace_id: string;
   name: string;
@@ -9,10 +24,12 @@ export interface RemoteWorkspaceSummary {
   updated_at: string;
 }
 
+/** A full backend workspace including its project. */
 export interface RemoteWorkspace extends RemoteWorkspaceSummary {
   project: Project;
 }
 
+/** Error from a backend call. `status` is the HTTP status, absent for network failures and timeouts. */
 export class BackendApiError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
@@ -20,10 +37,12 @@ export class BackendApiError extends Error {
   }
 }
 
+/** Backend address from VITE_API_URL, defaulting to http://127.0.0.1:8000, without trailing slashes. */
 export function backendBaseUrl(): string {
   return (import.meta.env.VITE_API_URL?.trim() || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 }
 
+/** Sends a JSON request to the backend with a timeout and returns the parsed body. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -56,15 +75,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 }
 
+/** Gets the summaries of all workspaces on the backend. */
 export async function listRemoteWorkspaces(): Promise<RemoteWorkspaceSummary[]> {
   return request<RemoteWorkspaceSummary[]>('/desktop/workspaces/');
 }
 
+/** Gets one workspace by id and validates its project. */
 export async function loadRemoteWorkspace(id: string): Promise<RemoteWorkspace> {
   const remote = await request<RemoteWorkspace>(`/desktop/workspaces/${encodeURIComponent(id)}`);
   return { ...remote, project: validateProject(remote.project) };
 }
 
+/** Creates a workspace, or updates the linked one using its last known revision. */
 export async function saveRemoteWorkspace(
   project: Project,
   link?: { workspaceId: string; revision: number } | null,
