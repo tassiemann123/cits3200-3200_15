@@ -877,8 +877,12 @@ export default function App() {
     const remainingGraveyards = graveyards.filter(
       graveyard => graveyard.id !== deleteGraveyardId,
     );
+    const updatedGraveyards =
+      remainingGraveyards.length > 0
+        ? remainingGraveyards
+        : [{ id: 'GY-001', name: 'Graveyard 1' }];
 
-    setGraveyards(remainingGraveyards);
+    setGraveyards(updatedGraveyards);
 
     setProject(previous => ({
       ...previous,
@@ -886,11 +890,11 @@ export default function App() {
       individuals: previous.individuals.filter(
         individual => individual.graveyardId !== deleteGraveyardId,
       ),
-      graveyards: remainingGraveyards,
+      graveyards: updatedGraveyards,
     }));
 
     if (currentGraveyardId === deleteGraveyardId) {
-      setCurrentGraveyardId(remainingGraveyards[0]?.id ?? 'GY-001');
+      setCurrentGraveyardId(updatedGraveyards[0].id);
     }
 
     setDeleteGraveyardId(null);
