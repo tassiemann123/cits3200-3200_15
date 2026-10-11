@@ -1,3 +1,14 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * LEGACY -- not used by the app (only by its test). Fits a reference model
+ * to a set of landmarks as a whole (long axis, width axis, centre and one
+ * uniform scale). The live app instead poses each mesh piece individually
+ * -- see SceneViewport.tsx and lib/skeletonPose.ts.
+ */
+
 import type { Landmark, Vec3 } from "../types";
 import { centroid } from "./coordinates";
 

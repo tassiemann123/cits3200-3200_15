@@ -1,3 +1,14 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The Details side panel: a read-only summary of the active skeleton
+ * record's entered coordinates, its notes field, and the controls to
+ * import a different GLB reference model or reset to the bundled one.
+ */
+
 import { Database, Info, RotateCcw, Upload } from "lucide-react";
 import type { Landmark, ViewerModel } from "../types";
 

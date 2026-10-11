@@ -1,3 +1,15 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * A single X, Y or Z number field in the coordinate entry form. Keeps the
+ * text as typed while it is still incomplete (e.g. "-" or "1.") and only
+ * reports a value once it parses, with a sign toggle for mobile keyboards
+ * that lack a minus key -- see lib/coordinateInput.ts.
+ */
+
 import { useRef, useState } from "react";
 import { parseCoordinateInput, toggleCoordinateSign } from "../lib/coordinateInput";
 

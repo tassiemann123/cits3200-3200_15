@@ -1,3 +1,17 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * The Coordinates side panel: graveyard and skeleton record selection
+ * (create, rename, delete), the X/Y/Z entry fields for every CFA landmark
+ * grouped by bone group, the per-group presence toggles and per-bone
+ * presence ticks at multi-bone joints, and the CSV import/export, save and
+ * load-from-backend actions. All state lives in App.tsx; this panel only
+ * displays it and reports changes through its callbacks.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { CoordinateInput } from "./CoordinateInput";
 import { Ban, Check, CloudDownload, Download, Pencil, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";

@@ -1,15 +1,15 @@
-/**
-* The file is for getting the live compass heading and GPS location from the androids hardware
-* to display on the applications main page via an on-screen compass heading indicator and a tap-to-expand
-* menu with GPS data and the heading/data accuracy
-* 
-* The file works using the following plugins:
-* Compass: @capawesome/capacitor-compass
-* GPS: @capacitor/geolocation
-* 
-* No permissions should be required for the compass via androids built in magnetic heading
-* Run time location permissions will be required for the GPS
-*/
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * React hook providing the device's live compass heading and GPS location
+ * (with their accuracy) for the CompassIndicator, using the plugins
+ * @capawesome/capacitor-compass (heading) and @capacitor/geolocation (GPS).
+ * The compass needs no permission (Android's built-in magnetic heading);
+ * GPS asks for location permission at run time.
+ */
 
 
 /* Imports */

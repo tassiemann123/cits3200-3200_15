@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Client for the project backend: checks the connection, and creates,
+ * renames, loads and deletes graveyards and skeletons, syncing each
+ * skeleton record's coordinates. Also converts between the app's
+ * SkeletonRecord and the backend's skeleton/coordinate format. The backend
+ * address comes from getBackendBaseUrl.
+ */
+
 import { Capacitor } from "@capacitor/core";
 import { ALL_CFA_POINTS, type PointName } from "../data/cfaSchema";
 import type { CoordinateDraft, SkeletonCoordinates, SkeletonRecord } from "../types";

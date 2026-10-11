@@ -1,13 +1,35 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG, 
+ * RUAN VAN ZYL
+ * 
+ * Shared data types. The live app's model is SkeletonRecord (one entered
+ * skeleton) grouped by WorkspaceGraveyard. SkeletonLayer, ProjectData,
+ * ParseResult, Segment and ModelType belong to the earlier prototype's
+ * import format and are only used by the legacy csvParser.ts / rotParser.ts
+ * and the unused project functions in projectStorage.ts.
+ */
+
 import type { PointGroupId, PointName } from "./data/cfaSchema";
 
+/** A position is stored as a vector in the form [x, y, z] -- CFA coordinates
+ * or three.js scene depend usage depends on the context.
+ */
 export type Vec3 = [number, number, number];
 
+/** CFA axes entered coordinates with [x, y, z] and z meaning depth, null empty 
+ */
 export type CoordinateDraft = [number | null, number | null, number | null];
 
+/** The primary skeleton coordinates per landmark location -- see 
+ * SkeletonRecord.coordinates 
+ */
 export type SkeletonCoordinates = Partial<Record<PointName, CoordinateDraft>>;
 
+/** LEGACY type -- see header */
 export type ModelType = "landmarks" | "male" | "female";
 
+/** Model loading status -- used in SceneViewport */
 export type ModelLoadState = "loading" | "ready" | "error";
 
 export interface ViewerModel {
@@ -18,17 +40,22 @@ export interface ViewerModel {
   attribution: string;
 }
 
+/** LEGACY -- prototype connection between points */
 export interface Segment {
   from: Vec3;
   to: Vec3;
 }
 
+/** One entered landmark for display */
 export interface Landmark {
+  /** The landmark key (PointName or boneLandmarkID) */
   id: string;
   label: string;
+  /** CFA coordinates */
   position: Vec3;
 }
 
+/** A skeleton entered in the app: its coordinates and identifiers */
 export interface SkeletonRecord {
   id: string;
   name: string;
@@ -59,13 +86,18 @@ export interface SkeletonRecord {
    * disarticulated shoulder where only the clavicle was recovered.
    */
   excludedBones?: string[];
+  /** Whole groups marked as not present via the coordinate toggle */
   excludedGroups: PointGroupId[];
   notes: string;
+  /** Graveyard that the record belongs to */
   graveyardId?: string;
+  /** ID of the skeleton if/when synced to backend */
   backendId?: string;
+  /** ISO timestamp of last complete backend sync */
   lastSyncedAt?: string;
 }
 
+/** LEGACY -- prototype import format -- see header */
 export interface SkeletonLayer {
   id: string;
   name: string;
@@ -79,6 +111,7 @@ export interface SkeletonLayer {
   notes: string;
 }
 
+/** LEGACY -- prototype import format -- see header */
 export interface ProjectData {
   version: 1;
   name: string;
@@ -91,11 +124,13 @@ export interface ProjectData {
   };
 }
 
+/** LEGACY -- prototype import format -- see header */
 export interface ParseResult {
   layers: SkeletonLayer[];
   warnings: string[];
 }
 
+/** Named site grouping of skeletons */
 export interface WorkspaceGraveyard {
   id: string;
   name: string;

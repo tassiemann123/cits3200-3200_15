@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Flattens a skeleton record into the list of landmarks that is displayed
+ * and sent to the backend (toBackendLandmarks): one entry per landmark, or
+ * per bone at a multi-bone joint, leaving out anything marked not present.
+ * Also defines how a bone-specific coordinate is named in the backend's
+ * joint_name column.
+ */
+
 import { ALL_CFA_POINTS, boneLabelsFor, boneLandmarkId, groupForBone, parseBoneLandmarkId, pointLabel, type PointName } from "../data/cfaSchema";
 import type { CoordinateDraft, Landmark, SkeletonRecord } from "../types";
 

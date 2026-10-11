@@ -1,3 +1,13 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * LEGACY -- colour helpers for the earlier prototype's layer import. Only
+ * used by the legacy csvParser.ts and rotParser.ts, which the app itself
+ * no longer calls.
+ */
+
 const ACCESSIBLE_PALETTE = [
   "#2FC7B1",
   "#F18745",

@@ -1,3 +1,16 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * File helpers used by the app: downloadFile (browser download) and
+ * safeFilename (strips characters that are invalid in file names).
+ * makeProject, saveProject and loadProject are LEGACY -- they store the
+ * earlier prototype's project format and the app no longer calls them;
+ * the live workspace is saved by App.tsx.
+ */
+
 import type { ProjectData, SkeletonLayer } from "../types";
 
 const STORAGE_KEY = "osteoplot.current-project.v1";
