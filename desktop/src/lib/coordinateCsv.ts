@@ -1,3 +1,15 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Reads and writes the shared CSV format used by both the mobile and desktop
+ * apps. Columns are skeleton_id, joint_name, bone, x, y, z, present, with a
+ * "Graveyard Name" row first. Parsing accepts older column names, never throws on
+ * bad rows, and instead skips them with a warning that includes the line number.
+ */
+
 /**
  Shared CSV format used by both the mobile and desktop applications.
 
@@ -6,6 +18,7 @@
  skeleton_id,joint_name,bone,x,y,z,present
  */
 
+/** One CSV data row. */
 export interface CoordinateCsvRow {
   /** Line where this CSV row begins, for actionable import warnings. */
   lineNumber?: number;
@@ -18,17 +31,20 @@ export interface CoordinateCsvRow {
   present: boolean;
 }
 
+/** All rows belonging to one skeleton. */
 export interface CoordinateCsvRecord {
   name: string;
   rows: CoordinateCsvRow[];
 }
 
+/** Parsed skeletons, the graveyard name if present, and warnings for rows that were skipped. */
 export interface CoordinateCsvParseResult {
   graveyardName?: string;
   records: CoordinateCsvRecord[];
   warnings: string[];
 }
 
+/** Splits CSV text into rows, handling quoted cells, commas and line breaks inside quotes, and records the starting line of each row. */
 function parseRows(text: string): { rows: string[][]; lineNumbers: number[] } {
   const rows: string[][] = [];
   const lineNumbers: number[] = [];
@@ -86,6 +102,7 @@ function parseRows(text: string): { rows: string[][]; lineNumbers: number[] } {
   return { rows, lineNumbers };
 }
 
+/** Lower-cases a header and turns spaces and punctuation into underscores so variations match. */
 function normaliseName(value: string): string {
   return value
     .replace(/^\uFEFF/, "")
@@ -95,12 +112,14 @@ function normaliseName(value: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+/** Quotes a cell if it contains a comma, quote or line break. */
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value)
     ? `"${value.replace(/"/g, '""')}"`
     : value;
 }
 
+/** Converts text to a number, or null if blank or not a finite number. */
 function parseCoordinate(value: string): number | null {
   if (value.trim() === "") {
     return null;

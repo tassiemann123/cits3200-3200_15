@@ -1,3 +1,12 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Unit tests for the backend API client in backendApi.ts.
+ */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackendApiError, loadRemoteWorkspace, saveRemoteWorkspace } from './backendApi';
 import { createDemoProject } from './model';

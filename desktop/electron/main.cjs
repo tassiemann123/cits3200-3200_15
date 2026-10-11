@@ -1,3 +1,18 @@
+/** FILE DEVELOPED FOR THE UWA CITS3200 PROFESSIONAL COMPUTING PROJECT
+ * AS UNDERTAKEN BY GROUP 15:
+ * HOGAN TAN, IVY QI, SUHRID MAHMOOD PUSHAN, TASVEER MANN, WENBO ZHONG,
+ * RUAN VAN ZYL
+ *
+ * File Function:
+ * Electron main process for the Windows desktop build. When packaged, it
+ * stores all app data in a data folder next to OsteoPlot.exe so the app can run
+ * from a USB stick or shared folder. It serves the built dist folder through a
+ * privileged app:// scheme (with a path check so nothing outside dist is read),
+ * opens the main window, and sends external links to the default browser.
+ *
+ * Plain CommonJS, not bundled: Electron loads this file directly.
+ */
+
 const { app, BrowserWindow, protocol, net, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -10,8 +25,10 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
+/** Folder holding the built web app (output of vite build). */
 const dist = path.join(__dirname, '..', 'dist');
 
+/** Opens the main OsteoPlot window and routes external links to the system browser. */
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
