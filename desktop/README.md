@@ -1,105 +1,175 @@
-# OSTEO desktop prototype
+# OsteoPlot Desktop — Quick Start
 
-A Windows-focused desktop PWA prototype for CITS3200 Team 15 and Dr Ambika Flavel. It demonstrates a multi-individual workspace, bone-specific joint coordinates, explicit bone inventory, offline local recording, and sync to the project's FastAPI backend. All new desktop work lives in this directory.
+Choose the instructions for your computer. Windows users can open the team's packaged ZIP. Mac users can run the app from source; the Windows `.exe` does not run on macOS.
 
-## Run
+## Open the Windows app
 
-Use Node.js 24 LTS and npm. From this directory:
+1. Download the Windows ZIP provided by the team.
+2. Right-click the ZIP and select **Extract All**.
+3. Open the extracted folder and double-click **OsteoPlot.exe**.
+
+Keep the whole extracted folder together. Do not move the `.exe` out of it or run it from inside the ZIP. You do not need a terminal, Node.js or a separate web server to open the packaged app.
+
+## Start recording
+
+1. Select or create a graveyard.
+2. Add a skeleton, or use **Import** to load a CSV file. You can select several CSV files together.
+3. Enter the X, Y and Z coordinates for the landmarks you want to record.
+4. Use the view buttons, zoom and rotation controls to inspect the skeleton.
+
+The skeleton is displayed from the coordinates you record. A new blank record does not show a complete skeleton.
+
+## Save your work
+
+The app saves changes locally as you work. In the packaged Windows version, local data is stored in the **data** folder beside `OsteoPlot.exe`. Keep this folder when moving the app.
+
+Use **Export** to save a separate copy of your work. JSON is the workspace backup format; CSV is useful for opening coordinate data in Excel or sharing it with others. Export a backup before replacing or updating the app folder.
+
+Local recording and file import/export are intended to work offline in the Windows package. Saving to or opening from the backend requires a connection to the backend server.
+
+## Run from source on macOS or Windows
+
+Install Node.js 24 and npm, and use the latest project source. The anatomical model must be available at `mobile/public/models/skeleton_pre-cut.glb` or `desktop/public/models/skeleton_pre-cut.glb`. Ask the team for the model file if it is missing.
+
+### macOS
+
+Open **Terminal** in the repository folder and run:
 
 ```sh
+cd desktop
 npm install
 npm run dev
 ```
 
-Open the local address printed by Vite (normally `http://127.0.0.1:5174`). The development server is for UI work; its resources are intentionally **not** installed for offline use.
+### Windows
 
-Start the existing backend using [`backend/README.md`](../backend/README.md). The desktop app uses `http://127.0.0.1:8000` by default. To use another server, copy `.env.example` to `.env.local` and set `VITE_API_URL`. This is the same API server used by mobile, with separate desktop data storage.
+If you are using the ZIP, skip this section. To run the source code, open **PowerShell** in the repository folder and run:
 
-For the installable, cached production build:
-
-```sh
-npm run test
-npm run build
-npm run preview
+```powershell
+cd desktop
+npm install
+npm run dev
 ```
 
-Open the production address (normally `http://127.0.0.1:4174`) and wait until the app confirms offline readiness. The build generates `dist/sw.js` after Vite, precaching every built local asset, including the JavaScript, styles, manifest, and app icons. No remote font or model is required by the desktop shell. Serve `dist/` on HTTPS for a hosted installation; localhost is permitted for local development. Do not open `index.html` directly as a file.
+### Open and close the preview (both systems)
 
-## Five-minute meeting demonstration
+Open the address shown in the terminal, normally **http://127.0.0.1:5174/**. Keep the terminal running while using this preview. Press **Ctrl+C** to stop it when finished. Next time, run `npm run dev` from `desktop`; you do not need to reinstall dependencies unless they have changed.
 
-1. Start in an empty workspace: no preset skeletons or coordinates. Enter coordinates, or use the example menu → Open complete sample workspace to explicitly load two fully articulated individuals.
-2. Select the left knee in the joint editor. It has separate coordinates for the femur and lower-leg endpoints. While linked, editing the first coordinate updates the second automatically.
-3. Expand the second coordinate. Expansion only reveals the fields; unlinking allows independent editing. Change one endpoint and inspect the resulting separation. Collapsing the editor preserves both values.
-4. Turn on recorded joint markers from the viewport toolbar. Matching bone endpoints share one visible marker; a separated joint shows both bone-owned endpoints. Markers remain hidden by default so the anatomical model stays clear.
-5. Use the missing-femur example: the femur is absent while the lower leg and its endpoint coordinates remain. Neighbouring points must not produce a phantom femur.
-6. Save an edit, refresh, and verify it persists. Export a project backup, then demonstrate importing that backup.
-7. In the production preview, wait for offline readiness, enable browser network emulation **Offline**, and reload. Edit a coordinate, reload again, and verify both application loading and saved data. Repeat import/export offline.
+To open the Electron version from the latest source instead, stop the preview and run:
 
-Use the articulated, disarticulated, and missing-femur examples for discussion. They contain **synthetic demonstration data**, not a reconstruction of the BP002/IND-001 email attachment.
+```sh
+npm run electron
+```
 
-## Requirements represented
+The browser preview and Electron app store their local records separately. Export a JSON workspace backup and import it if you want to move your work between them.
 
-- Non-terminal joint endpoints each carry their owning bone/group and an `(x, y, z)` coordinate. Two coordinate sets do not mean two-dimensional coordinates.
-- A shared coordinate is the default; the second set can be revealed and independently edited. Relinking deliberately copies the first coordinate to the second.
-- Bone status distinguishes present, absent, and unrecorded; blank coordinates alone do not declare a bone absent.
-- Recorded joint markers are an optional inspection layer. It is off initially, includes only complete coordinates for present bones, deduplicates linked endpoints, and preserves both markers when a joint is split.
-- The proximal skull point replaces the skull-centre measurement.
-- Pelvic rendering requires the sacral promontory and acetabular points. Optional ilium/ischium measurements do not determine bone presence.
-- Data is saved locally while recording. Press **Save** while online to sync the complete workspace to the backend; **Open from backend** lists saved desktop workspaces. A JSON export provides an independent backup. Mobile records are not displayed in desktop.
+## Set up the backend
 
-## React reuse decision
+The backend stores a separate server copy of your workspace. You can record coordinates and export files without it. You only need it for **Save workspace** to sync online and **Open from backend** to load a server copy.
 
-The prototype retains the project's React, TypeScript, Vite, and Three.js stack. The desktop workspace and endpoint data model are separate from the mobile app so the existing mobile workflow can continue unchanged. The backend uses a dedicated `desktop_workspace` table for the full desktop project; Ivy's original mobile API routes and tables remain unchanged. The current mobile `SkeletonCoordinates` records one coordinate set per landmark and uses excluded anatomical groups, so its coordinate rows cannot represent desktop bone-specific endpoints.
+The steps below run the backend on the same computer as the desktop app. You need the project source folder, **Python 3.12** and **Docker Desktop**. Open Docker Desktop and wait until it is running.
 
-## Offline and installation boundaries
+### macOS: first-time setup
 
-The service worker is registered only for production. The interface reports readiness only after the controlling worker is active and confirms every expected shell resource exists in its cache. Cache names are isolated to this app and its deployment scope. Updates wait for existing app windows to close; they do not replace an active recording session's shell. Application caching and saved coordinate data are separate stores.
+Open a separate **Terminal** window in the repository folder. Run:
 
-A first visit requires the app's server to be reachable. Once cached, the shell can load without that server. Coordinate edits are saved in the browser profile even when the API is offline. Press **Save** again after reconnecting to sync; an offline Save remains local and says so. A backend revision conflict stops the upload and asks you to export local work before opening the backend copy. Browser/site data removal also removes the offline installation and any edits not yet synced; export a backup before clearing data or changing browser/profile/origin. Storage failures must be addressed before treating local edits as saved.
+```sh
+cd backend
+docker compose up -d
+python3.12 -m venv venv
+./venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+```
 
-Windows Edge installation is the target, but Windows installation/relaunch must be verified on an actual UWA laptop before declaring the requirement complete. The install prompt may be unavailable under institutional browser policy. When offered, use the app's install action or Edge's installation control. An installed web app does not require Node.js on the user's laptop when served from a hosted HTTPS site; this repository's npm commands are for building and local demonstration.
+Skip the last command if `.env` already exists. Then follow **Backend settings** below.
 
-Windows acceptance checklist:
+### Windows: first-time setup
 
-- [ ] Install in Edge on a UWA staff laptop and create/locate the desktop or Start shortcut.
-- [ ] Close all browser/app windows, disconnect the internet, and launch through the shortcut.
-- [ ] View multiple skeletons; edit linked and split endpoints; mark a femur absent.
-- [ ] Close and relaunch offline; confirm the latest records persist.
-- [ ] Import/export a project offline and open the exported backup again.
-- [ ] Reconnect and verify an updated build becomes available after closing old app windows.
+Open PowerShell in the project folder and run these commands one at a time:
 
-## Prototype limits and questions for Wednesday
+```powershell
+cd backend
+docker compose up -d
+py -3.12 -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-The viewer reuses the mobile anatomical GLB asset and its rest-tip/bone positioning code. The inventory mapping is still a prototype: Axial skeleton, shoulder girdle, forearms, lower legs, hands, and feet include grouped segments; individual radius/ulna, tibia/fibula, ribs, and vertebrae are not a validated anatomical inventory. The synthetic coordinates use metres and Z-up. Confirm the client's actual units, coordinate conventions, complete landmark/bone mapping, and treatment of partially recorded bones before real data migration. The numbered email table alone is insufficient to map its points safely.
+The Docker command starts the database. The next two commands prepare Python and install the backend packages. The last command creates the settings file; skip it if you already have a `.env` file.
 
-Multi-skeleton layout is a team exploration rather than a requirement explicitly confirmed in the supplied emails. Confirm shared spatial comparison versus independent side-by-side views. Also agree on whether bone status or bone-specific coordinates are the authoritative inventory source, and how relinking previously separated endpoints should be confirmed.
+### Backend settings (both systems)
 
-This is an interaction prototype, not a clinically validated reconstruction or the final production offline application. Desktop backend sync is explicit through Save and Open; there is no login, automatic background sync, collaboration, installer package, or mobile-data migration. The current backend has no authentication, so restrict its network exposure before using real field records.
+Open `backend/.env` in a text editor. For the default local setup, it should contain:
 
-Implementation references: [MDN service-worker installation lifecycle](https://developer.mozilla.org/en-US/docs/Web/API/ExtendableEvent/waitUntil), [Microsoft Edge PWA setup and offline caching](https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/how-to/), and [Windows PWA icons](https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/how-to/icon-theme-color).
+```dotenv
+DATABASE_URL=postgresql://postgres:password@localhost:5432/graveyard_db
+CORS_ORIGINS=app://osteoplot
+```
 
-## Verification in this workspace
+The second line allows the Electron app on either system to connect. If `CORS_ORIGINS` already contains other addresses, add `app://osteoplot` to that list, separated by a comma.
 
-- TypeScript and production build pass; 16 data-model tests pass.
-- Browser-tested: automatic coordinate duplication, independent endpoints surviving collapse/reload, blank individual recovery, explicit absent femur with present lower leg, local JSON import, and reload/edit/persistence with browser networking disabled.
-- Layouts checked at 1280 and 1440 CSS pixels without horizontal page overflow.
-- A synthetic reset/import file is included at `public/demo-workspace.json`.
-- Browser automation did not expose a completed download event for the JSON export in the in-app browser. Confirm the downloaded JSON/CSV files in Windows Edge as part of the meeting setup; UI export code is implemented, but downloaded-file verification is still pending there.
+### Start the backend
 
-The running development preview is port 5174. The production preview with offline support is port 4174. These are separate browser origins and therefore have separate local records; transfer a workspace file when moving between them. This machine reuses a local copy of the existing project dependencies; a fresh checkout should run `npm install` in `desktop/`.
+From the `backend` folder, run:
 
-## Mobile-aligned revision
+**macOS — Terminal:**
 
-The page header, brand row, institutional heading, title and subtitle were removed. Import/export and save status are in the left panel. Colours match mobile: warm off-white panels, blue-grey controls, a charcoal viewport and natural bone materials.
+```sh
+./venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-New workspaces contain one blank skeleton record. As in mobile, bone presence initially defaults to present; geometry is gated by recorded landmarks and an explicit absent status always hides that bone. Old edited projects migrate intact; the untouched synthetic starter becomes a blank workspace, with the old storage entry retained. Examples remain opt-in.
+**Windows — PowerShell:**
 
-The `predev` and `prebuild` scripts copy `mobile/public/models/skeleton_pre-cut.glb` into the desktop local assets when it is available. A fresh checkout without the GLB still builds, but the anatomical 3D model will not appear; the viewer shows a missing-model message while coordinate editing remains available. For a model demo or a complete offline release, place the GLB in `mobile/public/models/` or `desktop/public/models/` before building and verify that `dist/models/skeleton_pre-cut.glb` exists. When supplied, it is cached with the offline shell. It retains the mobile asset attribution: Skeleton Pre-cut · Maxime66410 · Sketchfab Standard. GLB files remain excluded from Git, consistent with the mobile asset instructions and pending redistribution-rights confirmation. The desktop no longer uses procedurally generated stick/guide skeletons.
+```powershell
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-## Attribution
+Keep this terminal open. Visit **http://127.0.0.1:8000/docs** in a browser. If the API documentation page opens, the backend has started. The database tables are created automatically on startup.
 
-3D model: ["Skeleton Pre-cut" by Maxime66410](https://sketchfab.com/3d-models/skeleton-pre-cut-c6aae66fa4674394beda981f46eee415), used under the [Sketchfab Free Standard licence](https://sketchfab.com/licenses).
+## Use the backend in desktop (both systems)
 
-Modified: materials converted for Three.js, and the pieces are repositioned, rotated and scaled by the app.
+The desktop app uses **http://127.0.0.1:8000** by default, so no address change is needed when both run on the same computer.
 
-The model file is not stored in this repository. Download it from the Sketchfab page above and place it in `mobile/public/models/skeleton_pre-cut.glb` (the desktop build copies it from there). Do not commit the model file or re-upload or share it on its own.
+- Click **Save workspace** to save locally and send the full desktop workspace to the backend. Wait for **Backend saved**.
+- Click **Open from backend** to choose a saved workspace. Opening it replaces the current local workspace, so export a backup first if you want to keep both.
+- If the app shows **Local only**, your work has not synced to the server. Check that Docker and the backend are running, then save again.
+- If it shows **Backend conflict**, export your local work before opening the server copy to compare the changes.
+
+Desktop and mobile use the same backend software, but their stored records are separate. Mobile skeletons will not appear in the desktop workspace list.
+
+## Next time and shutdown
+
+Next time, open Docker Desktop, open a terminal in `backend`, and run:
+
+**macOS:**
+
+```sh
+docker compose up -d
+./venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+**Windows:**
+
+```powershell
+docker compose up -d
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+You do not need to repeat the installation steps.
+
+When finished, press **Ctrl+C** in the backend terminal, then run:
+
+```powershell
+docker compose stop
+```
+
+This stops the database without deleting its saved data. Close the desktop window too. If you also started the browser preview, press **Ctrl+C** in that terminal.
+
+## If it will not connect
+
+- **Docker command fails:** check that Docker Desktop is open and running.
+- **Database connection error:** run `docker compose up -d` from `backend` and check the `DATABASE_URL` line in `.env`.
+- **The `/docs` page opens, but Electron cannot connect:** check `CORS_ORIGINS=app://osteoplot` and restart the backend after changing `.env`.
+- **Using a server on another computer:** ask the teammate managing it for the server address. For a source build, set `VITE_API_URL` in `desktop/.env.local` and restart the preview or rebuild the app. An existing Windows ZIP needs to be rebuilt with the correct address.
+
+For further backend details, see [the backend README](../backend/README.md).
